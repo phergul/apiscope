@@ -1,0 +1,51 @@
+package spec
+
+import (
+	"errors"
+	"fmt"
+)
+
+type ErrorKind string
+
+const (
+	ErrorKindInvalidSource     ErrorKind = "invalid_source"
+	ErrorKindFileReadFailure   ErrorKind = "file_read_failure"
+	ErrorKindURLFetchFailure   ErrorKind = "url_fetch_failure"
+	ErrorKindUnsupportedScheme ErrorKind = "unsupported_source_scheme"
+	ErrorKindUnknownFormat     ErrorKind = "unknown_document_format"
+	ErrorKindEmptyDocument     ErrorKind = "empty_document"
+	ErrorKindNotImplemented    ErrorKind = "not_implemented"
+)
+
+type Error struct {
+	Kind       ErrorKind
+	Op         string
+	Source     string
+	StatusCode int
+	Err        error
+}
+
+func (e *Error) Error() string {
+	base := fmt.Sprintf("%s: %s", e.Op, e.Source)
+	if e.StatusCode > 0 {
+		base = fmt.Sprintf("%s (status=%d)", base, e.StatusCode)
+	}
+	if e.Err == nil {
+		return fmt.Sprintf("%s: %s", e.Kind, base)
+	}
+
+	return fmt.Sprintf("%s: %s: %v", e.Kind, base, e.Err)
+}
+
+func (e *Error) Unwrap() error {
+	return e.Err
+}
+
+func IsErrorKind(err error, kind ErrorKind) bool {
+	var specErr *Error
+	if !errors.As(err, &specErr) {
+		return false
+	}
+
+	return specErr.Kind == kind
+}

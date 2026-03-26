@@ -8,21 +8,23 @@ import (
 type ErrorKind string
 
 const (
-	ErrorKindInvalidSource               ErrorKind = "invalid_source"
-	ErrorKindFileReadFailure             ErrorKind = "file_read_failure"
-	ErrorKindURLFetchFailure             ErrorKind = "url_fetch_failure"
-	ErrorKindUnsupportedScheme           ErrorKind = "unsupported_source_scheme"
-	ErrorKindUnknownFormat               ErrorKind = "unknown_document_format"
-	ErrorKindEmptyDocument               ErrorKind = "empty_document"
-	ErrorKindDecodeFailure               ErrorKind = "decode_failure"
-	ErrorKindUnsupportedFamily           ErrorKind = "unsupported_spec_family"
-	ErrorKindUnsupportedVersion          ErrorKind = "unsupported_spec_version"
-	ErrorKindOpenAPIParseFailure         ErrorKind = "openapi_parse_failure"
-	ErrorKindSwaggerConversionFailure    ErrorKind = "swagger_conversion_failure"
-	ErrorKindUnsupportedSwaggerConstruct ErrorKind = "unsupported_swagger_construct"
-	ErrorKindRefResolutionFailure        ErrorKind = "ref_resolution_failure"
-	ErrorKindUnsupportedExternalRef      ErrorKind = "unsupported_external_ref"
-	ErrorKindNotImplemented              ErrorKind = "not_implemented"
+	ErrorKindInvalidSource                  ErrorKind = "invalid_source"
+	ErrorKindFileReadFailure                ErrorKind = "file_read_failure"
+	ErrorKindURLFetchFailure                ErrorKind = "url_fetch_failure"
+	ErrorKindUnsupportedScheme              ErrorKind = "unsupported_source_scheme"
+	ErrorKindUnknownFormat                  ErrorKind = "unknown_document_format"
+	ErrorKindEmptyDocument                  ErrorKind = "empty_document"
+	ErrorKindDecodeFailure                  ErrorKind = "decode_failure"
+	ErrorKindUnsupportedFamily              ErrorKind = "unsupported_spec_family"
+	ErrorKindUnsupportedVersion             ErrorKind = "unsupported_spec_version"
+	ErrorKindOpenAPIParseFailure            ErrorKind = "openapi_parse_failure"
+	ErrorKindSwaggerConversionFailure       ErrorKind = "swagger_conversion_failure"
+	ErrorKindUnsupportedSwaggerConstruct    ErrorKind = "unsupported_swagger_construct"
+	ErrorKindRefResolutionFailure           ErrorKind = "ref_resolution_failure"
+	ErrorKindUnsupportedExternalRef         ErrorKind = "unsupported_external_ref"
+	ErrorKindNormalizationFailure           ErrorKind = "normalization_failure"
+	ErrorKindUnsupportedNormalizedConstruct ErrorKind = "unsupported_normalized_construct"
+	ErrorKindNotImplemented                 ErrorKind = "not_implemented"
 )
 
 type Error struct {

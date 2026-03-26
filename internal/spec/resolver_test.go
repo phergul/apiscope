@@ -194,7 +194,7 @@ components:
 	}
 }
 
-func TestLoadReturnsNotImplementedAfterSuccessfulResolution(t *testing.T) {
+func TestLoadReturnsNormalizedSpecAfterSuccessfulResolution(t *testing.T) {
 	t.Parallel()
 
 	path := writeTempSpecFile(t, "resolved.yaml", `openapi: 3.0.3
@@ -220,9 +220,12 @@ components:
           type: string
 `)
 
-	_, err := NewLoader(nil).Load(context.Background(), Source{Value: path})
-	if !IsErrorKind(err, ErrorKindNotImplemented) {
-		t.Fatalf("expected not implemented error, got %v", err)
+	spec, err := NewLoader(nil).Load(context.Background(), Source{Value: path})
+	if err != nil {
+		t.Fatalf("expected successful normalized load, got %v", err)
+	}
+	if spec == nil {
+		t.Fatal("expected normalized spec after successful resolution")
 	}
 }
 

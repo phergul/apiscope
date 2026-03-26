@@ -2,6 +2,8 @@ package spec
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -74,16 +76,17 @@ func (l *loader) Load(ctx context.Context, source Source) (*model.APISpec, error
 	}
 
 	_, err = l.resolveDocument(ctx, converted)
+	resolved, err := l.resolveDocument(ctx, converted)
 	if err != nil {
 		return nil, err
 	}
 
-	return nil, &Error{
-		Kind:   ErrorKindNotImplemented,
-		Op:     "normalize parsed spec",
-		Source: source.Value,
-		Err:    errNormalizationPending,
-	}
+	return l.normalizeDocument(resolved)
+}
+
+func fingerprintForDocument(document *loadedDocument) model.SpecFingerprint {
+	sum := sha256.Sum256(document.Raw)
+	return model.SpecFingerprint(hex.EncodeToString(sum[:]))
 }
 
 func (l *loader) loadDocument(ctx context.Context, source Source) (*loadedDocument, error) {

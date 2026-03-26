@@ -58,16 +58,21 @@ func newLoader(client *http.Client) *loader {
 }
 
 func (l *loader) Load(ctx context.Context, source Source) (*model.APISpec, error) {
-	_, err := l.loadDocument(ctx, source)
+	document, err := l.loadDocument(ctx, source)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = l.parseDocument(document)
 	if err != nil {
 		return nil, err
 	}
 
 	return nil, &Error{
 		Kind:   ErrorKindNotImplemented,
-		Op:     "normalize spec",
+		Op:     "normalize parsed spec",
 		Source: source.Value,
-		Err:    errNormalizationPending,
+		Err:    err,
 	}
 }
 

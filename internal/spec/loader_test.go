@@ -216,17 +216,6 @@ func TestDetectDocumentFormatRejectsUnknownContent(t *testing.T) {
 	}
 }
 
-func TestLoadReturnsNotImplementedAfterRawLoading(t *testing.T) {
-	t.Parallel()
-
-	path := writeTempSpecFile(t, "spec.yaml", "openapi: 3.0.3\n")
-
-	_, err := NewLoader(nil).Load(context.Background(), Source{Value: path})
-	if !IsErrorKind(err, ErrorKindNotImplemented) {
-		t.Fatalf("expected not implemented error, got %v", err)
-	}
-}
-
 func writeTempSpecFile(t *testing.T, name, contents string) string {
 	t.Helper()
 

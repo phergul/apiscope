@@ -20,6 +20,8 @@ const (
 	ErrorKindOpenAPIParseFailure         ErrorKind = "openapi_parse_failure"
 	ErrorKindSwaggerConversionFailure    ErrorKind = "swagger_conversion_failure"
 	ErrorKindUnsupportedSwaggerConstruct ErrorKind = "unsupported_swagger_construct"
+	ErrorKindRefResolutionFailure        ErrorKind = "ref_resolution_failure"
+	ErrorKindUnsupportedExternalRef      ErrorKind = "unsupported_external_ref"
 	ErrorKindNotImplemented              ErrorKind = "not_implemented"
 )
 

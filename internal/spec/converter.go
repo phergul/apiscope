@@ -66,10 +66,19 @@ func convertSwaggerDocument(parsed *parsedDocument) (*openapi3.T, error) {
 	if err != nil {
 		return nil, err
 	}
-	if securitySchemes != nil {
-		doc.Components = &openapi3.Components{
-			SecuritySchemes: securitySchemes,
+	schemas, err := convertSwaggerDefinitions(parsed)
+	if err != nil {
+		return nil, err
+	}
+	if securitySchemes != nil || len(schemas) > 0 {
+		components := openapi3.NewComponents()
+		if securitySchemes != nil {
+			components.SecuritySchemes = securitySchemes
 		}
+		if len(schemas) > 0 {
+			components.Schemas = schemas
+		}
+		doc.Components = &components
 	}
 
 	security, err := convertSecurityRequirementList(parsed.document.CanonicalLocation, "top-level security", getSliceMap(parsed.swaggerDoc, "security"))
@@ -459,6 +468,24 @@ func convertSwaggerSecuritySchemes(parsed *parsedDocument) (openapi3.SecuritySch
 	}
 
 	return schemes, nil
+}
+
+func convertSwaggerDefinitions(parsed *parsedDocument) (openapi3.Schemas, error) {
+	rawDefinitions, ok := getMap(parsed.swaggerDoc, "definitions")
+	if !ok || len(rawDefinitions) == 0 {
+		return nil, nil
+	}
+
+	schemas := make(openapi3.Schemas, len(rawDefinitions))
+	for name, rawDefinition := range rawDefinitions {
+		schema, err := convertSchemaRef(parsed.document.CanonicalLocation, "definitions."+name, rawDefinition)
+		if err != nil {
+			return nil, err
+		}
+		schemas[name] = schema
+	}
+
+	return schemas, nil
 }
 
 func convertSwaggerSecurityScheme(source, name string, definitionMap map[string]any) (*openapi3.SecuritySchemeRef, error) {

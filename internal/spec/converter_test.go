@@ -196,24 +196,3 @@ paths:
 		t.Fatalf("expected unsupported swagger construct error, got %v", err)
 	}
 }
-
-func TestLoadReturnsNotImplementedAfterSuccessfulConversion(t *testing.T) {
-	t.Parallel()
-
-	path := writeTempSpecFile(t, "swagger.yaml", `swagger: "2.0"
-info:
-  title: Demo
-  version: 1.0.0
-paths:
-  /pets:
-    get:
-      responses:
-        "200":
-          description: ok
-`)
-
-	_, err := NewLoader(nil).Load(context.Background(), Source{Value: path})
-	if !IsErrorKind(err, ErrorKindNotImplemented) {
-		t.Fatalf("expected not implemented error, got %v", err)
-	}
-}

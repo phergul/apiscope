@@ -68,7 +68,12 @@ func (l *loader) Load(ctx context.Context, source Source) (*model.APISpec, error
 		return nil, err
 	}
 
-	_, err = l.convertDocument(parsed)
+	converted, err := l.convertDocument(parsed)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = l.resolveDocument(ctx, converted)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +82,7 @@ func (l *loader) Load(ctx context.Context, source Source) (*model.APISpec, error
 		Kind:   ErrorKindNotImplemented,
 		Op:     "normalize parsed spec",
 		Source: source.Value,
-		Err:    err,
+		Err:    errNormalizationPending,
 	}
 }
 

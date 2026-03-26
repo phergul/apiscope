@@ -112,14 +112,3 @@ func TestLoadReturnsDecodeErrorForInvalidSyntax(t *testing.T) {
 		t.Fatalf("expected decode failure, got %v", err)
 	}
 }
-
-func TestLoadReturnsNotImplementedAfterSuccessfulParse(t *testing.T) {
-	t.Parallel()
-
-	path := writeTempSpecFile(t, "spec.yaml", "openapi: 3.0.3\ninfo:\n  title: Demo\n  version: 1.0.0\npaths: {}\n")
-
-	_, err := NewLoader(nil).Load(context.Background(), Source{Value: path})
-	if !IsErrorKind(err, ErrorKindNotImplemented) {
-		t.Fatalf("expected not implemented error, got %v", err)
-	}
-}

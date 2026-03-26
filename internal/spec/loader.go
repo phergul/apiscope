@@ -63,7 +63,12 @@ func (l *loader) Load(ctx context.Context, source Source) (*model.APISpec, error
 		return nil, err
 	}
 
-	_, err = l.parseDocument(document)
+	parsed, err := l.parseDocument(document)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = l.convertDocument(parsed)
 	if err != nil {
 		return nil, err
 	}

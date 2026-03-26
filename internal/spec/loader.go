@@ -2,8 +2,6 @@ package spec
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -20,7 +18,6 @@ var (
 	errUnsupportedSourceScheme = errors.New("unsupported source scheme")
 	errMissingURLHost          = errors.New("url host is required")
 	errEmptyDocument           = errors.New("document is empty")
-	errNormalizationPending    = errors.New("normalization is not implemented yet")
 )
 
 type DocumentFormat string
@@ -75,18 +72,12 @@ func (l *loader) Load(ctx context.Context, source Source) (*model.APISpec, error
 		return nil, err
 	}
 
-	_, err = l.resolveDocument(ctx, converted)
 	resolved, err := l.resolveDocument(ctx, converted)
 	if err != nil {
 		return nil, err
 	}
 
 	return l.normalizeDocument(resolved)
-}
-
-func fingerprintForDocument(document *loadedDocument) model.SpecFingerprint {
-	sum := sha256.Sum256(document.Raw)
-	return model.SpecFingerprint(hex.EncodeToString(sum[:]))
 }
 
 func (l *loader) loadDocument(ctx context.Context, source Source) (*loadedDocument, error) {

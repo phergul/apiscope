@@ -12,6 +12,8 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
+const swaggerCollectionFormatExtension = "x-api-tui-swagger-collection-format"
+
 type convertedDocument struct {
 	document      *loadedDocument
 	sourceFamily  model.SourceFamily
@@ -70,13 +72,27 @@ func convertSwaggerDocument(parsed *parsedDocument) (*openapi3.T, error) {
 	if err != nil {
 		return nil, err
 	}
-	if securitySchemes != nil || len(schemas) > 0 {
+	parameters, err := convertSwaggerParameterDefinitions(parsed)
+	if err != nil {
+		return nil, err
+	}
+	responses, err := convertSwaggerResponseDefinitions(parsed)
+	if err != nil {
+		return nil, err
+	}
+	if securitySchemes != nil || len(schemas) > 0 || len(parameters) > 0 || len(responses) > 0 {
 		components := openapi3.NewComponents()
 		if securitySchemes != nil {
 			components.SecuritySchemes = securitySchemes
 		}
 		if len(schemas) > 0 {
 			components.Schemas = schemas
+		}
+		if len(parameters) > 0 {
+			components.Parameters = parameters
+		}
+		if len(responses) > 0 {
+			components.Responses = responses
 		}
 		doc.Components = &components
 	}
@@ -183,8 +199,10 @@ func convertSwaggerPaths(source string, swaggerDoc map[string]any, globalConsume
 }
 
 func convertSwaggerPathItem(source, pathName string, pathMap map[string]any, globalConsumes, globalProduces []string) (*openapi3.PathItem, error) {
-	if _, ok := pathMap["$ref"]; ok {
-		return nil, unsupportedSwaggerConstruct(source, fmt.Sprintf("paths.%s.$ref", pathName), "path item references are not supported before ref resolution")
+	if ref, ok := pathMap["$ref"]; ok {
+		return &openapi3.PathItem{
+			Ref: convertSwaggerRef(fmt.Sprint(ref)),
+		}, nil
 	}
 
 	pathParameters, err := convertSwaggerParameters(source, fmt.Sprintf("paths.%s.parameters", pathName), getSliceMap(pathMap, "parameters"))
@@ -341,8 +359,8 @@ func convertSwaggerBodyParameter(source, location string, rawParameter map[strin
 }
 
 func convertSwaggerParameter(source, location string, rawParameter map[string]any) (*openapi3.ParameterRef, error) {
-	if _, ok := rawParameter["$ref"]; ok {
-		return nil, unsupportedSwaggerConstruct(source, location, "parameter references are not supported before ref resolution")
+	if ref, ok := rawParameter["$ref"]; ok {
+		return &openapi3.ParameterRef{Ref: convertSwaggerRef(fmt.Sprint(ref))}, nil
 	}
 
 	inValue := getString(rawParameter, "in")
@@ -357,15 +375,16 @@ func convertSwaggerParameter(source, location string, rawParameter map[string]an
 		return nil, err
 	}
 
-	return &openapi3.ParameterRef{
-		Value: &openapi3.Parameter{
-			Name:        getString(rawParameter, "name"),
-			In:          inValue,
-			Description: getString(rawParameter, "description"),
-			Required:    getBool(rawParameter, "required") || inValue == "path",
-			Schema:      schema,
-		},
-	}, nil
+	parameter := &openapi3.Parameter{
+		Name:        getString(rawParameter, "name"),
+		In:          inValue,
+		Description: getString(rawParameter, "description"),
+		Required:    getBool(rawParameter, "required") || inValue == "path",
+		Schema:      schema,
+	}
+	applySwaggerCollectionFormat(parameter, inValue, rawParameter)
+
+	return &openapi3.ParameterRef{Value: parameter}, nil
 }
 
 func convertSwaggerResponses(source, pathName, method string, operationMap map[string]any, globalProduces []string) (*openapi3.Responses, error) {
@@ -411,8 +430,8 @@ func convertSwaggerResponses(source, pathName, method string, operationMap map[s
 }
 
 func convertSwaggerResponse(source, location string, responseMap map[string]any, produces []string) (*openapi3.ResponseRef, error) {
-	if _, ok := responseMap["$ref"]; ok {
-		return nil, unsupportedSwaggerConstruct(source, location, "response references are not supported before ref resolution")
+	if ref, ok := responseMap["$ref"]; ok {
+		return &openapi3.ResponseRef{Ref: convertSwaggerRef(fmt.Sprint(ref))}, nil
 	}
 
 	response := &openapi3.Response{
@@ -420,7 +439,11 @@ func convertSwaggerResponse(source, location string, responseMap map[string]any,
 	}
 
 	if headers, ok := getMap(responseMap, "headers"); ok && len(headers) > 0 {
-		return nil, unsupportedSwaggerConstruct(source, location, "response headers are not supported yet")
+		convertedHeaders, err := convertSwaggerHeaders(source, location+".headers", headers)
+		if err != nil {
+			return nil, err
+		}
+		response.Headers = convertedHeaders
 	}
 
 	if rawSchema, ok := responseMap["schema"]; ok {
@@ -440,6 +463,63 @@ func convertSwaggerResponse(source, location string, responseMap map[string]any,
 	}
 
 	return &openapi3.ResponseRef{Value: response}, nil
+}
+
+func convertSwaggerParameterDefinitions(parsed *parsedDocument) (openapi3.ParametersMap, error) {
+	rawDefinitions, ok := getMap(parsed.swaggerDoc, "parameters")
+	if !ok || len(rawDefinitions) == 0 {
+		return nil, nil
+	}
+
+	parameters := make(openapi3.ParametersMap, len(rawDefinitions))
+	for name, rawDefinition := range rawDefinitions {
+		definitionMap, ok := rawDefinition.(map[string]any)
+		if !ok {
+			return nil, &Error{
+				Kind:   ErrorKindSwaggerConversionFailure,
+				Op:     "convert parameter definitions",
+				Source: parsed.document.CanonicalLocation,
+				Err:    fmt.Errorf("parameter definition %q must be an object", name),
+			}
+		}
+
+		parameter, err := convertSwaggerParameter(parsed.document.CanonicalLocation, "parameters."+name, definitionMap)
+		if err != nil {
+			return nil, err
+		}
+		parameters[name] = parameter
+	}
+
+	return parameters, nil
+}
+
+func convertSwaggerResponseDefinitions(parsed *parsedDocument) (openapi3.ResponseBodies, error) {
+	rawDefinitions, ok := getMap(parsed.swaggerDoc, "responses")
+	if !ok || len(rawDefinitions) == 0 {
+		return nil, nil
+	}
+
+	responses := make(openapi3.ResponseBodies, len(rawDefinitions))
+	globalProduces := getStringSlice(parsed.swaggerDoc, "produces")
+	for name, rawDefinition := range rawDefinitions {
+		definitionMap, ok := rawDefinition.(map[string]any)
+		if !ok {
+			return nil, &Error{
+				Kind:   ErrorKindSwaggerConversionFailure,
+				Op:     "convert response definitions",
+				Source: parsed.document.CanonicalLocation,
+				Err:    fmt.Errorf("response definition %q must be an object", name),
+			}
+		}
+
+		response, err := convertSwaggerResponse(parsed.document.CanonicalLocation, "responses."+name, definitionMap, globalProduces)
+		if err != nil {
+			return nil, err
+		}
+		responses[name] = response
+	}
+
+	return responses, nil
 }
 
 func convertSwaggerSecuritySchemes(parsed *parsedDocument) (openapi3.SecuritySchemes, error) {
@@ -488,6 +568,53 @@ func convertSwaggerDefinitions(parsed *parsedDocument) (openapi3.Schemas, error)
 	return schemas, nil
 }
 
+func convertSwaggerHeaders(source, location string, rawHeaders map[string]any) (openapi3.Headers, error) {
+	headers := make(openapi3.Headers, len(rawHeaders))
+	for name, rawHeader := range rawHeaders {
+		headerMap, ok := rawHeader.(map[string]any)
+		if !ok {
+			return nil, &Error{
+				Kind:   ErrorKindSwaggerConversionFailure,
+				Op:     "convert response headers",
+				Source: source,
+				Err:    fmt.Errorf("%s.%s must be an object", location, name),
+			}
+		}
+
+		header, err := convertSwaggerHeader(source, location+"."+name, headerMap)
+		if err != nil {
+			return nil, err
+		}
+		headers[name] = header
+	}
+
+	return headers, nil
+}
+
+func convertSwaggerHeader(source, location string, rawHeader map[string]any) (*openapi3.HeaderRef, error) {
+	if _, ok := rawHeader["$ref"]; ok {
+		return nil, unsupportedSwaggerConstruct(source, location, "response header references are not supported")
+	}
+
+	schema, err := convertSchemaFromParameter(source, location, rawHeader)
+	if err != nil {
+		return nil, err
+	}
+
+	parameter := openapi3.Parameter{
+		Description: getString(rawHeader, "description"),
+		Required:    getBool(rawHeader, "required"),
+		Schema:      schema,
+	}
+	applySwaggerCollectionFormat(&parameter, "header", rawHeader)
+
+	return &openapi3.HeaderRef{
+		Value: &openapi3.Header{
+			Parameter: parameter,
+		},
+	}, nil
+}
+
 func convertSwaggerSecurityScheme(source, name string, definitionMap map[string]any) (*openapi3.SecuritySchemeRef, error) {
 	schemeType := getString(definitionMap, "type")
 	switch schemeType {
@@ -512,9 +639,46 @@ func convertSwaggerSecurityScheme(source, name string, definitionMap map[string]
 				Scheme:      "basic",
 			},
 		}, nil
+	case "oauth2":
+		flows, err := convertSwaggerOAuthFlows(source, name, definitionMap)
+		if err != nil {
+			return nil, err
+		}
+		return &openapi3.SecuritySchemeRef{
+			Value: &openapi3.SecurityScheme{
+				Type:        "oauth2",
+				Description: getString(definitionMap, "description"),
+				Flows:       flows,
+			},
+		}, nil
 	default:
 		return nil, unsupportedSwaggerConstruct(source, "securityDefinitions."+name, fmt.Sprintf("security definition type %q is not supported", schemeType))
 	}
+}
+
+func convertSwaggerOAuthFlows(source, name string, definitionMap map[string]any) (*openapi3.OAuthFlows, error) {
+	flowName := getString(definitionMap, "flow")
+	flow := &openapi3.OAuthFlow{
+		AuthorizationURL: getString(definitionMap, "authorizationUrl"),
+		TokenURL:         getString(definitionMap, "tokenUrl"),
+		Scopes:           stringMapFromAny(definitionMap["scopes"]),
+	}
+
+	flows := &openapi3.OAuthFlows{}
+	switch flowName {
+	case "implicit":
+		flows.Implicit = flow
+	case "password":
+		flows.Password = flow
+	case "application":
+		flows.ClientCredentials = flow
+	case "accessCode":
+		flows.AuthorizationCode = flow
+	default:
+		return nil, unsupportedSwaggerConstruct(source, "securityDefinitions."+name, fmt.Sprintf("oauth2 flow %q is not supported", flowName))
+	}
+
+	return flows, nil
 }
 
 func convertSecurityRequirementList(source, location string, items []map[string]any) (openapi3.SecurityRequirements, error) {
@@ -608,7 +772,27 @@ func convertSchemaRef(source, location string, raw any) (*openapi3.SchemaRef, er
 }
 
 func convertSwaggerRef(ref string) string {
-	return strings.Replace(ref, "#/definitions/", "#/components/schemas/", 1)
+	fragmentIndex := strings.Index(ref, "#")
+	if fragmentIndex == -1 {
+		return ref
+	}
+
+	prefix := ref[:fragmentIndex]
+	fragment := ref[fragmentIndex:]
+
+	replacements := map[string]string{
+		"#/definitions/":         "#/components/schemas/",
+		"#/parameters/":          "#/components/parameters/",
+		"#/responses/":           "#/components/responses/",
+		"#/securityDefinitions/": "#/components/securitySchemes/",
+	}
+	for oldPrefix, newPrefix := range replacements {
+		if strings.HasPrefix(fragment, oldPrefix) {
+			return prefix + strings.Replace(fragment, oldPrefix, newPrefix, 1)
+		}
+	}
+
+	return ref
 }
 
 func consumesForOperation(operationMap map[string]any, global []string) []string {
@@ -699,6 +883,20 @@ func stringSliceFromAny(raw any) []string {
 	return result
 }
 
+func stringMapFromAny(raw any) openapi3.StringMap {
+	items, ok := raw.(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	result := make(openapi3.StringMap, len(items))
+	for key, value := range items {
+		result[key] = strings.TrimSpace(fmt.Sprint(value))
+	}
+
+	return result
+}
+
 func getBool(m map[string]any, key string) bool {
 	if m == nil {
 		return false
@@ -713,6 +911,78 @@ func getBool(m map[string]any, key string) bool {
 
 func ptrString(value string) *string {
 	return &value
+}
+
+func boolPtr(value bool) *bool {
+	return &value
+}
+
+func applySwaggerCollectionFormat(parameter *openapi3.Parameter, inValue string, raw map[string]any) {
+	if parameter == nil || !swaggerParameterHasArrayShape(raw) {
+		return
+	}
+
+	collectionFormat := strings.ToLower(strings.TrimSpace(getString(raw, "collectionFormat")))
+	switch collectionFormat {
+	case "", "csv":
+		switch inValue {
+		case "query":
+			parameter.Style = "form"
+			parameter.Explode = boolPtr(false)
+		case "path", "header":
+			parameter.Style = "simple"
+			parameter.Explode = boolPtr(false)
+		}
+	case "multi":
+		if inValue == "query" {
+			parameter.Style = "form"
+			parameter.Explode = boolPtr(true)
+			return
+		}
+		parameter.Extensions = withSwaggerCollectionFormat(parameter.Extensions, collectionFormat)
+	case "ssv":
+		if inValue == "query" {
+			parameter.Style = "spaceDelimited"
+			parameter.Explode = boolPtr(false)
+			return
+		}
+		parameter.Extensions = withSwaggerCollectionFormat(parameter.Extensions, collectionFormat)
+	case "pipes":
+		if inValue == "query" {
+			parameter.Style = "pipeDelimited"
+			parameter.Explode = boolPtr(false)
+			return
+		}
+		parameter.Extensions = withSwaggerCollectionFormat(parameter.Extensions, collectionFormat)
+	case "tsv":
+		parameter.Extensions = withSwaggerCollectionFormat(parameter.Extensions, collectionFormat)
+	default:
+		if collectionFormat != "" {
+			parameter.Extensions = withSwaggerCollectionFormat(parameter.Extensions, collectionFormat)
+		}
+	}
+}
+
+func swaggerParameterHasArrayShape(raw map[string]any) bool {
+	if raw == nil {
+		return false
+	}
+	if getString(raw, "type") == "array" {
+		return true
+	}
+	_, hasItems := raw["items"]
+	return hasItems
+}
+
+func withSwaggerCollectionFormat(extensions map[string]any, collectionFormat string) map[string]any {
+	if collectionFormat == "" {
+		return extensions
+	}
+	if extensions == nil {
+		extensions = make(map[string]any, 1)
+	}
+	extensions[swaggerCollectionFormatExtension] = collectionFormat
+	return extensions
 }
 
 func securityRequirementPtr(requirements openapi3.SecurityRequirements) *openapi3.SecurityRequirements {

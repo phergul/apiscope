@@ -200,18 +200,9 @@ func normalizeParameters(parameters openapi3.Parameters) ([]model.Parameter, []m
 			})
 			continue
 		}
-		result = append(result, model.Parameter{
-			Name:        parameter.Name,
-			In:          in,
-			Description: parameter.Description,
-			Required:    parameter.Required,
-			Deprecated:  parameter.Deprecated,
-			Style:       string(parameter.Style),
-			Explode:     parameter.Explode,
-			Schema:      normalizeSchema(parameter.Schema),
-			Example:     parameter.Example,
-			Default:     schemaDefault(parameter.Schema),
-		})
+		normalized, parameterWarnings := normalizeParameterModel(parameter.Name, in, parameter)
+		result = append(result, normalized)
+		warnings = append(warnings, parameterWarnings...)
 	}
 
 	return result, warnings
@@ -310,26 +301,59 @@ func normalizeResponses(responses *openapi3.Responses) ([]model.ResponseSpec, []
 }
 
 func normalizeResponseHeaders(headers openapi3.Headers) ([]model.Parameter, []model.SpecWarning) {
-	result := make([]model.Parameter, 0, len(headers))
+	names := make([]string, 0, len(headers))
+	for name := range headers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	result := make([]model.Parameter, 0, len(names))
 	var warnings []model.SpecWarning
-	for name, headerRef := range headers {
+	for _, name := range names {
+		headerRef := headers[name]
 		if headerRef == nil || headerRef.Value == nil {
 			continue
 		}
-		result = append(result, model.Parameter{
-			Name:        name,
-			In:          model.ParameterLocationHeader,
-			Description: headerRef.Value.Description,
-			Required:    headerRef.Value.Required,
-			Deprecated:  headerRef.Value.Deprecated,
-			Style:       string(headerRef.Value.Style),
-			Explode:     headerRef.Value.Explode,
-			Schema:      normalizeSchema(headerRef.Value.Schema),
-			Example:     headerRef.Value.Example,
-			Default:     schemaDefault(headerRef.Value.Schema),
-		})
+		normalized, headerWarnings := normalizeParameterModel(name, model.ParameterLocationHeader, &headerRef.Value.Parameter)
+		result = append(result, normalized)
+		warnings = append(warnings, headerWarnings...)
 	}
 	return result, warnings
+}
+
+func normalizeParameterModel(name string, in model.ParameterLocation, parameter *openapi3.Parameter) (model.Parameter, []model.SpecWarning) {
+	if parameter == nil {
+		return model.Parameter{}, nil
+	}
+
+	content, warnings := normalizeContent(parameter.Content)
+	normalized := model.Parameter{
+		Name:                name,
+		In:                  in,
+		Description:         parameter.Description,
+		Required:            parameter.Required,
+		Deprecated:          parameter.Deprecated,
+		Style:               string(parameter.Style),
+		Explode:             parameter.Explode,
+		Schema:              normalizeSchema(parameter.Schema),
+		Content:             content,
+		SelectedContentType: defaultSelectedMediaType(content),
+	}
+	if len(content) == 0 {
+		normalized.Example = parameter.Example
+		normalized.Default = schemaDefault(parameter.Schema)
+	}
+
+	if collectionFormat, ok := swaggerCollectionFormatFromExtensions(parameter.Extensions); ok {
+		normalized.CollectionFormat = collectionFormat
+		warnings = append(warnings, model.SpecWarning{
+			Code:    model.SpecWarningDowngradedFeature,
+			Message: fmt.Sprintf("swagger collectionFormat %q for parameter %q was preserved separately because it is not losslessly representable via OpenAPI 3 style/explode", collectionFormat, name),
+			Path:    name,
+		})
+	}
+
+	return normalized, warnings
 }
 
 func normalizeContent(content openapi3.Content) ([]model.MediaTypeSpec, []model.SpecWarning) {
@@ -555,7 +579,31 @@ func defaultSelectedContentType(body *model.RequestBodySpec) string {
 	if body == nil || len(body.Content) == 0 {
 		return ""
 	}
-	return body.Content[0].MediaType
+	return defaultSelectedMediaType(body.Content)
+}
+
+func defaultSelectedMediaType(content []model.MediaTypeSpec) string {
+	if len(content) == 0 {
+		return ""
+	}
+	return content[0].MediaType
+}
+
+func swaggerCollectionFormatFromExtensions(extensions map[string]any) (string, bool) {
+	if len(extensions) == 0 {
+		return "", false
+	}
+	raw, ok := extensions[swaggerCollectionFormatExtension]
+	if !ok || raw == nil {
+		return "", false
+	}
+
+	value := strings.TrimSpace(fmt.Sprint(raw))
+	if value == "" {
+		return "", false
+	}
+
+	return value, true
 }
 
 func fingerprintForSpec(spec *model.APISpec) model.SpecFingerprint {
@@ -606,16 +654,19 @@ type fingerprintOperation struct {
 }
 
 type fingerprintParameter struct {
-	Name        string                  `json:"name"`
-	In          model.ParameterLocation `json:"in"`
-	Description string                  `json:"description"`
-	Required    bool                    `json:"required"`
-	Deprecated  bool                    `json:"deprecated"`
-	Style       string                  `json:"style"`
-	Explode     *bool                   `json:"explode,omitempty"`
-	Schema      *fingerprintSchema      `json:"schema,omitempty"`
-	Example     any                     `json:"example,omitempty"`
-	Default     any                     `json:"default,omitempty"`
+	Name                string                  `json:"name"`
+	In                  model.ParameterLocation `json:"in"`
+	Description         string                  `json:"description"`
+	Required            bool                    `json:"required"`
+	Deprecated          bool                    `json:"deprecated"`
+	Style               string                  `json:"style"`
+	Explode             *bool                   `json:"explode,omitempty"`
+	Schema              *fingerprintSchema      `json:"schema,omitempty"`
+	Content             []fingerprintMediaType  `json:"content,omitempty"`
+	SelectedContentType string                  `json:"selected_content_type,omitempty"`
+	Example             any                     `json:"example,omitempty"`
+	Default             any                     `json:"default,omitempty"`
+	CollectionFormat    string                  `json:"collection_format,omitempty"`
 }
 
 type fingerprintRequestBody struct {
@@ -765,16 +816,19 @@ func canonicalParameters(parameters []model.Parameter) []fingerprintParameter {
 	result := make([]fingerprintParameter, 0, len(parameters))
 	for _, parameter := range parameters {
 		result = append(result, fingerprintParameter{
-			Name:        parameter.Name,
-			In:          parameter.In,
-			Description: parameter.Description,
-			Required:    parameter.Required,
-			Deprecated:  parameter.Deprecated,
-			Style:       parameter.Style,
-			Explode:     parameter.Explode,
-			Schema:      canonicalSchema(parameter.Schema),
-			Example:     parameter.Example,
-			Default:     parameter.Default,
+			Name:                parameter.Name,
+			In:                  parameter.In,
+			Description:         parameter.Description,
+			Required:            parameter.Required,
+			Deprecated:          parameter.Deprecated,
+			Style:               parameter.Style,
+			Explode:             parameter.Explode,
+			Schema:              canonicalSchema(parameter.Schema),
+			Content:             canonicalMediaTypes(parameter.Content),
+			SelectedContentType: parameter.SelectedContentType,
+			Example:             parameter.Example,
+			Default:             parameter.Default,
+			CollectionFormat:    parameter.CollectionFormat,
 		})
 	}
 	return result

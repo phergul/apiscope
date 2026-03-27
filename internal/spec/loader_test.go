@@ -46,6 +46,29 @@ func TestLoadDocumentFromFileYAML(t *testing.T) {
 	}
 }
 
+func TestLoadDocumentCanonicalizesRelativeFilePath(t *testing.T) {
+	t.Parallel()
+
+	path := writeTempSpecFile(t, "spec.yaml", "openapi: 3.0.3\ninfo:\n  title: Demo\n")
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("os.Getwd: %v", err)
+	}
+	relativePath, err := filepath.Rel(cwd, path)
+	if err != nil {
+		t.Fatalf("filepath.Rel: %v", err)
+	}
+
+	doc, err := newLoader(nil).loadDocument(context.Background(), Source{Value: relativePath})
+	if err != nil {
+		t.Fatalf("loadDocument returned error: %v", err)
+	}
+
+	if !filepath.IsAbs(doc.CanonicalLocation) {
+		t.Fatalf("expected canonical location to be absolute, got %q", doc.CanonicalLocation)
+	}
+}
+
 func TestLoadDocumentRejectsMissingFile(t *testing.T) {
 	t.Parallel()
 
@@ -220,6 +243,12 @@ func writeTempSpecFile(t *testing.T, name, contents string) string {
 	t.Helper()
 
 	dir := t.TempDir()
+	return writeTempSpecFileInDir(t, dir, name, contents)
+}
+
+func writeTempSpecFileInDir(t *testing.T, dir, name, contents string) string {
+	t.Helper()
+
 	path := filepath.Join(dir, name)
 	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
 		t.Fatalf("write temp file: %v", err)

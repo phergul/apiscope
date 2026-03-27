@@ -2,6 +2,7 @@ package spec
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"api-tui/internal/model"
@@ -496,4 +497,316 @@ paths:
 	if oasSpec.Fingerprint == swaggerSpec.Fingerprint {
 		t.Fatalf("expected source-aware fingerprints to differ, both were %q", oasSpec.Fingerprint)
 	}
+}
+
+func TestLoadPreservesParameterContent(t *testing.T) {
+	t.Parallel()
+
+	path := writeTempSpecFile(t, "content-param.yaml", `openapi: 3.0.3
+info:
+  title: Demo
+  version: 1.0.0
+paths:
+  /pets:
+    get:
+      parameters:
+        - name: filter
+          in: query
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+              example:
+                status: active
+      responses:
+        "200":
+          description: ok
+`)
+
+	spec, err := NewLoader(nil).Load(context.Background(), Source{Value: path})
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	param := spec.Operations[0].Parameters[0]
+	if len(param.Content) != 1 {
+		t.Fatalf("expected parameter content to be preserved, got %#v", param)
+	}
+	if got := param.SelectedContentType; got != "application/json" {
+		t.Fatalf("expected selected parameter content type application/json, got %q", got)
+	}
+	if param.Example != nil || param.Default != nil {
+		t.Fatalf("expected content-based parameter example/default to stay in content, got %#v", param)
+	}
+}
+
+func TestLoadPreservesResponseHeaderContent(t *testing.T) {
+	t.Parallel()
+
+	path := writeTempSpecFile(t, "content-header.yaml", `openapi: 3.0.3
+info:
+  title: Demo
+  version: 1.0.0
+paths:
+  /pets:
+    get:
+      responses:
+        "200":
+          description: ok
+          headers:
+            X-Filter:
+              content:
+                application/json:
+                  schema:
+                    type: array
+                    items:
+                      type: string
+`)
+
+	spec, err := NewLoader(nil).Load(context.Background(), Source{Value: path})
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	header := spec.Operations[0].Responses[0].Headers[0]
+	if len(header.Content) != 1 {
+		t.Fatalf("expected header content to be preserved, got %#v", header)
+	}
+	if got := header.SelectedContentType; got != "application/json" {
+		t.Fatalf("expected selected header content type application/json, got %q", got)
+	}
+}
+
+func TestLoadPreservesSwaggerDowngradeWarnings(t *testing.T) {
+	t.Parallel()
+
+	path := writeTempSpecFile(t, "swagger-warnings.yaml", `swagger: "2.0"
+info:
+  title: Demo
+  version: 1.0.0
+securityDefinitions:
+  petstore_auth:
+    type: oauth2
+    flow: accessCode
+    authorizationUrl: https://example.com/oauth/authorize
+    tokenUrl: https://example.com/oauth/token
+    scopes:
+      read:pets: read your pets
+paths:
+  /pets:
+    get:
+      parameters:
+        - name: ids
+          in: query
+          type: array
+          items:
+            type: string
+          collectionFormat: tsv
+      responses:
+        "200":
+          description: ok
+`)
+
+	spec, err := NewLoader(nil).Load(context.Background(), Source{Value: path})
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	param := spec.Operations[0].Parameters[0]
+	if got := param.CollectionFormat; got != "tsv" {
+		t.Fatalf("expected collectionFormat tsv to be preserved, got %q", got)
+	}
+	if !hasWarningContaining(spec.Warnings, "collectionFormat") {
+		t.Fatalf("expected collectionFormat warning, got %#v", spec.Warnings)
+	}
+	if !hasWarningContaining(spec.Warnings, "security scheme") {
+		t.Fatalf("expected oauth security warning, got %#v", spec.Warnings)
+	}
+}
+
+func TestLoadNormalizesEquivalentSwaggerAndOAS3SerializationShapes(t *testing.T) {
+	t.Parallel()
+
+	oasPath := writeTempSpecFile(t, "oas3-style.yaml", `openapi: 3.0.3
+info:
+  title: Demo
+  version: 1.0.0
+paths:
+  /pets:
+    get:
+      parameters:
+        - name: ids
+          in: query
+          style: spaceDelimited
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+      responses:
+        "200":
+          description: ok
+`)
+	swaggerPath := writeTempSpecFile(t, "swagger-style.yaml", `swagger: "2.0"
+info:
+  title: Demo
+  version: 1.0.0
+paths:
+  /pets:
+    get:
+      parameters:
+        - name: ids
+          in: query
+          type: array
+          items:
+            type: string
+          collectionFormat: ssv
+      responses:
+        "200":
+          description: ok
+`)
+
+	oasSpec, err := NewLoader(nil).Load(context.Background(), Source{Value: oasPath})
+	if err != nil {
+		t.Fatalf("load oas3: %v", err)
+	}
+	swaggerSpec, err := NewLoader(nil).Load(context.Background(), Source{Value: swaggerPath})
+	if err != nil {
+		t.Fatalf("load swagger: %v", err)
+	}
+
+	oasParam := oasSpec.Operations[0].Parameters[0]
+	swaggerParam := swaggerSpec.Operations[0].Parameters[0]
+	if oasParam.Style != swaggerParam.Style {
+		t.Fatalf("expected matching style, got %q and %q", oasParam.Style, swaggerParam.Style)
+	}
+	if (oasParam.Explode == nil) != (swaggerParam.Explode == nil) {
+		t.Fatalf("expected matching explode pointers, got %v and %v", oasParam.Explode, swaggerParam.Explode)
+	}
+	if oasParam.Explode != nil && swaggerParam.Explode != nil && *oasParam.Explode != *swaggerParam.Explode {
+		t.Fatalf("expected matching explode values, got %v and %v", *oasParam.Explode, *swaggerParam.Explode)
+	}
+	if swaggerParam.CollectionFormat != "" {
+		t.Fatalf("expected exact Swagger mapping to avoid preserved collectionFormat, got %q", swaggerParam.CollectionFormat)
+	}
+}
+
+func TestLoadFingerprintChangesWhenParameterContentChanges(t *testing.T) {
+	t.Parallel()
+
+	jsonPath := writeTempSpecFile(t, "json-param.yaml", `openapi: 3.0.3
+info:
+  title: Demo
+  version: 1.0.0
+paths:
+  /pets:
+    get:
+      parameters:
+        - name: filter
+          in: query
+          content:
+            application/json:
+              schema:
+                type: string
+      responses:
+        "200":
+          description: ok
+`)
+	xmlPath := writeTempSpecFile(t, "xml-param.yaml", `openapi: 3.0.3
+info:
+  title: Demo
+  version: 1.0.0
+paths:
+  /pets:
+    get:
+      parameters:
+        - name: filter
+          in: query
+          content:
+            application/xml:
+              schema:
+                type: string
+      responses:
+        "200":
+          description: ok
+`)
+
+	jsonSpec, err := NewLoader(nil).Load(context.Background(), Source{Value: jsonPath})
+	if err != nil {
+		t.Fatalf("load json content spec: %v", err)
+	}
+	xmlSpec, err := NewLoader(nil).Load(context.Background(), Source{Value: xmlPath})
+	if err != nil {
+		t.Fatalf("load xml content spec: %v", err)
+	}
+
+	if jsonSpec.Fingerprint == xmlSpec.Fingerprint {
+		t.Fatalf("expected fingerprints to differ when parameter content changes, both were %q", jsonSpec.Fingerprint)
+	}
+}
+
+func TestLoadFingerprintChangesWhenSwaggerCollectionFormatChanges(t *testing.T) {
+	t.Parallel()
+
+	csvPath := writeTempSpecFile(t, "csv-param.yaml", `swagger: "2.0"
+info:
+  title: Demo
+  version: 1.0.0
+paths:
+  /pets:
+    get:
+      parameters:
+        - name: ids
+          in: query
+          type: array
+          items:
+            type: string
+          collectionFormat: csv
+      responses:
+        "200":
+          description: ok
+`)
+	tsvPath := writeTempSpecFile(t, "tsv-param.yaml", `swagger: "2.0"
+info:
+  title: Demo
+  version: 1.0.0
+paths:
+  /pets:
+    get:
+      parameters:
+        - name: ids
+          in: query
+          type: array
+          items:
+            type: string
+          collectionFormat: tsv
+      responses:
+        "200":
+          description: ok
+`)
+
+	csvSpec, err := NewLoader(nil).Load(context.Background(), Source{Value: csvPath})
+	if err != nil {
+		t.Fatalf("load csv spec: %v", err)
+	}
+	tsvSpec, err := NewLoader(nil).Load(context.Background(), Source{Value: tsvPath})
+	if err != nil {
+		t.Fatalf("load tsv spec: %v", err)
+	}
+
+	if csvSpec.Fingerprint == tsvSpec.Fingerprint {
+		t.Fatalf("expected fingerprints to differ when collectionFormat changes, both were %q", csvSpec.Fingerprint)
+	}
+}
+
+func hasWarningContaining(warnings []model.SpecWarning, substring string) bool {
+	for _, warning := range warnings {
+		if strings.Contains(warning.Message, substring) {
+			return true
+		}
+	}
+	return false
 }

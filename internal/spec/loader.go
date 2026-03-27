@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"api-tui/internal/model"
@@ -102,24 +103,32 @@ func (l *loader) loadDocument(ctx context.Context, source Source) (*loadedDocume
 }
 
 func (l *loader) loadFile(source Source) (*loadedDocument, error) {
-	raw, err := os.ReadFile(source.Value)
+	absolutePath, err := filepath.Abs(source.Value)
+	if err != nil {
+		absolutePath = source.Value
+	}
+
+	canonicalSource := source
+	canonicalSource.Value = absolutePath
+
+	raw, err := os.ReadFile(canonicalSource.Value)
 	if err != nil {
 		return nil, &Error{
 			Kind:   ErrorKindFileReadFailure,
 			Op:     "read file",
-			Source: source.Value,
+			Source: canonicalSource.Value,
 			Err:    err,
 		}
 	}
 
-	format, err := detectDocumentFormat(source.Value, "", raw)
+	format, err := detectDocumentFormat(canonicalSource.Value, "", raw)
 	if err != nil {
-		return nil, wrapDocumentError(err, source.Value, "detect format")
+		return nil, wrapDocumentError(err, canonicalSource.Value, "detect format")
 	}
 
 	return &loadedDocument{
-		Source:            source,
-		CanonicalLocation: source.Value,
+		Source:            canonicalSource,
+		CanonicalLocation: canonicalSource.Value,
 		Raw:               raw,
 		Format:            format,
 	}, nil

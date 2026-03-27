@@ -196,3 +196,285 @@ paths:
 		t.Fatalf("expected unsupported swagger construct error, got %v", err)
 	}
 }
+
+func TestConvertDocumentConvertsSwaggerReusableRefsAndResponseHeaders(t *testing.T) {
+	t.Parallel()
+
+	raw := `swagger: "2.0"
+info:
+  title: Demo
+  version: 1.0.0
+parameters:
+  Limit:
+    name: limit
+    in: query
+    type: array
+    items:
+      type: string
+    collectionFormat: multi
+responses:
+  Error:
+    description: failed
+    headers:
+      X-Trace:
+        type: array
+        items:
+          type: string
+        collectionFormat: csv
+paths:
+  /pets:
+    get:
+      parameters:
+        - $ref: "#/parameters/Limit"
+      responses:
+        default:
+          $ref: "#/responses/Error"
+`
+
+	parsed, err := newLoader(nil).parseDocument(&loadedDocument{
+		CanonicalLocation: "swagger.yaml",
+		Format:            DocumentFormatYAML,
+		Raw:               []byte(raw),
+	})
+	if err != nil {
+		t.Fatalf("parseDocument returned error: %v", err)
+	}
+
+	converted, err := newLoader(nil).convertDocument(parsed)
+	if err != nil {
+		t.Fatalf("convertDocument returned error: %v", err)
+	}
+
+	limit := converted.openAPI3Doc.Components.Parameters["Limit"]
+	if limit == nil || limit.Value == nil {
+		t.Fatal("expected converted reusable parameter")
+	}
+	if limit.Value.Style != "form" || limit.Value.Explode == nil || !*limit.Value.Explode {
+		t.Fatalf("expected multi query collectionFormat to map to form+explode, got style=%q explode=%v", limit.Value.Style, limit.Value.Explode)
+	}
+
+	pathItem := converted.openAPI3Doc.Paths.Value("/pets")
+	if pathItem == nil || pathItem.Get == nil {
+		t.Fatal("expected converted get operation")
+	}
+	if got := pathItem.Get.Parameters[0].Ref; got != "#/components/parameters/Limit" {
+		t.Fatalf("expected parameter ref rewrite, got %q", got)
+	}
+	if got := pathItem.Get.Responses.Default().Ref; got != "#/components/responses/Error" {
+		t.Fatalf("expected response ref rewrite, got %q", got)
+	}
+
+	errorResponse := converted.openAPI3Doc.Components.Responses["Error"]
+	if errorResponse == nil || errorResponse.Value == nil {
+		t.Fatal("expected converted reusable response")
+	}
+	header := errorResponse.Value.Headers["X-Trace"]
+	if header == nil || header.Value == nil {
+		t.Fatal("expected converted response header")
+	}
+	if header.Value.Style != "simple" || header.Value.Explode == nil || *header.Value.Explode {
+		t.Fatalf("expected csv header collectionFormat to map to simple+explode=false, got style=%q explode=%v", header.Value.Style, header.Value.Explode)
+	}
+}
+
+func TestConvertDocumentRewritesExternalSwaggerRefs(t *testing.T) {
+	t.Parallel()
+
+	raw := `swagger: "2.0"
+info:
+  title: Demo
+  version: 1.0.0
+paths:
+  /pets:
+    get:
+      parameters:
+        - $ref: "common.yaml#/parameters/Limit"
+      responses:
+        default:
+          $ref: "https://example.com/common.yaml#/responses/Error"
+`
+
+	parsed, err := newLoader(nil).parseDocument(&loadedDocument{
+		CanonicalLocation: "swagger.yaml",
+		Format:            DocumentFormatYAML,
+		Raw:               []byte(raw),
+	})
+	if err != nil {
+		t.Fatalf("parseDocument returned error: %v", err)
+	}
+
+	converted, err := newLoader(nil).convertDocument(parsed)
+	if err != nil {
+		t.Fatalf("convertDocument returned error: %v", err)
+	}
+
+	pathItem := converted.openAPI3Doc.Paths.Value("/pets")
+	if got := pathItem.Get.Parameters[0].Ref; got != "common.yaml#/components/parameters/Limit" {
+		t.Fatalf("expected external parameter ref rewrite, got %q", got)
+	}
+	if got := pathItem.Get.Responses.Default().Ref; got != "https://example.com/common.yaml#/components/responses/Error" {
+		t.Fatalf("expected external response ref rewrite, got %q", got)
+	}
+}
+
+func TestConvertDocumentPreservesSwaggerPathItemRefs(t *testing.T) {
+	t.Parallel()
+
+	raw := `swagger: "2.0"
+info:
+  title: Demo
+  version: 1.0.0
+paths:
+  /pets:
+    $ref: "common.yaml#/paths/~1pets"
+`
+
+	parsed, err := newLoader(nil).parseDocument(&loadedDocument{
+		CanonicalLocation: "swagger.yaml",
+		Format:            DocumentFormatYAML,
+		Raw:               []byte(raw),
+	})
+	if err != nil {
+		t.Fatalf("parseDocument returned error: %v", err)
+	}
+
+	converted, err := newLoader(nil).convertDocument(parsed)
+	if err != nil {
+		t.Fatalf("convertDocument returned error: %v", err)
+	}
+
+	pathItem := converted.openAPI3Doc.Paths.Value("/pets")
+	if pathItem == nil {
+		t.Fatal("expected converted path item")
+	}
+	if got := pathItem.Ref; got != "common.yaml#/paths/~1pets" {
+		t.Fatalf("expected path item ref to be preserved, got %q", got)
+	}
+}
+
+func TestConvertDocumentConvertsSwaggerOAuth2Definitions(t *testing.T) {
+	t.Parallel()
+
+	raw := `swagger: "2.0"
+info:
+  title: Demo
+  version: 1.0.0
+securityDefinitions:
+  petstore_auth:
+    type: oauth2
+    flow: accessCode
+    authorizationUrl: https://example.com/oauth/authorize
+    tokenUrl: https://example.com/oauth/token
+    scopes:
+      read:pets: read your pets
+paths:
+  /pets:
+    get:
+      responses:
+        "200":
+          description: ok
+`
+
+	parsed, err := newLoader(nil).parseDocument(&loadedDocument{
+		CanonicalLocation: "swagger.yaml",
+		Format:            DocumentFormatYAML,
+		Raw:               []byte(raw),
+	})
+	if err != nil {
+		t.Fatalf("parseDocument returned error: %v", err)
+	}
+
+	converted, err := newLoader(nil).convertDocument(parsed)
+	if err != nil {
+		t.Fatalf("convertDocument returned error: %v", err)
+	}
+
+	scheme := converted.openAPI3Doc.Components.SecuritySchemes["petstore_auth"]
+	if scheme == nil || scheme.Value == nil {
+		t.Fatal("expected converted oauth2 scheme")
+	}
+	if scheme.Value.Type != "oauth2" {
+		t.Fatalf("expected oauth2 scheme type, got %q", scheme.Value.Type)
+	}
+	if scheme.Value.Flows == nil || scheme.Value.Flows.AuthorizationCode == nil {
+		t.Fatalf("expected accessCode flow to map to authorizationCode, got %#v", scheme.Value.Flows)
+	}
+}
+
+func TestConvertDocumentMapsSwaggerCollectionFormats(t *testing.T) {
+	t.Parallel()
+
+	raw := `swagger: "2.0"
+info:
+  title: Demo
+  version: 1.0.0
+paths:
+  /pets:
+    get:
+      parameters:
+        - name: multi
+          in: query
+          type: array
+          items:
+            type: string
+          collectionFormat: multi
+        - name: ssv
+          in: query
+          type: array
+          items:
+            type: string
+          collectionFormat: ssv
+        - name: pipes
+          in: query
+          type: array
+          items:
+            type: string
+          collectionFormat: pipes
+        - name: tsv
+          in: query
+          type: array
+          items:
+            type: string
+          collectionFormat: tsv
+      responses:
+        "200":
+          description: ok
+`
+
+	parsed, err := newLoader(nil).parseDocument(&loadedDocument{
+		CanonicalLocation: "swagger.yaml",
+		Format:            DocumentFormatYAML,
+		Raw:               []byte(raw),
+	})
+	if err != nil {
+		t.Fatalf("parseDocument returned error: %v", err)
+	}
+
+	converted, err := newLoader(nil).convertDocument(parsed)
+	if err != nil {
+		t.Fatalf("convertDocument returned error: %v", err)
+	}
+
+	params := converted.openAPI3Doc.Paths.Value("/pets").Get.Parameters
+	if got := params[0].Value.Style; got != "form" {
+		t.Fatalf("expected multi to map to form, got %q", got)
+	}
+	if params[0].Value.Explode == nil || !*params[0].Value.Explode {
+		t.Fatalf("expected multi to map to explode=true, got %v", params[0].Value.Explode)
+	}
+	if got := params[1].Value.Style; got != "spaceDelimited" {
+		t.Fatalf("expected ssv to map to spaceDelimited, got %q", got)
+	}
+	if params[1].Value.Explode == nil || *params[1].Value.Explode {
+		t.Fatalf("expected ssv to map to explode=false, got %v", params[1].Value.Explode)
+	}
+	if got := params[2].Value.Style; got != "pipeDelimited" {
+		t.Fatalf("expected pipes to map to pipeDelimited, got %q", got)
+	}
+	if params[2].Value.Explode == nil || *params[2].Value.Explode {
+		t.Fatalf("expected pipes to map to explode=false, got %v", params[2].Value.Explode)
+	}
+	if got := params[3].Value.Extensions[swaggerCollectionFormatExtension]; got != "tsv" {
+		t.Fatalf("expected tsv to be preserved in extensions, got %#v", got)
+	}
+}

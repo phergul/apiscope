@@ -2,6 +2,7 @@ package spec
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
 	"api-tui/internal/model"
@@ -115,10 +116,11 @@ components:
 	}
 }
 
-func TestResolveDocumentRejectsExternalFileRefs(t *testing.T) {
+func TestResolveDocumentResolvesExternalFileRefs(t *testing.T) {
 	t.Parallel()
 
-	converted := mustConvertDocument(t, `openapi: 3.0.3
+	dir := t.TempDir()
+	rootPath := writeTempSpecFileInDir(t, dir, "root.yaml", `openapi: 3.0.3
 info:
   title: Demo
   version: 1.0.0
@@ -133,17 +135,45 @@ paths:
               schema:
                 $ref: "other.yaml#/components/schemas/Pet"
 `)
+	writeTempSpecFileInDir(t, dir, "other.yaml", `openapi: 3.0.3
+info:
+  title: Child
+  version: 1.0.0
+components:
+  schemas:
+    Pet:
+      type: object
+      properties:
+        id:
+          type: string
+`)
 
-	_, err := newLoader(nil).resolveDocument(context.Background(), converted)
-	if !IsErrorKind(err, ErrorKindUnsupportedExternalRef) {
-		t.Fatalf("expected unsupported external ref, got %v", err)
+	document, err := newLoader(nil).loadDocument(context.Background(), Source{Value: rootPath})
+	if err != nil {
+		t.Fatalf("loadDocument returned error: %v", err)
+	}
+	converted := mustConvertLoadedDocument(t, document)
+
+	resolved, err := newLoader(nil).resolveDocument(context.Background(), converted)
+	if err != nil {
+		t.Fatalf("resolveDocument returned error: %v", err)
+	}
+
+	schema := resolved.openAPI3Doc.Paths.Value("/pets").Get.Responses.Value("200").Value.Content["application/json"].Schema
+	if schema == nil || schema.Value == nil {
+		t.Fatal("expected external file ref to be resolved")
 	}
 }
 
-func TestResolveDocumentRejectsRemoteRefs(t *testing.T) {
+func TestResolveDocumentResolvesRemoteRefs(t *testing.T) {
 	t.Parallel()
 
-	converted := mustConvertDocument(t, `openapi: 3.0.3
+	converted := mustConvertLoadedDocument(t, &loadedDocument{
+		Source:            Source{Kind: SourceKindURL, Value: "https://example.com/spec/root.yaml"},
+		CanonicalLocation: "https://example.com/spec/root.yaml",
+		FinalURL:          "https://example.com/spec/root.yaml",
+		Format:            DocumentFormatYAML,
+		Raw: []byte(`openapi: 3.0.3
 info:
   title: Demo
   version: 1.0.0
@@ -157,11 +187,154 @@ paths:
             application/json:
               schema:
                 $ref: "https://example.com/pet.yaml#/components/schemas/Pet"
-`)
+`),
+	})
+
+	client := newTestClient(func(req *http.Request) (*http.Response, error) {
+		switch req.URL.String() {
+		case "https://example.com/pet.yaml":
+			return stringResponse(req, http.StatusOK, "application/yaml", `openapi: 3.0.3
+info:
+  title: Child
+  version: 1.0.0
+components:
+  schemas:
+    Pet:
+      type: object
+      properties:
+        id:
+          type: string
+`), nil
+		default:
+			return stringResponse(req, http.StatusNotFound, "text/plain", "not found"), nil
+		}
+	})
+
+	resolved, err := newLoader(client).resolveDocument(context.Background(), converted)
+	if err != nil {
+		t.Fatalf("resolveDocument returned error: %v", err)
+	}
+
+	schema := resolved.openAPI3Doc.Paths.Value("/pets").Get.Responses.Value("200").Value.Content["application/json"].Schema
+	if schema == nil || schema.Value == nil {
+		t.Fatal("expected remote ref to be resolved")
+	}
+}
+
+func TestResolveDocumentUsesRedirectedFinalURLForRelativeRefs(t *testing.T) {
+	t.Parallel()
+
+	converted := mustConvertLoadedDocument(t, &loadedDocument{
+		Source:            Source{Kind: SourceKindURL, Value: "https://example.com/start/root.yaml"},
+		CanonicalLocation: "https://example.com/final/root.yaml",
+		FinalURL:          "https://example.com/final/root.yaml",
+		Format:            DocumentFormatYAML,
+		Raw: []byte(`openapi: 3.0.3
+info:
+  title: Demo
+  version: 1.0.0
+paths:
+  /pets:
+    get:
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "common.yaml#/components/schemas/Pet"
+`),
+	})
+
+	client := newTestClient(func(req *http.Request) (*http.Response, error) {
+		switch req.URL.String() {
+		case "https://example.com/final/common.yaml":
+			return stringResponse(req, http.StatusOK, "application/yaml", `openapi: 3.0.3
+info:
+  title: Child
+  version: 1.0.0
+components:
+  schemas:
+    Pet:
+      type: object
+`), nil
+		default:
+			return stringResponse(req, http.StatusNotFound, "text/plain", "not found"), nil
+		}
+	})
+
+	resolved, err := newLoader(client).resolveDocument(context.Background(), converted)
+	if err != nil {
+		t.Fatalf("resolveDocument returned error: %v", err)
+	}
+
+	schema := resolved.openAPI3Doc.Paths.Value("/pets").Get.Responses.Value("200").Value.Content["application/json"].Schema
+	if schema == nil || schema.Value == nil {
+		t.Fatal("expected redirected final URL to be used as the ref base")
+	}
+}
+
+func TestResolveDocumentRejectsUnsupportedExternalSchemes(t *testing.T) {
+	t.Parallel()
+
+	converted := mustConvertLoadedDocument(t, &loadedDocument{
+		CanonicalLocation: "spec.yaml",
+		Format:            DocumentFormatYAML,
+		Raw: []byte(`openapi: 3.0.3
+info:
+  title: Demo
+  version: 1.0.0
+paths:
+  /pets:
+    get:
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "ftp://example.com/pet.yaml#/components/schemas/Pet"
+`),
+	})
 
 	_, err := newLoader(nil).resolveDocument(context.Background(), converted)
 	if !IsErrorKind(err, ErrorKindUnsupportedExternalRef) {
 		t.Fatalf("expected unsupported external ref, got %v", err)
+	}
+}
+
+func TestResolveDocumentReturnsRefResolutionFailureForMissingExternalTargets(t *testing.T) {
+	t.Parallel()
+
+	converted := mustConvertLoadedDocument(t, &loadedDocument{
+		Source:            Source{Kind: SourceKindURL, Value: "https://example.com/spec/root.yaml"},
+		CanonicalLocation: "https://example.com/spec/root.yaml",
+		FinalURL:          "https://example.com/spec/root.yaml",
+		Format:            DocumentFormatYAML,
+		Raw: []byte(`openapi: 3.0.3
+info:
+  title: Demo
+  version: 1.0.0
+paths:
+  /pets:
+    get:
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "https://example.com/missing.yaml#/components/schemas/Pet"
+`),
+	})
+
+	client := newTestClient(func(req *http.Request) (*http.Response, error) {
+		return stringResponse(req, http.StatusNotFound, "text/plain", "missing"), nil
+	})
+
+	_, err := newLoader(client).resolveDocument(context.Background(), converted)
+	if !IsErrorKind(err, ErrorKindRefResolutionFailure) {
+		t.Fatalf("expected ref resolution failure, got %v", err)
 	}
 }
 
@@ -232,11 +405,15 @@ components:
 func mustConvertDocument(t *testing.T, raw string) *convertedDocument {
 	t.Helper()
 
-	document := &loadedDocument{
+	return mustConvertLoadedDocument(t, &loadedDocument{
 		CanonicalLocation: "spec.yaml",
 		Format:            DocumentFormatYAML,
 		Raw:               []byte(raw),
-	}
+	})
+}
+
+func mustConvertLoadedDocument(t *testing.T, document *loadedDocument) *convertedDocument {
+	t.Helper()
 
 	parsed, err := newLoader(nil).parseDocument(document)
 	if err != nil {

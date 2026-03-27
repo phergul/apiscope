@@ -116,16 +116,19 @@ type Operation struct {
 }
 
 type Parameter struct {
-	Name        string
-	In          ParameterLocation
-	Description string
-	Required    bool
-	Deprecated  bool
-	Style       string
-	Explode     *bool
-	Schema      *Schema
-	Example     any
-	Default     any
+	Name                string
+	In                  ParameterLocation
+	Description         string
+	Required            bool
+	Deprecated          bool
+	Style               string
+	Explode             *bool
+	Schema              *Schema
+	Content             []MediaTypeSpec
+	SelectedContentType string
+	Example             any
+	Default             any
+	CollectionFormat    string
 }
 
 type RequestBodySpec struct {

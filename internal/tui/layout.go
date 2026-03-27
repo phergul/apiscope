@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"api-tui/internal/model"
@@ -159,19 +160,31 @@ func (m *Model) operationsPaneContent() string {
 		return "No spec loaded."
 	}
 
-	title := m.session.Spec.Title
-	if strings.TrimSpace(title) == "" {
-		title = "(untitled API)"
+	if len(m.viewState.VisibleOperationKeys) == 0 {
+		return "No operations in spec."
 	}
 
-	lines := []string{
-		fmt.Sprintf("API: %s", title),
-		fmt.Sprintf("Operations: %d", len(m.session.Spec.Operations)),
+	selected := m.resolvedSelectedOperation()
+	lines := make([]string, 0, len(m.viewState.VisibleOperationKeys))
+	for _, key := range m.viewState.VisibleOperationKeys {
+		operation := m.operationByKey(key)
+		if operation == nil {
+			continue
+		}
+
+		prefix := "  "
+		if selected != nil && operation.Key == selected.Key {
+			prefix = "> "
+		}
+
+		line := fmt.Sprintf("%s%-6s %s", prefix, strings.ToUpper(operation.Method), operation.Path)
+		if summary := strings.TrimSpace(operation.Summary); summary != "" {
+			line += " - " + summary
+		}
+		lines = append(lines, line)
 	}
-	if selected := m.selectedOperation(); selected != nil {
-		lines = append(lines, fmt.Sprintf("Current: %s %s", selected.Method, selected.Path))
-	} else {
-		lines = append(lines, "", "No operations in spec.")
+	if len(lines) == 0 {
+		return "No visible operations."
 	}
 
 	return strings.Join(lines, "\n")
@@ -185,21 +198,32 @@ func (m *Model) detailsPaneContent() string {
 		return fmt.Sprintf("Failed to load spec.\n\n%s", m.loadErr.Error())
 	}
 
-	selected := m.selectedOperation()
+	selected := m.resolvedSelectedOperation()
 	if selected == nil {
-		return "No operations in spec."
+		return "No operation selected."
 	}
 
-	summary := selected.Summary
-	if strings.TrimSpace(summary) == "" {
-		summary = "No summary yet."
+	sections := []string{
+		fmt.Sprintf("Operation: %s %s", strings.ToUpper(selected.Method), selected.Path),
+		fmt.Sprintf("Summary: %s", fallbackText(selected.Summary, "None")),
+		fmt.Sprintf("Description: %s", fallbackText(selected.Description, "None")),
+		fmt.Sprintf("Tags: %s", formatTags(selected.Tags)),
+		fmt.Sprintf("Deprecated: %s", yesNo(selected.Deprecated)),
+		"",
+		"Parameters",
+		formatParameterSections(selected.Parameters),
+		"",
+		"Request Body",
+		formatRequestBody(selected.RequestBody),
+		"",
+		"Responses",
+		formatResponses(selected.Responses),
+		"",
+		"Security",
+		formatSecurityRequirement(m.effectiveSecurityRequirement(selected)),
 	}
 
-	return strings.Join([]string{
-		fmt.Sprintf("Operation: %s %s", selected.Method, selected.Path),
-		fmt.Sprintf("Summary: %s", summary),
-		"Read-only explorer rendering arrives in M2.2.",
-	}, "\n")
+	return strings.Join(sections, "\n")
 }
 
 func (m *Model) requestPaneContent() string {
@@ -219,12 +243,20 @@ func (m *Model) responsePaneContent() string {
 }
 
 func (m *Model) renderStatusBar(width int) string {
-	line := fmt.Sprintf(
-		"Source: %s | State: %s | Focus: %s | Keys: 1-4 switch Tab cycle q quit",
-		m.source,
-		m.loadStateLabel(),
-		focusedPaneLabel(m.viewState.FocusedPane),
-	)
+	parts := []string{
+		fmt.Sprintf("Source: %s", m.source),
+		fmt.Sprintf("State: %s", m.loadStateLabel()),
+		fmt.Sprintf("Focus: %s", focusedPaneLabel(m.viewState.FocusedPane)),
+	}
+	if selected := m.resolvedSelectedOperation(); selected != nil {
+		parts = append(parts, fmt.Sprintf("Operation: %s %s", strings.ToUpper(selected.Method), selected.Path))
+	}
+	if m.session.Spec != nil {
+		parts = append(parts, fmt.Sprintf("Count: %d", len(m.session.Spec.Operations)))
+	}
+	parts = append(parts, "Keys: 1-4 switch Tab cycle q quit")
+
+	line := strings.Join(parts, " | ")
 
 	return lipgloss.NewStyle().
 		BorderTop(true).
@@ -246,19 +278,32 @@ func (m *Model) loadStateLabel() string {
 	}
 }
 
-func (m *Model) selectedOperation() *model.Operation {
+func (m *Model) operationByKey(key model.OperationKey) *model.Operation {
 	if m.session.Spec == nil {
 		return nil
 	}
 
 	for index := range m.session.Spec.Operations {
 		operation := &m.session.Spec.Operations[index]
-		if operation.Key == m.session.SelectedOperationKey {
+		if operation.Key == key {
 			return operation
 		}
 	}
 
 	return nil
+}
+
+func (m *Model) resolvedSelectedOperation() *model.Operation {
+	if operation := m.operationByKey(m.session.SelectedOperationKey); operation != nil {
+		if len(m.viewState.VisibleOperationKeys) == 0 || slices.Contains(m.viewState.VisibleOperationKeys, operation.Key) {
+			return operation
+		}
+	}
+	if len(m.viewState.VisibleOperationKeys) == 0 {
+		return nil
+	}
+
+	return m.operationByKey(m.viewState.VisibleOperationKeys[0])
 }
 
 func (m *Model) resolvedDimensions() (int, int) {
@@ -321,4 +366,203 @@ func maxInt(left, right int) int {
 	}
 
 	return right
+}
+
+func fallbackText(value, fallback string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fallback
+	}
+
+	return value
+}
+
+func yesNo(value bool) string {
+	if value {
+		return "yes"
+	}
+
+	return "no"
+}
+
+func formatTags(tags []string) string {
+	if len(tags) == 0 {
+		return "None"
+	}
+
+	return strings.Join(tags, ", ")
+}
+
+func formatParameterSections(parameters []model.Parameter) string {
+	locations := []model.ParameterLocation{
+		model.ParameterLocationPath,
+		model.ParameterLocationQuery,
+		model.ParameterLocationHeader,
+		model.ParameterLocationCookie,
+	}
+
+	lines := make([]string, 0, len(locations)*2)
+	for _, location := range locations {
+		lines = append(lines, strings.ToUpper(string(location))+":")
+
+		count := 0
+		for _, parameter := range parameters {
+			if parameter.In != location {
+				continue
+			}
+
+			count++
+			lines = append(lines, fmt.Sprintf(
+				"- %s (%s, %s)",
+				parameter.Name,
+				requiredLabel(parameter.Required),
+				formatParameterTypeHint(parameter),
+			))
+		}
+		if count == 0 {
+			lines = append(lines, "- none")
+		}
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func requiredLabel(required bool) string {
+	if required {
+		return "required"
+	}
+
+	return "optional"
+}
+
+func formatParameterTypeHint(parameter model.Parameter) string {
+	if parameter.Schema != nil {
+		return formatSchemaType(parameter.Schema)
+	}
+	if len(parameter.Content) > 0 {
+		return "content"
+	}
+
+	return "unknown"
+}
+
+func formatSchemaType(schema *model.Schema) string {
+	if schema == nil {
+		return "unknown"
+	}
+
+	parts := make([]string, 0, 2)
+	if schema.Type != "" {
+		parts = append(parts, schema.Type)
+	}
+	if schema.Format != "" {
+		parts = append(parts, schema.Format)
+	}
+	if len(parts) > 0 {
+		return strings.Join(parts, "/")
+	}
+	if schema.Ref != "" {
+		return schema.Ref
+	}
+	if len(schema.OneOf) > 0 {
+		return "oneOf"
+	}
+	if len(schema.AnyOf) > 0 {
+		return "anyOf"
+	}
+	if len(schema.AllOf) > 0 {
+		return "allOf"
+	}
+
+	return "object"
+}
+
+func formatRequestBody(body *model.RequestBodySpec) string {
+	if body == nil {
+		return "None"
+	}
+
+	required := "optional"
+	if body.Required {
+		required = "required"
+	}
+
+	mediaTypes := make([]string, 0, len(body.Content))
+	for _, content := range body.Content {
+		mediaTypes = append(mediaTypes, content.MediaType)
+	}
+	if len(mediaTypes) == 0 {
+		mediaTypes = append(mediaTypes, "none")
+	}
+
+	lines := []string{
+		fmt.Sprintf("Required: %s", required),
+		fmt.Sprintf("Media types: %s", strings.Join(mediaTypes, ", ")),
+	}
+	if description := strings.TrimSpace(body.Description); description != "" {
+		lines = append(lines, fmt.Sprintf("Description: %s", description))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func formatResponses(responses []model.ResponseSpec) string {
+	if len(responses) == 0 {
+		return "None"
+	}
+
+	lines := make([]string, 0, len(responses))
+	for _, response := range responses {
+		mediaTypes := make([]string, 0, len(response.Content))
+		for _, content := range response.Content {
+			mediaTypes = append(mediaTypes, content.MediaType)
+		}
+		if len(mediaTypes) == 0 {
+			mediaTypes = append(mediaTypes, "none")
+		}
+
+		description := fallbackText(response.Description, "None")
+		lines = append(lines, fmt.Sprintf("- %s: %s [%s]", response.StatusCode, description, strings.Join(mediaTypes, ", ")))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func (m *Model) effectiveSecurityRequirement(operation *model.Operation) *model.SecurityRequirement {
+	if operation != nil && operation.Security != nil {
+		return operation.Security
+	}
+
+	if m.session.Spec == nil {
+		return nil
+	}
+
+	return m.session.Spec.Security
+}
+
+func formatSecurityRequirement(requirement *model.SecurityRequirement) string {
+	if requirement == nil || len(requirement.Alternatives) == 0 {
+		return "None"
+	}
+
+	lines := make([]string, 0, len(requirement.Alternatives))
+	for _, alternative := range requirement.Alternatives {
+		parts := make([]string, 0, len(alternative.Schemes))
+		for _, scheme := range alternative.Schemes {
+			part := scheme.Name
+			if len(scheme.Scopes) > 0 {
+				part += " (" + strings.Join(scheme.Scopes, ", ") + ")"
+			}
+			parts = append(parts, part)
+		}
+		if len(parts) == 0 {
+			continue
+		}
+		lines = append(lines, "- "+strings.Join(parts, " AND "))
+	}
+	if len(lines) == 0 {
+		return "None"
+	}
+
+	return strings.Join(lines, "\nOR\n")
 }

@@ -48,18 +48,18 @@ type SpecFingerprint string
 
 type OperationKey string
 
-func NewOperationKey(method, normalizedPath string) OperationKey {
-	normalizedMethod := strings.ToUpper(strings.TrimSpace(method))
-	path := normalizeOperationPath(normalizedPath)
+func NewOperationKey(method, normalisedPath string) OperationKey {
+	normalisedMethod := strings.ToUpper(strings.TrimSpace(method))
+	path := normaliseOperationPath(normalisedPath)
 
-	return OperationKey(normalizedMethod + " " + path)
+	return OperationKey(normalisedMethod + " " + path)
 }
 
 func (k OperationKey) String() string {
 	return string(k)
 }
 
-func normalizeOperationPath(path string) string {
+func normaliseOperationPath(path string) string {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return "/"

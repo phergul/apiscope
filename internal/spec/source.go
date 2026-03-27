@@ -3,19 +3,17 @@ package spec
 import (
 	"net/url"
 	"strings"
+
+	"api-tui/internal/spec/internal/pipeline"
 )
 
-type SourceKind string
+type SourceKind = pipeline.SourceKind
+type Source = pipeline.Source
 
 const (
-	SourceKindFile SourceKind = "file"
-	SourceKindURL  SourceKind = "url"
+	SourceKindFile = pipeline.SourceKindFile
+	SourceKindURL  = pipeline.SourceKindURL
 )
-
-type Source struct {
-	Kind  SourceKind
-	Value string
-}
 
 func classifySource(source Source) (Source, error) {
 	value := strings.TrimSpace(source.Value)

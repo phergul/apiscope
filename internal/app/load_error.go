@@ -62,12 +62,12 @@ func DescribeLoadError(err error, fallbackSource string) LoadErrorView {
 		view.Summary = "The document could not be understood as a supported Swagger or OpenAPI spec."
 		view.Hint = "Validate the file contents and make sure the document is valid JSON or YAML."
 	case spec.ErrorKindRefResolutionFailure, spec.ErrorKindUnsupportedExternalRef,
-		spec.ErrorKindNormalizationFailure, spec.ErrorKindUnsupportedNormalizedConstruct,
+		spec.ErrorKindNormalisationFailure, spec.ErrorKindUnsupportedNormalisedConstruct,
 		spec.ErrorKindUnsupportedSwaggerConstruct, spec.ErrorKindSwaggerConversionFailure,
 		spec.ErrorKindNotImplemented:
 		view.Category = "unsupported spec content"
 		view.Title = "Spec contains unsupported content"
-		view.Summary = "The spec uses references or features that this explorer cannot normalize yet."
+		view.Summary = "The spec uses references or features that this explorer cannot normalise yet."
 		view.Hint = "Simplify the spec or remove unsupported features, then reload it."
 	default:
 		if specErr.Err != nil {

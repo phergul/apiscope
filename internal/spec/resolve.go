@@ -8,25 +8,18 @@ import (
 	"net/url"
 	"path/filepath"
 
-	"api-tui/internal/model"
+	"api-tui/internal/spec/internal/pipeline"
 
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
-type resolvedDocument struct {
-	document      *loadedDocument
-	sourceFamily  model.SourceFamily
-	sourceVersion string
-	openAPI3Doc   *openapi3.T
-}
-
-func (l *loader) resolveDocument(ctx context.Context, converted *convertedDocument) (*resolvedDocument, error) {
-	baseURI, err := resolveBaseURI(converted.document)
+func (l *Loader) resolveDocument(ctx context.Context, converted *pipeline.ConvertedDocument) (*pipeline.ResolvedDocument, error) {
+	baseURI, err := resolveBaseURI(converted.Document)
 	if err != nil {
 		return nil, &Error{
 			Kind:   ErrorKindRefResolutionFailure,
 			Op:     "resolve refs",
-			Source: converted.document.CanonicalLocation,
+			Source: converted.Document.CanonicalLocation,
 			Err:    err,
 		}
 	}
@@ -36,7 +29,7 @@ func (l *loader) resolveDocument(ctx context.Context, converted *convertedDocume
 	refLoader.Context = ctx
 	refLoader.ReadFromURIFunc = newRefReadFromURIFunc(l.client)
 
-	if err := refLoader.ResolveRefsIn(converted.openAPI3Doc, baseURI); err != nil {
+	if err := refLoader.ResolveRefsIn(converted.OpenAPI3Doc, baseURI); err != nil {
 		kind := ErrorKindRefResolutionFailure
 		if errors.Is(err, openapi3.ErrURINotSupported) {
 			kind = ErrorKindUnsupportedExternalRef
@@ -44,25 +37,27 @@ func (l *loader) resolveDocument(ctx context.Context, converted *convertedDocume
 		return nil, &Error{
 			Kind:   kind,
 			Op:     "resolve refs",
-			Source: converted.document.CanonicalLocation,
+			Source: converted.Document.CanonicalLocation,
 			Err:    err,
 		}
 	}
 
-	return &resolvedDocument{
-		document:      converted.document,
-		sourceFamily:  converted.sourceFamily,
-		sourceVersion: converted.sourceVersion,
-		openAPI3Doc:   converted.openAPI3Doc,
+	return &pipeline.ResolvedDocument{
+		BaseDocument: pipeline.BaseDocument{
+			Document:      converted.Document,
+			SourceFamily:  converted.SourceFamily,
+			SourceVersion: converted.SourceVersion,
+			OpenAPI3Doc:   converted.OpenAPI3Doc,
+		},
 	}, nil
 }
 
-func resolveBaseURI(document *loadedDocument) (*url.URL, error) {
+func resolveBaseURI(document *pipeline.LoadedDocument) (*url.URL, error) {
 	if document == nil {
 		return nil, errors.New("document is required")
 	}
 
-	if document.Source.Kind == SourceKindURL || document.FinalURL != "" {
+	if document.Source.Kind == pipeline.SourceKindURL || document.FinalURL != "" {
 		location := document.FinalURL
 		if location == "" {
 			location = document.CanonicalLocation

@@ -1,13 +1,5 @@
 package model
 
-type AuthSchemeValueType string
-
-const (
-	AuthSchemeValueTypeAPIKey AuthSchemeValueType = "apiKey"
-	AuthSchemeValueTypeBasic  AuthSchemeValueType = "basic"
-	AuthSchemeValueTypeBearer AuthSchemeValueType = "bearer"
-)
-
 type FocusedPane string
 
 const (
@@ -57,14 +49,6 @@ type ViewState struct {
 	ExecuteInFlight        bool
 	ActiveLoadRequestID    uint64
 	ActiveExecuteRequestID uint64
-}
-
-type AuthValue struct {
-	Type        AuthSchemeValueType
-	APIKey      string
-	Username    string
-	Password    string
-	BearerToken string
 }
 
 type HistoryEntry struct {

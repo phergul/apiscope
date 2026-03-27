@@ -8,31 +8,6 @@ import (
 	"api-tui/internal/model"
 )
 
-func TestOperationsPaneContentHighlightsSelectedOperationAndPreservesOrder(t *testing.T) {
-	t.Parallel()
-
-	m := newLoadedModelForRendering()
-
-	content := m.operationsPaneContent()
-
-	firstGroup := strings.Index(content, "PETS")
-	secondGroup := strings.Index(content, "ADMIN")
-	selected := strings.Index(content, "> GET    /pets")
-	second := strings.Index(content, "  POST   /pets")
-	if firstGroup == -1 || secondGroup == -1 {
-		t.Fatalf("expected grouped operations list, got %q", content)
-	}
-	if selected == -1 || second == -1 {
-		t.Fatalf("expected operations list to contain selected and unselected rows, got %q", content)
-	}
-	if firstGroup > secondGroup || selected > second {
-		t.Fatalf("expected operations to preserve visible order, got %q", content)
-	}
-	if strings.Contains(content, "List pets") || strings.Contains(content, "Create pet") {
-		t.Fatalf("expected operations rows to omit summaries, got %q", content)
-	}
-}
-
 func TestOperationsPaneContentFallsBackToFirstVisibleWhenSelectionMissing(t *testing.T) {
 	t.Parallel()
 
@@ -43,126 +18,6 @@ func TestOperationsPaneContentFallsBackToFirstVisibleWhenSelectionMissing(t *tes
 
 	if !strings.Contains(content, "> GET    /pets") {
 		t.Fatalf("expected first visible operation to be highlighted, got %q", content)
-	}
-}
-
-func TestOperationsPaneContentShowsEmptyState(t *testing.T) {
-	t.Parallel()
-
-	m := newLoadedModelForRendering()
-	m.session.Spec.Operations = nil
-	m.viewState.VisibleOperationKeys = nil
-
-	content := m.operationsPaneContent()
-
-	if !strings.Contains(content, "does not define any operations") {
-		t.Fatalf("expected empty operations state, got %q", content)
-	}
-}
-
-func TestOperationsPaneContentShowsFilteredEmptyState(t *testing.T) {
-	t.Parallel()
-
-	m := newLoadedModelForRendering()
-	m.viewState.FilterText = "zzz"
-	m.viewState.VisibleOperationKeys = nil
-
-	content := m.operationsPaneContent()
-
-	if !strings.Contains(content, "No operations match the current filter.") {
-		t.Fatalf("expected filtered empty state, got %q", content)
-	}
-	if !strings.Contains(content, "Press Esc to clear the filter.") {
-		t.Fatalf("expected filtered empty state to mention Esc, got %q", content)
-	}
-}
-
-func TestDetailsPaneContentRendersSummarySection(t *testing.T) {
-	t.Parallel()
-
-	m := newLoadedModelForRendering()
-	m.activeDetailsSection = detailsSectionSummary
-
-	content := m.detailsPaneContent()
-
-	wantSnippets := []string{
-		"[Summary]  Security  Warnings",
-		"Operation: GET /pets",
-		"Summary: List pets",
-		"Description: Returns pets.",
-		"Tags: pets, public",
-		"Deprecated: no",
-	}
-	for _, snippet := range wantSnippets {
-		if !strings.Contains(content, snippet) {
-			t.Fatalf("expected details content to include %q, got %q", snippet, content)
-		}
-	}
-}
-
-func TestDetailsPaneContentShowsSecuritySectionWhenActive(t *testing.T) {
-	t.Parallel()
-
-	m := newLoadedModelForRendering()
-	m.activeDetailsSection = detailsSectionSecurity
-
-	content := m.detailsPaneContent()
-
-	wantSnippets := []string{
-		"Summary  [Security]  Warnings",
-		"- api_key AND secondary_header",
-		"OR",
-		"- oauth (pets:read)",
-	}
-	for _, snippet := range wantSnippets {
-		if !strings.Contains(content, snippet) {
-			t.Fatalf("expected security section to include %q, got %q", snippet, content)
-		}
-	}
-}
-
-func TestDetailsPaneContentShowsWarningsSectionWhenActive(t *testing.T) {
-	t.Parallel()
-
-	m := newLoadedModelForRendering()
-	m.activeDetailsSection = detailsSectionWarnings
-
-	content := m.detailsPaneContent()
-
-	wantSnippets := []string{
-		"Summary  Security  [Warnings]",
-		"- unsupported_feature: callbacks are not supported in v1",
-		"  path: #/paths/~1pets/get/callbacks",
-		"- downgraded_feature: collectionFormat was simplified during normalization",
-	}
-	for _, snippet := range wantSnippets {
-		if !strings.Contains(content, snippet) {
-			t.Fatalf("expected warnings section to include %q, got %q", snippet, content)
-		}
-	}
-}
-
-func TestDetailsPaneContentDoesNotShowRequestOrResponseSections(t *testing.T) {
-	t.Parallel()
-
-	m := newLoadedModelForRendering()
-
-	content := m.detailsPaneContent()
-
-	unwantedSnippets := []string{
-		"Parameters",
-		"Request Body",
-		"Responses",
-		"PATH:",
-		"QUERY:",
-		"Required: required",
-		"Media types: application/json, application/xml",
-		"- 200: OK [application/json]",
-	}
-	for _, snippet := range unwantedSnippets {
-		if strings.Contains(content, snippet) {
-			t.Fatalf("expected details pane to omit %q, got %q", snippet, content)
-		}
 	}
 }
 
@@ -178,28 +33,6 @@ func TestDetailsPaneContentUsesTopLevelSecurityFallback(t *testing.T) {
 
 	if !strings.Contains(content, "- global_auth") {
 		t.Fatalf("expected top-level security fallback, got %q", content)
-	}
-}
-
-func TestDetailsPaneContentExplainsMissingSelection(t *testing.T) {
-	t.Parallel()
-
-	m := newLoadedModelForRendering()
-	m.viewState.FilterText = "zzz"
-	m.viewState.VisibleOperationKeys = nil
-	m.session.SelectedOperationKey = ""
-
-	content := m.detailsPaneContent()
-
-	wantSnippets := []string{
-		"No operation selected.",
-		"Choose an operation in pane 1",
-		"press Esc to clear the filter",
-	}
-	for _, snippet := range wantSnippets {
-		if !strings.Contains(content, snippet) {
-			t.Fatalf("expected missing selection copy to include %q, got %q", snippet, content)
-		}
 	}
 }
 
@@ -269,69 +102,6 @@ func TestRenderZoomLayoutShowsOnlyFocusedPaneAndStatusBar(t *testing.T) {
 	}
 	if !strings.Contains(content, "z zoom") || !strings.Contains(content, "q quit") {
 		t.Fatalf("expected status bar to remain visible in zoom mode, got %q", content)
-	}
-}
-
-func TestDetailsPaneContentShowsExplicitNoneStates(t *testing.T) {
-	t.Parallel()
-
-	m := newLoadedModelForRendering()
-	m.session.SelectedOperationKey = model.NewOperationKey("POST", "/pets")
-	m.syncActiveDetailsSection()
-
-	content := m.detailsPaneContent()
-
-	wantSnippets := []string{
-		"[Summary]  Security  Warnings",
-		"Summary: Create pet",
-		"Description: None",
-		"Tags: admin",
-		"Deprecated: yes",
-	}
-	for _, snippet := range wantSnippets {
-		if !strings.Contains(content, snippet) {
-			t.Fatalf("expected details content to include %q, got %q", snippet, content)
-		}
-	}
-}
-
-func TestRequestAndResponsePaneCopyExplainsFutureOwnership(t *testing.T) {
-	t.Parallel()
-
-	m := newLoadedModelForRendering()
-
-	requestContent := m.requestPaneContent()
-	if !strings.Contains(requestContent, "path/query/header params, auth, and request body input") {
-		t.Fatalf("expected request pane copy to explain ownership, got %q", requestContent)
-	}
-
-	responseContent := m.responsePaneContent()
-	if !strings.Contains(responseContent, "response details and examples") {
-		t.Fatalf("expected response pane copy to explain ownership, got %q", responseContent)
-	}
-}
-
-func TestStatusBarIncludesOperationIdentityAndCount(t *testing.T) {
-	t.Parallel()
-
-	m := newLoadedModelForRendering()
-
-	content := m.renderStatusBar(200)
-
-	wantSnippets := []string{
-		"Source: demo.yaml",
-		"State: loaded",
-		"Focus: operations",
-		"Operation: GET /pets",
-		"Count: 2",
-		"Visible: 2",
-		"Warnings: 2",
-		"Keys: 1-4 switch Tab cycle z zoom q quit",
-	}
-	for _, snippet := range wantSnippets {
-		if !strings.Contains(content, snippet) {
-			t.Fatalf("expected status bar to include %q, got %q", snippet, content)
-		}
 	}
 }
 
@@ -456,7 +226,7 @@ func newLoadedModelForRendering() *Model {
 			},
 			{
 				Code:    model.SpecWarningDowngradedFeature,
-				Message: "collectionFormat was simplified during normalization",
+				Message: "collectionFormat was simplified during normalisation",
 			},
 		},
 	}

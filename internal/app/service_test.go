@@ -50,7 +50,7 @@ func TestServiceLoadSourceInitializesSessionAndView(t *testing.T) {
 		t.Fatalf("expected raw source to be forwarded, got %#v", loader.gotSource)
 	}
 	if result.Session.Spec == nil {
-		t.Fatal("expected normalized spec to be stored in session")
+		t.Fatal("expected normalised spec to be stored in session")
 	}
 	if result.Session.SpecFingerprint != "spec-123" {
 		t.Fatalf("expected fingerprint spec-123, got %q", result.Session.SpecFingerprint)

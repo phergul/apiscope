@@ -1,4 +1,5 @@
-// Package spec loads, parses, resolves, and normalizes API descriptions.
+// Package spec loads, parses, resolves, and normalises API descriptions.
 //
-// It is the only package allowed to depend on parser-library structs.
+// The internal/spec subtree is the only part of the app allowed to depend on
+// parser-library structs.
 package spec

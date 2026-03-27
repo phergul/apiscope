@@ -7,20 +7,13 @@ import (
 	"strings"
 
 	"api-tui/internal/model"
+	"api-tui/internal/spec/internal/pipeline"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"gopkg.in/yaml.v3"
 )
 
-type parsedDocument struct {
-	document      *loadedDocument
-	sourceFamily  model.SourceFamily
-	sourceVersion string
-	openAPI3Doc   *openapi3.T
-	swaggerDoc    map[string]any
-}
-
-func (l *loader) parseDocument(document *loadedDocument) (*parsedDocument, error) {
+func (l *Loader) parseDocument(document *pipeline.LoadedDocument) (*pipeline.ParsedDocument, error) {
 	decoded, err := decodeDocument(document)
 	if err != nil {
 		return nil, err
@@ -31,10 +24,12 @@ func (l *loader) parseDocument(document *loadedDocument) (*parsedDocument, error
 		return nil, err
 	}
 
-	parsed := &parsedDocument{
-		document:      document,
-		sourceFamily:  family,
-		sourceVersion: version,
+	parsed := &pipeline.ParsedDocument{
+		BaseDocument: pipeline.BaseDocument{
+			Document:      document,
+			SourceFamily:  family,
+			SourceVersion: version,
+		},
 	}
 
 	switch family {
@@ -43,9 +38,9 @@ func (l *loader) parseDocument(document *loadedDocument) (*parsedDocument, error
 		if err != nil {
 			return nil, err
 		}
-		parsed.openAPI3Doc = openapiDoc
+		parsed.OpenAPI3Doc = openapiDoc
 	case model.SourceFamilySwagger2:
-		parsed.swaggerDoc = decoded
+		parsed.SwaggerDoc = decoded
 	default:
 		return nil, &Error{
 			Kind:   ErrorKindUnsupportedFamily,
@@ -58,11 +53,11 @@ func (l *loader) parseDocument(document *loadedDocument) (*parsedDocument, error
 	return parsed, nil
 }
 
-func decodeDocument(document *loadedDocument) (map[string]any, error) {
+func decodeDocument(document *pipeline.LoadedDocument) (map[string]any, error) {
 	var decoded map[string]any
 
 	switch document.Format {
-	case DocumentFormatJSON:
+	case pipeline.DocumentFormatJSON:
 		if err := json.Unmarshal(document.Raw, &decoded); err != nil {
 			return nil, &Error{
 				Kind:   ErrorKindDecodeFailure,
@@ -71,7 +66,7 @@ func decodeDocument(document *loadedDocument) (map[string]any, error) {
 				Err:    err,
 			}
 		}
-	case DocumentFormatYAML:
+	case pipeline.DocumentFormatYAML:
 		if err := yaml.Unmarshal(document.Raw, &decoded); err != nil {
 			return nil, &Error{
 				Kind:   ErrorKindDecodeFailure,
@@ -101,7 +96,7 @@ func decodeDocument(document *loadedDocument) (map[string]any, error) {
 	return decoded, nil
 }
 
-func detectSpecFamilyVersion(document *loadedDocument, decoded map[string]any) (model.SourceFamily, string, error) {
+func detectSpecFamilyVersion(document *pipeline.LoadedDocument, decoded map[string]any) (model.SourceFamily, string, error) {
 	if rawVersion, ok := decoded["openapi"]; ok {
 		version := strings.TrimSpace(fmt.Sprint(rawVersion))
 		if strings.HasPrefix(version, "3.") {
@@ -138,7 +133,7 @@ func detectSpecFamilyVersion(document *loadedDocument, decoded map[string]any) (
 	}
 }
 
-func parseOpenAPI3Document(document *loadedDocument, decoded map[string]any) (*openapi3.T, error) {
+func parseOpenAPI3Document(document *pipeline.LoadedDocument, decoded map[string]any) (*openapi3.T, error) {
 	jsonBytes, err := json.Marshal(decoded)
 	if err != nil {
 		return nil, &Error{

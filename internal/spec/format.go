@@ -5,6 +5,15 @@ import (
 	"mime"
 	"path"
 	"strings"
+
+	"api-tui/internal/spec/internal/pipeline"
+)
+
+type DocumentFormat = pipeline.DocumentFormat
+
+const (
+	DocumentFormatJSON = pipeline.DocumentFormatJSON
+	DocumentFormatYAML = pipeline.DocumentFormatYAML
 )
 
 func formatFromLocation(location string) (DocumentFormat, bool) {

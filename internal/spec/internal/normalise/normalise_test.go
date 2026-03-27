@@ -1,17 +1,22 @@
-package spec
+package normalise
 
 import (
-	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
 	"api-tui/internal/model"
+	"api-tui/internal/spec/internal/converter"
+	"api-tui/internal/spec/internal/pipeline"
+
+	"github.com/getkin/kin-openapi/openapi3"
+	"gopkg.in/yaml.v3"
 )
 
-func TestLoadReturnsNormalizedOpenAPI3Spec(t *testing.T) {
+func TestDocumentReturnsNormalisedOpenAPI3Spec(t *testing.T) {
 	t.Parallel()
 
-	path := writeTempSpecFile(t, "oas3.yaml", `openapi: 3.0.3
+	spec, err := Document(mustResolvedOpenAPI3(t, `openapi: 3.0.3
 info:
   title: Demo API
   summary: Demo summary
@@ -37,23 +42,17 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Pet"
-components:
-  schemas:
-    Pet:
-      type: object
-      required: [id]
-      properties:
-        id:
-          type: string
-`)
-
-	spec, err := NewLoader(nil).Load(context.Background(), Source{Value: path})
+                type: object
+                required: [id]
+                properties:
+                  id:
+                    type: string
+`))
 	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
+		t.Fatalf("Document returned error: %v", err)
 	}
 	if spec == nil {
-		t.Fatal("expected normalized spec")
+		t.Fatal("expected normalised spec")
 	}
 	if spec.Title != "Demo API" {
 		t.Fatalf("expected title Demo API, got %q", spec.Title)
@@ -72,20 +71,20 @@ components:
 		t.Fatalf("expected operationId metadata to be preserved, got %q", op.ID)
 	}
 	if len(op.Parameters) != 1 || op.Parameters[0].In != model.ParameterLocationPath {
-		t.Fatalf("expected normalized path parameter, got %#v", op.Parameters)
+		t.Fatalf("expected normalised path parameter, got %#v", op.Parameters)
 	}
 	if len(op.Responses) != 1 || len(op.Responses[0].Content) != 1 {
-		t.Fatalf("expected normalized response content, got %#v", op.Responses)
+		t.Fatalf("expected normalised response content, got %#v", op.Responses)
 	}
 	if spec.Fingerprint == "" {
 		t.Fatal("expected fingerprint to be populated")
 	}
 }
 
-func TestLoadReturnsNormalizedSwagger2Spec(t *testing.T) {
+func TestDocumentReturnsNormalisedSwagger2Spec(t *testing.T) {
 	t.Parallel()
 
-	path := writeTempSpecFile(t, "swagger.yaml", `swagger: "2.0"
+	spec, err := Document(mustResolvedSwagger(t, `swagger: "2.0"
 host: api.example.com
 basePath: /v1
 schemes: [https]
@@ -118,37 +117,35 @@ definitions:
     properties:
       id:
         type: string
-`)
-
-	spec, err := NewLoader(nil).Load(context.Background(), Source{Value: path})
+`))
 	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
+		t.Fatalf("Document returned error: %v", err)
 	}
 	if spec.SourceFamily != model.SourceFamilySwagger2 {
 		t.Fatalf("expected swagger2 source family, got %q", spec.SourceFamily)
 	}
 	if len(spec.Servers) != 1 || spec.Servers[0].URL != "https://api.example.com/v1" {
-		t.Fatalf("expected normalized server from swagger, got %#v", spec.Servers)
+		t.Fatalf("expected normalised server from swagger, got %#v", spec.Servers)
 	}
 	if len(spec.Operations) != 1 {
 		t.Fatalf("expected 1 operation, got %d", len(spec.Operations))
 	}
 	op := spec.Operations[0]
 	if op.RequestBody == nil || len(op.RequestBody.Content) != 1 {
-		t.Fatalf("expected normalized request body, got %#v", op.RequestBody)
+		t.Fatalf("expected normalised request body, got %#v", op.RequestBody)
 	}
 	if spec.Security == nil || len(spec.Security.Alternatives) != 1 {
 		t.Fatalf("expected top-level security, got %#v", spec.Security)
 	}
 	if spec.SecuritySchemes["api_key"].Type != model.SecuritySchemeTypeAPIKey {
-		t.Fatalf("expected normalized api key security scheme, got %#v", spec.SecuritySchemes["api_key"])
+		t.Fatalf("expected normalised api key security scheme, got %#v", spec.SecuritySchemes["api_key"])
 	}
 }
 
-func TestLoadNormalizesEquivalentSwaggerAndOAS3Shapes(t *testing.T) {
+func TestDocumentNormalisesEquivalentSwaggerAndOAS3Shapes(t *testing.T) {
 	t.Parallel()
 
-	oasPath := writeTempSpecFile(t, "oas3.yaml", `openapi: 3.0.3
+	oasSpec, err := Document(mustResolvedOpenAPI3(t, `openapi: 3.0.3
 info:
   title: Demo
   version: 1.0.0
@@ -160,8 +157,11 @@ paths:
       responses:
         "200":
           description: ok
-`)
-	swaggerPath := writeTempSpecFile(t, "swagger.yaml", `swagger: "2.0"
+`))
+	if err != nil {
+		t.Fatalf("normalise oas3: %v", err)
+	}
+	swaggerSpec, err := Document(mustResolvedSwagger(t, `swagger: "2.0"
 host: api.example.com
 basePath: /v1
 schemes: [https]
@@ -174,32 +174,26 @@ paths:
       responses:
         "200":
           description: ok
-`)
-
-	oasSpec, err := NewLoader(nil).Load(context.Background(), Source{Value: oasPath})
+`))
 	if err != nil {
-		t.Fatalf("load oas3: %v", err)
-	}
-	swaggerSpec, err := NewLoader(nil).Load(context.Background(), Source{Value: swaggerPath})
-	if err != nil {
-		t.Fatalf("load swagger: %v", err)
+		t.Fatalf("normalise swagger: %v", err)
 	}
 
 	if len(oasSpec.Operations) != len(swaggerSpec.Operations) {
 		t.Fatalf("expected matching operation counts, got %d and %d", len(oasSpec.Operations), len(swaggerSpec.Operations))
 	}
 	if oasSpec.Operations[0].Key != swaggerSpec.Operations[0].Key {
-		t.Fatalf("expected matching normalized operation keys, got %q and %q", oasSpec.Operations[0].Key, swaggerSpec.Operations[0].Key)
+		t.Fatalf("expected matching normalised operation keys, got %q and %q", oasSpec.Operations[0].Key, swaggerSpec.Operations[0].Key)
 	}
 	if oasSpec.Servers[0].URL != swaggerSpec.Servers[0].URL {
-		t.Fatalf("expected matching normalized server urls, got %q and %q", oasSpec.Servers[0].URL, swaggerSpec.Servers[0].URL)
+		t.Fatalf("expected matching normalised server urls, got %q and %q", oasSpec.Servers[0].URL, swaggerSpec.Servers[0].URL)
 	}
 }
 
-func TestLoadDerivesCapabilitiesAndWarnings(t *testing.T) {
+func TestDocumentDerivesCapabilitiesAndWarnings(t *testing.T) {
 	t.Parallel()
 
-	path := writeTempSpecFile(t, "warnings.yaml", `openapi: 3.0.3
+	spec, err := Document(mustResolvedOpenAPI3(t, `openapi: 3.0.3
 info:
   title: Demo
   version: 1.0.0
@@ -219,11 +213,9 @@ paths:
       responses:
         "200":
           description: ok
-`)
-
-	spec, err := NewLoader(nil).Load(context.Background(), Source{Value: path})
+`))
 	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
+		t.Fatalf("Document returned error: %v", err)
 	}
 	if !spec.Capabilities.SupportsCookieParameters {
 		t.Fatal("expected cookie parameter capability")
@@ -232,14 +224,14 @@ paths:
 		t.Fatal("expected security scheme capability")
 	}
 	if len(spec.Warnings) == 0 {
-		t.Fatal("expected normalization warnings")
+		t.Fatal("expected normalisation warnings")
 	}
 }
 
-func TestLoadUsesMostSpecificServerOverride(t *testing.T) {
+func TestDocumentUsesMostSpecificServerOverride(t *testing.T) {
 	t.Parallel()
 
-	path := writeTempSpecFile(t, "servers.yaml", `openapi: 3.0.3
+	spec, err := Document(mustResolvedOpenAPI3(t, `openapi: 3.0.3
 info:
   title: Demo
   version: 1.0.0
@@ -267,11 +259,9 @@ paths:
       responses:
         "200":
           description: ok
-`)
-
-	spec, err := NewLoader(nil).Load(context.Background(), Source{Value: path})
+`))
 	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
+		t.Fatalf("Document returned error: %v", err)
 	}
 
 	ops := map[string]model.Operation{}
@@ -290,10 +280,10 @@ paths:
 	}
 }
 
-func TestLoadAppliesParameterOverrideSemantics(t *testing.T) {
+func TestDocumentAppliesParameterOverrideSemantics(t *testing.T) {
 	t.Parallel()
 
-	path := writeTempSpecFile(t, "params.yaml", `openapi: 3.0.3
+	spec, err := Document(mustResolvedOpenAPI3(t, `openapi: 3.0.3
 info:
   title: Demo
   version: 1.0.0
@@ -325,11 +315,9 @@ paths:
       responses:
         "200":
           description: ok
-`)
-
-	spec, err := NewLoader(nil).Load(context.Background(), Source{Value: path})
+`))
 	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
+		t.Fatalf("Document returned error: %v", err)
 	}
 	params := spec.Operations[0].Parameters
 	if len(params) != 3 {
@@ -346,10 +334,10 @@ paths:
 	}
 }
 
-func TestLoadDerivesSourceAwareCapabilities(t *testing.T) {
+func TestDocumentDerivesSourceAwareCapabilities(t *testing.T) {
 	t.Parallel()
 
-	oasPath := writeTempSpecFile(t, "oas3.yaml", `openapi: 3.0.3
+	oasSpec, err := Document(mustResolvedOpenAPI3(t, `openapi: 3.0.3
 info:
   title: Demo
   version: 1.0.0
@@ -359,26 +347,23 @@ paths:
       responses:
         "200":
           description: ok
-`)
-	swaggerPath := writeTempSpecFile(t, "swagger.yaml", `swagger: "2.0"
-info:
-  title: Demo
-  version: 1.0.0
-paths:
-  /pets:
-    get:
-      responses:
-        "200":
-          description: ok
-`)
-
-	oasSpec, err := NewLoader(nil).Load(context.Background(), Source{Value: oasPath})
+`))
 	if err != nil {
-		t.Fatalf("load oas3: %v", err)
+		t.Fatalf("normalise oas3: %v", err)
 	}
-	swaggerSpec, err := NewLoader(nil).Load(context.Background(), Source{Value: swaggerPath})
+	swaggerSpec, err := Document(mustResolvedSwagger(t, `swagger: "2.0"
+info:
+  title: Demo
+  version: 1.0.0
+paths:
+  /pets:
+    get:
+      responses:
+        "200":
+          description: ok
+`))
 	if err != nil {
-		t.Fatalf("load swagger: %v", err)
+		t.Fatalf("normalise swagger: %v", err)
 	}
 
 	if !oasSpec.Capabilities.SupportsOpenAPI3 {
@@ -404,10 +389,10 @@ paths:
 	}
 }
 
-func TestLoadUsesCanonicalFingerprintAcrossFormatsAndFormatting(t *testing.T) {
+func TestDocumentUsesCanonicalFingerprintAcrossFormatsAndFormatting(t *testing.T) {
 	t.Parallel()
 
-	yamlPath := writeTempSpecFile(t, "spec.yaml", `# comment
+	yamlSpec, err := Document(mustResolvedOpenAPI3(t, `# comment
 openapi: 3.0.3
 info:
   title: Demo
@@ -418,9 +403,15 @@ paths:
       responses:
         "200":
           description: ok
-`)
-	jsonPath := writeTempSpecFile(t, "spec.json", `{"openapi":"3.0.3","info":{"title":"Demo","version":"1.0.0"},"paths":{"/pets":{"get":{"responses":{"200":{"description":"ok"}}}}}}`)
-	yamlVariantPath := writeTempSpecFile(t, "spec-variant.yaml", `
+`))
+	if err != nil {
+		t.Fatalf("normalise yaml: %v", err)
+	}
+	jsonSpec, err := Document(mustResolvedOpenAPI3(t, `{"openapi":"3.0.3","info":{"title":"Demo","version":"1.0.0"},"paths":{"/pets":{"get":{"responses":{"200":{"description":"ok"}}}}}}`))
+	if err != nil {
+		t.Fatalf("normalise json: %v", err)
+	}
+	yamlVariantSpec, err := Document(mustResolvedOpenAPI3(t, `
 openapi: 3.0.3
 info:
   title: Demo
@@ -431,19 +422,9 @@ paths:
       responses:
         "200":
           description: ok
-`)
-
-	yamlSpec, err := NewLoader(nil).Load(context.Background(), Source{Value: yamlPath})
+`))
 	if err != nil {
-		t.Fatalf("load yaml: %v", err)
-	}
-	jsonSpec, err := NewLoader(nil).Load(context.Background(), Source{Value: jsonPath})
-	if err != nil {
-		t.Fatalf("load json: %v", err)
-	}
-	yamlVariantSpec, err := NewLoader(nil).Load(context.Background(), Source{Value: yamlVariantPath})
-	if err != nil {
-		t.Fatalf("load yaml variant: %v", err)
+		t.Fatalf("normalise yaml variant: %v", err)
 	}
 
 	if yamlSpec.Fingerprint != jsonSpec.Fingerprint {
@@ -454,10 +435,10 @@ paths:
 	}
 }
 
-func TestLoadUsesSourceAwareFingerprintAcrossEquivalentSwaggerAndOAS3(t *testing.T) {
+func TestDocumentUsesSourceAwareFingerprintAcrossEquivalentSwaggerAndOAS3(t *testing.T) {
 	t.Parallel()
 
-	oasPath := writeTempSpecFile(t, "oas3.yaml", `openapi: 3.0.3
+	oasSpec, err := Document(mustResolvedOpenAPI3(t, `openapi: 3.0.3
 info:
   title: Demo
   version: 1.0.0
@@ -469,8 +450,11 @@ paths:
       responses:
         "200":
           description: ok
-`)
-	swaggerPath := writeTempSpecFile(t, "swagger.yaml", `swagger: "2.0"
+`))
+	if err != nil {
+		t.Fatalf("normalise oas3: %v", err)
+	}
+	swaggerSpec, err := Document(mustResolvedSwagger(t, `swagger: "2.0"
 host: api.example.com
 basePath: /v1
 schemes: [https]
@@ -483,15 +467,9 @@ paths:
       responses:
         "200":
           description: ok
-`)
-
-	oasSpec, err := NewLoader(nil).Load(context.Background(), Source{Value: oasPath})
+`))
 	if err != nil {
-		t.Fatalf("load oas3: %v", err)
-	}
-	swaggerSpec, err := NewLoader(nil).Load(context.Background(), Source{Value: swaggerPath})
-	if err != nil {
-		t.Fatalf("load swagger: %v", err)
+		t.Fatalf("normalise swagger: %v", err)
 	}
 
 	if oasSpec.Fingerprint == swaggerSpec.Fingerprint {
@@ -499,10 +477,10 @@ paths:
 	}
 }
 
-func TestLoadPreservesParameterContent(t *testing.T) {
+func TestDocumentPreservesParameterContent(t *testing.T) {
 	t.Parallel()
 
-	path := writeTempSpecFile(t, "content-param.yaml", `openapi: 3.0.3
+	spec, err := Document(mustResolvedOpenAPI3(t, `openapi: 3.0.3
 info:
   title: Demo
   version: 1.0.0
@@ -524,11 +502,9 @@ paths:
       responses:
         "200":
           description: ok
-`)
-
-	spec, err := NewLoader(nil).Load(context.Background(), Source{Value: path})
+`))
 	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
+		t.Fatalf("Document returned error: %v", err)
 	}
 
 	param := spec.Operations[0].Parameters[0]
@@ -543,10 +519,10 @@ paths:
 	}
 }
 
-func TestLoadPreservesResponseHeaderContent(t *testing.T) {
+func TestDocumentPreservesResponseHeaderContent(t *testing.T) {
 	t.Parallel()
 
-	path := writeTempSpecFile(t, "content-header.yaml", `openapi: 3.0.3
+	spec, err := Document(mustResolvedOpenAPI3(t, `openapi: 3.0.3
 info:
   title: Demo
   version: 1.0.0
@@ -564,11 +540,9 @@ paths:
                     type: array
                     items:
                       type: string
-`)
-
-	spec, err := NewLoader(nil).Load(context.Background(), Source{Value: path})
+`))
 	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
+		t.Fatalf("Document returned error: %v", err)
 	}
 
 	header := spec.Operations[0].Responses[0].Headers[0]
@@ -580,10 +554,10 @@ paths:
 	}
 }
 
-func TestLoadPreservesSwaggerDowngradeWarnings(t *testing.T) {
+func TestDocumentPreservesSwaggerDowngradeWarnings(t *testing.T) {
 	t.Parallel()
 
-	path := writeTempSpecFile(t, "swagger-warnings.yaml", `swagger: "2.0"
+	spec, err := Document(mustResolvedSwagger(t, `swagger: "2.0"
 info:
   title: Demo
   version: 1.0.0
@@ -608,11 +582,9 @@ paths:
       responses:
         "200":
           description: ok
-`)
-
-	spec, err := NewLoader(nil).Load(context.Background(), Source{Value: path})
+`))
 	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
+		t.Fatalf("Document returned error: %v", err)
 	}
 
 	param := spec.Operations[0].Parameters[0]
@@ -627,10 +599,10 @@ paths:
 	}
 }
 
-func TestLoadNormalizesEquivalentSwaggerAndOAS3SerializationShapes(t *testing.T) {
+func TestDocumentNormalisesEquivalentSwaggerAndOAS3SerialisationShapes(t *testing.T) {
 	t.Parallel()
 
-	oasPath := writeTempSpecFile(t, "oas3-style.yaml", `openapi: 3.0.3
+	oasSpec, err := Document(mustResolvedOpenAPI3(t, `openapi: 3.0.3
 info:
   title: Demo
   version: 1.0.0
@@ -649,8 +621,11 @@ paths:
       responses:
         "200":
           description: ok
-`)
-	swaggerPath := writeTempSpecFile(t, "swagger-style.yaml", `swagger: "2.0"
+`))
+	if err != nil {
+		t.Fatalf("normalise oas3: %v", err)
+	}
+	swaggerSpec, err := Document(mustResolvedSwagger(t, `swagger: "2.0"
 info:
   title: Demo
   version: 1.0.0
@@ -667,15 +642,9 @@ paths:
       responses:
         "200":
           description: ok
-`)
-
-	oasSpec, err := NewLoader(nil).Load(context.Background(), Source{Value: oasPath})
+`))
 	if err != nil {
-		t.Fatalf("load oas3: %v", err)
-	}
-	swaggerSpec, err := NewLoader(nil).Load(context.Background(), Source{Value: swaggerPath})
-	if err != nil {
-		t.Fatalf("load swagger: %v", err)
+		t.Fatalf("normalise swagger: %v", err)
 	}
 
 	oasParam := oasSpec.Operations[0].Parameters[0]
@@ -694,10 +663,10 @@ paths:
 	}
 }
 
-func TestLoadFingerprintChangesWhenParameterContentChanges(t *testing.T) {
+func TestDocumentFingerprintChangesWhenParameterContentChanges(t *testing.T) {
 	t.Parallel()
 
-	jsonPath := writeTempSpecFile(t, "json-param.yaml", `openapi: 3.0.3
+	jsonSpec, err := Document(mustResolvedOpenAPI3(t, `openapi: 3.0.3
 info:
   title: Demo
   version: 1.0.0
@@ -714,8 +683,11 @@ paths:
       responses:
         "200":
           description: ok
-`)
-	xmlPath := writeTempSpecFile(t, "xml-param.yaml", `openapi: 3.0.3
+`))
+	if err != nil {
+		t.Fatalf("normalise json content spec: %v", err)
+	}
+	xmlSpec, err := Document(mustResolvedOpenAPI3(t, `openapi: 3.0.3
 info:
   title: Demo
   version: 1.0.0
@@ -732,15 +704,9 @@ paths:
       responses:
         "200":
           description: ok
-`)
-
-	jsonSpec, err := NewLoader(nil).Load(context.Background(), Source{Value: jsonPath})
+`))
 	if err != nil {
-		t.Fatalf("load json content spec: %v", err)
-	}
-	xmlSpec, err := NewLoader(nil).Load(context.Background(), Source{Value: xmlPath})
-	if err != nil {
-		t.Fatalf("load xml content spec: %v", err)
+		t.Fatalf("normalise xml content spec: %v", err)
 	}
 
 	if jsonSpec.Fingerprint == xmlSpec.Fingerprint {
@@ -748,10 +714,10 @@ paths:
 	}
 }
 
-func TestLoadFingerprintChangesWhenSwaggerCollectionFormatChanges(t *testing.T) {
+func TestDocumentFingerprintChangesWhenSwaggerCollectionFormatChanges(t *testing.T) {
 	t.Parallel()
 
-	csvPath := writeTempSpecFile(t, "csv-param.yaml", `swagger: "2.0"
+	csvSpec, err := Document(mustResolvedSwagger(t, `swagger: "2.0"
 info:
   title: Demo
   version: 1.0.0
@@ -768,8 +734,11 @@ paths:
       responses:
         "200":
           description: ok
-`)
-	tsvPath := writeTempSpecFile(t, "tsv-param.yaml", `swagger: "2.0"
+`))
+	if err != nil {
+		t.Fatalf("normalise csv spec: %v", err)
+	}
+	tsvSpec, err := Document(mustResolvedSwagger(t, `swagger: "2.0"
 info:
   title: Demo
   version: 1.0.0
@@ -786,20 +755,85 @@ paths:
       responses:
         "200":
           description: ok
-`)
-
-	csvSpec, err := NewLoader(nil).Load(context.Background(), Source{Value: csvPath})
+`))
 	if err != nil {
-		t.Fatalf("load csv spec: %v", err)
-	}
-	tsvSpec, err := NewLoader(nil).Load(context.Background(), Source{Value: tsvPath})
-	if err != nil {
-		t.Fatalf("load tsv spec: %v", err)
+		t.Fatalf("normalise tsv spec: %v", err)
 	}
 
 	if csvSpec.Fingerprint == tsvSpec.Fingerprint {
 		t.Fatalf("expected fingerprints to differ when collectionFormat changes, both were %q", csvSpec.Fingerprint)
 	}
+}
+
+func mustResolvedOpenAPI3(t *testing.T, raw string) *pipeline.ResolvedDocument {
+	t.Helper()
+
+	doc := mustOpenAPI3Doc(t, raw)
+	return &pipeline.ResolvedDocument{
+		BaseDocument: pipeline.BaseDocument{
+			Document:      &pipeline.LoadedDocument{CanonicalLocation: "spec.yaml", Format: pipeline.DocumentFormatYAML},
+			SourceFamily:  model.SourceFamilyOpenAPI3,
+			SourceVersion: strings.TrimSpace(doc.OpenAPI),
+			OpenAPI3Doc:   doc,
+		},
+	}
+}
+
+func mustResolvedSwagger(t *testing.T, raw string) *pipeline.ResolvedDocument {
+	t.Helper()
+
+	parsed := mustParsedSwagger(t, raw)
+	converted, err := converter.Convert(parsed)
+	if err != nil {
+		t.Fatalf("converter.Convert: %v", err)
+	}
+
+	return &pipeline.ResolvedDocument{BaseDocument: converted.BaseDocument}
+}
+
+func mustParsedSwagger(t *testing.T, raw string) *pipeline.ParsedDocument {
+	t.Helper()
+
+	var decoded map[string]any
+	if err := yaml.Unmarshal([]byte(raw), &decoded); err != nil {
+		t.Fatalf("yaml.Unmarshal: %v", err)
+	}
+
+	return &pipeline.ParsedDocument{
+		BaseDocument: pipeline.BaseDocument{
+			Document:      &pipeline.LoadedDocument{CanonicalLocation: "swagger.yaml", Format: pipeline.DocumentFormatYAML},
+			SourceFamily:  model.SourceFamilySwagger2,
+			SourceVersion: strings.TrimSpace(decoded["swagger"].(string)),
+		},
+		SwaggerDoc: decoded,
+	}
+}
+
+func mustOpenAPI3Doc(t *testing.T, raw string) *openapi3.T {
+	t.Helper()
+
+	var decoded map[string]any
+	var err error
+	if strings.HasPrefix(strings.TrimSpace(raw), "{") {
+		err = json.Unmarshal([]byte(raw), &decoded)
+	} else {
+		err = yaml.Unmarshal([]byte(raw), &decoded)
+	}
+	if err != nil {
+		t.Fatalf("decode spec: %v", err)
+	}
+
+	payload, err := json.Marshal(decoded)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+
+	var doc openapi3.T
+	if err := json.Unmarshal(payload, &doc); err != nil {
+		t.Fatalf("json.Unmarshal openapi3: %v", err)
+	}
+
+	return &doc
 }
 
 func hasWarningContaining(warnings []model.SpecWarning, substring string) bool {

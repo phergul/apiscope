@@ -11,6 +11,9 @@ import (
 	"strings"
 
 	"api-tui/internal/model"
+	"api-tui/internal/spec/internal/converter"
+	"api-tui/internal/spec/internal/normalise"
+	"api-tui/internal/spec/internal/pipeline"
 )
 
 var (
@@ -21,43 +24,19 @@ var (
 	errEmptyDocument           = errors.New("document is empty")
 )
 
-type DocumentFormat string
-
-const (
-	DocumentFormatJSON DocumentFormat = "json"
-	DocumentFormatYAML DocumentFormat = "yaml"
-)
-
-type loadedDocument struct {
-	Source            Source
-	CanonicalLocation string
-	Raw               []byte
-	Format            DocumentFormat
-	MediaType         string
-	FinalURL          string
-}
-
-type Loader interface {
-	Load(ctx context.Context, source Source) (*model.APISpec, error)
-}
-
-type loader struct {
+type Loader struct {
 	client *http.Client
 }
 
-func NewLoader(client *http.Client) Loader {
-	return newLoader(client)
-}
-
-func newLoader(client *http.Client) *loader {
+func NewLoader(client *http.Client) *Loader {
 	if client == nil {
 		client = http.DefaultClient
 	}
 
-	return &loader{client: client}
+	return &Loader{client: client}
 }
 
-func (l *loader) Load(ctx context.Context, source Source) (*model.APISpec, error) {
+func (l *Loader) Load(ctx context.Context, source Source) (*model.APISpec, error) {
 	document, err := l.loadDocument(ctx, source)
 	if err != nil {
 		return nil, err
@@ -68,7 +47,7 @@ func (l *loader) Load(ctx context.Context, source Source) (*model.APISpec, error
 		return nil, err
 	}
 
-	converted, err := l.convertDocument(parsed)
+	converted, err := converter.Convert(parsed)
 	if err != nil {
 		return nil, err
 	}
@@ -78,10 +57,10 @@ func (l *loader) Load(ctx context.Context, source Source) (*model.APISpec, error
 		return nil, err
 	}
 
-	return l.normalizeDocument(resolved)
+	return normalise.Document(resolved)
 }
 
-func (l *loader) loadDocument(ctx context.Context, source Source) (*loadedDocument, error) {
+func (l *Loader) loadDocument(ctx context.Context, source Source) (*pipeline.LoadedDocument, error) {
 	classified, err := classifySource(source)
 	if err != nil {
 		return nil, err
@@ -102,7 +81,7 @@ func (l *loader) loadDocument(ctx context.Context, source Source) (*loadedDocume
 	}
 }
 
-func (l *loader) loadFile(source Source) (*loadedDocument, error) {
+func (l *Loader) loadFile(source Source) (*pipeline.LoadedDocument, error) {
 	absolutePath, err := filepath.Abs(source.Value)
 	if err != nil {
 		absolutePath = source.Value
@@ -126,15 +105,15 @@ func (l *loader) loadFile(source Source) (*loadedDocument, error) {
 		return nil, wrapDocumentError(err, canonicalSource.Value, "detect format")
 	}
 
-	return &loadedDocument{
-		Source:            canonicalSource,
+	return &pipeline.LoadedDocument{
+		Source:            Source{Kind: canonicalSource.Kind, Value: canonicalSource.Value},
 		CanonicalLocation: canonicalSource.Value,
 		Raw:               raw,
 		Format:            format,
 	}, nil
 }
 
-func (l *loader) loadURL(ctx context.Context, source Source) (*loadedDocument, error) {
+func (l *Loader) loadURL(ctx context.Context, source Source) (*pipeline.LoadedDocument, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, source.Value, nil)
 	if err != nil {
 		return nil, &Error{
@@ -187,8 +166,8 @@ func (l *loader) loadURL(ctx context.Context, source Source) (*loadedDocument, e
 		return nil, wrapDocumentError(err, source.Value, "detect format")
 	}
 
-	return &loadedDocument{
-		Source:            source,
+	return &pipeline.LoadedDocument{
+		Source:            Source{Kind: source.Kind, Value: source.Value},
 		CanonicalLocation: finalURL,
 		Raw:               raw,
 		Format:            format,

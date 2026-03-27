@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"api-tui/internal/model"
+	subconverter "api-tui/internal/spec/internal/converter"
+	"api-tui/internal/spec/internal/pipeline"
 )
 
 func TestResolveDocumentResolvesInternalOpenAPIRefs(t *testing.T) {
@@ -34,15 +36,15 @@ components:
           type: string
 `)
 
-	resolved, err := newLoader(nil).resolveDocument(context.Background(), converted)
+	resolved, err := NewLoader(nil).resolveDocument(context.Background(), converted)
 	if err != nil {
 		t.Fatalf("resolveDocument returned error: %v", err)
 	}
 
-	if resolved.sourceFamily != model.SourceFamilyOpenAPI3 {
-		t.Fatalf("expected source family openapi3, got %q", resolved.sourceFamily)
+	if resolved.SourceFamily != model.SourceFamilyOpenAPI3 {
+		t.Fatalf("expected source family openapi3, got %q", resolved.SourceFamily)
 	}
-	response := resolved.openAPI3Doc.Paths.Value("/pets").Get.Responses.Value("200")
+	response := resolved.OpenAPI3Doc.Paths.Value("/pets").Get.Responses.Value("200")
 	schema := response.Value.Content["application/json"].Schema
 	if schema == nil || schema.Value == nil {
 		t.Fatal("expected schema ref to be resolved")
@@ -72,15 +74,15 @@ definitions:
         type: string
 `)
 
-	resolved, err := newLoader(nil).resolveDocument(context.Background(), converted)
+	resolved, err := NewLoader(nil).resolveDocument(context.Background(), converted)
 	if err != nil {
 		t.Fatalf("resolveDocument returned error: %v", err)
 	}
 
-	if resolved.sourceFamily != model.SourceFamilySwagger2 {
-		t.Fatalf("expected source family swagger2, got %q", resolved.sourceFamily)
+	if resolved.SourceFamily != model.SourceFamilySwagger2 {
+		t.Fatalf("expected source family swagger2, got %q", resolved.SourceFamily)
 	}
-	response := resolved.openAPI3Doc.Paths.Value("/pets").Get.Responses.Value("200")
+	response := resolved.OpenAPI3Doc.Paths.Value("/pets").Get.Responses.Value("200")
 	schema := response.Value.Content["application/json"].Schema
 	if schema == nil || schema.Value == nil {
 		t.Fatal("expected converted swagger schema ref to be resolved")
@@ -110,7 +112,7 @@ components:
       type: object
 `)
 
-	_, err := newLoader(nil).resolveDocument(context.Background(), converted)
+	_, err := NewLoader(nil).resolveDocument(context.Background(), converted)
 	if !IsErrorKind(err, ErrorKindRefResolutionFailure) {
 		t.Fatalf("expected ref resolution failure, got %v", err)
 	}
@@ -148,18 +150,18 @@ components:
           type: string
 `)
 
-	document, err := newLoader(nil).loadDocument(context.Background(), Source{Value: rootPath})
+	document, err := NewLoader(nil).loadDocument(context.Background(), Source{Value: rootPath})
 	if err != nil {
 		t.Fatalf("loadDocument returned error: %v", err)
 	}
 	converted := mustConvertLoadedDocument(t, document)
 
-	resolved, err := newLoader(nil).resolveDocument(context.Background(), converted)
+	resolved, err := NewLoader(nil).resolveDocument(context.Background(), converted)
 	if err != nil {
 		t.Fatalf("resolveDocument returned error: %v", err)
 	}
 
-	schema := resolved.openAPI3Doc.Paths.Value("/pets").Get.Responses.Value("200").Value.Content["application/json"].Schema
+	schema := resolved.OpenAPI3Doc.Paths.Value("/pets").Get.Responses.Value("200").Value.Content["application/json"].Schema
 	if schema == nil || schema.Value == nil {
 		t.Fatal("expected external file ref to be resolved")
 	}
@@ -168,11 +170,11 @@ components:
 func TestResolveDocumentResolvesRemoteRefs(t *testing.T) {
 	t.Parallel()
 
-	converted := mustConvertLoadedDocument(t, &loadedDocument{
-		Source:            Source{Kind: SourceKindURL, Value: "https://example.com/spec/root.yaml"},
+	converted := mustConvertLoadedDocument(t, &pipeline.LoadedDocument{
+		Source:            pipeline.Source{Kind: pipeline.SourceKindURL, Value: "https://example.com/spec/root.yaml"},
 		CanonicalLocation: "https://example.com/spec/root.yaml",
 		FinalURL:          "https://example.com/spec/root.yaml",
-		Format:            DocumentFormatYAML,
+		Format:            pipeline.DocumentFormatYAML,
 		Raw: []byte(`openapi: 3.0.3
 info:
   title: Demo
@@ -210,12 +212,12 @@ components:
 		}
 	})
 
-	resolved, err := newLoader(client).resolveDocument(context.Background(), converted)
+	resolved, err := NewLoader(client).resolveDocument(context.Background(), converted)
 	if err != nil {
 		t.Fatalf("resolveDocument returned error: %v", err)
 	}
 
-	schema := resolved.openAPI3Doc.Paths.Value("/pets").Get.Responses.Value("200").Value.Content["application/json"].Schema
+	schema := resolved.OpenAPI3Doc.Paths.Value("/pets").Get.Responses.Value("200").Value.Content["application/json"].Schema
 	if schema == nil || schema.Value == nil {
 		t.Fatal("expected remote ref to be resolved")
 	}
@@ -224,11 +226,11 @@ components:
 func TestResolveDocumentUsesRedirectedFinalURLForRelativeRefs(t *testing.T) {
 	t.Parallel()
 
-	converted := mustConvertLoadedDocument(t, &loadedDocument{
-		Source:            Source{Kind: SourceKindURL, Value: "https://example.com/start/root.yaml"},
+	converted := mustConvertLoadedDocument(t, &pipeline.LoadedDocument{
+		Source:            pipeline.Source{Kind: pipeline.SourceKindURL, Value: "https://example.com/start/root.yaml"},
 		CanonicalLocation: "https://example.com/final/root.yaml",
 		FinalURL:          "https://example.com/final/root.yaml",
-		Format:            DocumentFormatYAML,
+		Format:            pipeline.DocumentFormatYAML,
 		Raw: []byte(`openapi: 3.0.3
 info:
   title: Demo
@@ -263,12 +265,12 @@ components:
 		}
 	})
 
-	resolved, err := newLoader(client).resolveDocument(context.Background(), converted)
+	resolved, err := NewLoader(client).resolveDocument(context.Background(), converted)
 	if err != nil {
 		t.Fatalf("resolveDocument returned error: %v", err)
 	}
 
-	schema := resolved.openAPI3Doc.Paths.Value("/pets").Get.Responses.Value("200").Value.Content["application/json"].Schema
+	schema := resolved.OpenAPI3Doc.Paths.Value("/pets").Get.Responses.Value("200").Value.Content["application/json"].Schema
 	if schema == nil || schema.Value == nil {
 		t.Fatal("expected redirected final URL to be used as the ref base")
 	}
@@ -277,9 +279,9 @@ components:
 func TestResolveDocumentRejectsUnsupportedExternalSchemes(t *testing.T) {
 	t.Parallel()
 
-	converted := mustConvertLoadedDocument(t, &loadedDocument{
+	converted := mustConvertLoadedDocument(t, &pipeline.LoadedDocument{
 		CanonicalLocation: "spec.yaml",
-		Format:            DocumentFormatYAML,
+		Format:            pipeline.DocumentFormatYAML,
 		Raw: []byte(`openapi: 3.0.3
 info:
   title: Demo
@@ -297,7 +299,7 @@ paths:
 `),
 	})
 
-	_, err := newLoader(nil).resolveDocument(context.Background(), converted)
+	_, err := NewLoader(nil).resolveDocument(context.Background(), converted)
 	if !IsErrorKind(err, ErrorKindUnsupportedExternalRef) {
 		t.Fatalf("expected unsupported external ref, got %v", err)
 	}
@@ -306,11 +308,11 @@ paths:
 func TestResolveDocumentReturnsRefResolutionFailureForMissingExternalTargets(t *testing.T) {
 	t.Parallel()
 
-	converted := mustConvertLoadedDocument(t, &loadedDocument{
-		Source:            Source{Kind: SourceKindURL, Value: "https://example.com/spec/root.yaml"},
+	converted := mustConvertLoadedDocument(t, &pipeline.LoadedDocument{
+		Source:            pipeline.Source{Kind: pipeline.SourceKindURL, Value: "https://example.com/spec/root.yaml"},
 		CanonicalLocation: "https://example.com/spec/root.yaml",
 		FinalURL:          "https://example.com/spec/root.yaml",
-		Format:            DocumentFormatYAML,
+		Format:            pipeline.DocumentFormatYAML,
 		Raw: []byte(`openapi: 3.0.3
 info:
   title: Demo
@@ -332,7 +334,7 @@ paths:
 		return stringResponse(req, http.StatusNotFound, "text/plain", "missing"), nil
 	})
 
-	_, err := newLoader(client).resolveDocument(context.Background(), converted)
+	_, err := NewLoader(client).resolveDocument(context.Background(), converted)
 	if !IsErrorKind(err, ErrorKindRefResolutionFailure) {
 		t.Fatalf("expected ref resolution failure, got %v", err)
 	}
@@ -367,7 +369,7 @@ components:
 	}
 }
 
-func TestLoadReturnsNormalizedSpecAfterSuccessfulResolution(t *testing.T) {
+func TestLoadReturnsNormalisedSpecAfterSuccessfulResolution(t *testing.T) {
 	t.Parallel()
 
 	path := writeTempSpecFile(t, "resolved.yaml", `openapi: 3.0.3
@@ -395,32 +397,32 @@ components:
 
 	spec, err := NewLoader(nil).Load(context.Background(), Source{Value: path})
 	if err != nil {
-		t.Fatalf("expected successful normalized load, got %v", err)
+		t.Fatalf("expected successful normalised load, got %v", err)
 	}
 	if spec == nil {
-		t.Fatal("expected normalized spec after successful resolution")
+		t.Fatal("expected normalised spec after successful resolution")
 	}
 }
 
-func mustConvertDocument(t *testing.T, raw string) *convertedDocument {
+func mustConvertDocument(t *testing.T, raw string) *pipeline.ConvertedDocument {
 	t.Helper()
 
-	return mustConvertLoadedDocument(t, &loadedDocument{
+	return mustConvertLoadedDocument(t, &pipeline.LoadedDocument{
 		CanonicalLocation: "spec.yaml",
-		Format:            DocumentFormatYAML,
+		Format:            pipeline.DocumentFormatYAML,
 		Raw:               []byte(raw),
 	})
 }
 
-func mustConvertLoadedDocument(t *testing.T, document *loadedDocument) *convertedDocument {
+func mustConvertLoadedDocument(t *testing.T, document *pipeline.LoadedDocument) *pipeline.ConvertedDocument {
 	t.Helper()
 
-	parsed, err := newLoader(nil).parseDocument(document)
+	parsed, err := NewLoader(nil).parseDocument(document)
 	if err != nil {
 		t.Fatalf("parseDocument returned error: %v", err)
 	}
 
-	converted, err := newLoader(nil).convertDocument(parsed)
+	converted, err := subconverter.Convert(parsed)
 	if err != nil {
 		t.Fatalf("convertDocument returned error: %v", err)
 	}

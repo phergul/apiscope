@@ -1,38 +1,44 @@
-package spec
+package converter
 
 import (
-	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"api-tui/internal/model"
+	"api-tui/internal/spec/internal/pipeline"
+
+	"github.com/getkin/kin-openapi/openapi3"
+	"gopkg.in/yaml.v3"
 )
 
-func TestConvertDocumentPassesThroughOpenAPI3(t *testing.T) {
+func TestConvertPassesThroughOpenAPI3(t *testing.T) {
 	t.Parallel()
 
-	parsed, err := newLoader(nil).parseDocument(&loadedDocument{
-		CanonicalLocation: "spec.json",
-		Format:            DocumentFormatJSON,
-		Raw:               []byte(`{"openapi":"3.0.3","info":{"title":"Demo","version":"1.0.0"},"paths":{}}`),
-	})
-	if err != nil {
-		t.Fatalf("parseDocument returned error: %v", err)
+	doc := mustOpenAPI3Doc(t, `{"openapi":"3.0.3","info":{"title":"Demo","version":"1.0.0"},"paths":{}}`)
+	parsed := &pipeline.ParsedDocument{
+		BaseDocument: pipeline.BaseDocument{
+			Document:      &pipeline.LoadedDocument{CanonicalLocation: "spec.json", Format: pipeline.DocumentFormatJSON},
+			SourceFamily:  model.SourceFamilyOpenAPI3,
+			SourceVersion: "3.0.3",
+			OpenAPI3Doc:   doc,
+		},
 	}
 
-	converted, err := newLoader(nil).convertDocument(parsed)
+	converted, err := Convert(parsed)
 	if err != nil {
-		t.Fatalf("convertDocument returned error: %v", err)
+		t.Fatalf("Convert returned error: %v", err)
 	}
 
-	if converted.sourceFamily != model.SourceFamilyOpenAPI3 {
-		t.Fatalf("expected source family openapi3, got %q", converted.sourceFamily)
+	if converted.SourceFamily != model.SourceFamilyOpenAPI3 {
+		t.Fatalf("expected source family openapi3, got %q", converted.SourceFamily)
 	}
-	if converted.openAPI3Doc != parsed.openAPI3Doc {
+	if converted.OpenAPI3Doc != parsed.OpenAPI3Doc {
 		t.Fatal("expected openapi3 document to pass through unchanged")
 	}
 }
 
-func TestConvertDocumentConvertsSwagger2CommonCase(t *testing.T) {
+func TestConvertConvertsSwagger2CommonCase(t *testing.T) {
 	t.Parallel()
 
 	raw := `swagger: "2.0"
@@ -87,30 +93,21 @@ definitions:
         type: string
 `
 
-	parsed, err := newLoader(nil).parseDocument(&loadedDocument{
-		CanonicalLocation: "swagger.yaml",
-		Format:            DocumentFormatYAML,
-		Raw:               []byte(raw),
-	})
+	converted, err := Convert(mustParsedSwagger(t, raw))
 	if err != nil {
-		t.Fatalf("parseDocument returned error: %v", err)
+		t.Fatalf("Convert returned error: %v", err)
 	}
 
-	converted, err := newLoader(nil).convertDocument(parsed)
-	if err != nil {
-		t.Fatalf("convertDocument returned error: %v", err)
+	if converted.SourceFamily != model.SourceFamilySwagger2 {
+		t.Fatalf("expected swagger2 source family, got %q", converted.SourceFamily)
 	}
-
-	if converted.sourceFamily != model.SourceFamilySwagger2 {
-		t.Fatalf("expected swagger2 source family, got %q", converted.sourceFamily)
-	}
-	if got := converted.openAPI3Doc.Servers[0].URL; got != "https://api.example.com/v1" {
+	if got := converted.OpenAPI3Doc.Servers[0].URL; got != "https://api.example.com/v1" {
 		t.Fatalf("expected converted server, got %q", got)
 	}
-	if converted.openAPI3Doc.Paths == nil {
+	if converted.OpenAPI3Doc.Paths == nil {
 		t.Fatal("expected converted paths")
 	}
-	pathItem := converted.openAPI3Doc.Paths.Value("/pets")
+	pathItem := converted.OpenAPI3Doc.Paths.Value("/pets")
 	if pathItem == nil || pathItem.Get == nil || pathItem.Post == nil {
 		t.Fatal("expected get and post operations to be converted")
 	}
@@ -123,11 +120,11 @@ definitions:
 	if pathItem.Post.RequestBody.Value.Content["application/json"] == nil {
 		t.Fatal("expected request body media type from consumes")
 	}
-	if converted.openAPI3Doc.Components == nil || converted.openAPI3Doc.Components.SecuritySchemes["api_key"] == nil {
+	if converted.OpenAPI3Doc.Components == nil || converted.OpenAPI3Doc.Components.SecuritySchemes["api_key"] == nil {
 		t.Fatal("expected security definition to be converted")
 	}
-	if len(converted.openAPI3Doc.Security) != 1 {
-		t.Fatalf("expected top-level security to be preserved, got %d entries", len(converted.openAPI3Doc.Security))
+	if len(converted.OpenAPI3Doc.Security) != 1 {
+		t.Fatalf("expected top-level security to be preserved, got %d entries", len(converted.OpenAPI3Doc.Security))
 	}
 	response := pathItem.Get.Responses.Value("200")
 	if response == nil || response.Value == nil {
@@ -138,7 +135,7 @@ definitions:
 	}
 }
 
-func TestConvertDocumentRejectsUnsupportedSwaggerConstruct(t *testing.T) {
+func TestConvertRejectsUnsupportedSwaggerConstruct(t *testing.T) {
 	t.Parallel()
 
 	raw := `swagger: "2.0"
@@ -157,47 +154,13 @@ paths:
           description: ok
 `
 
-	parsed, err := newLoader(nil).parseDocument(&loadedDocument{
-		CanonicalLocation: "swagger.yaml",
-		Format:            DocumentFormatYAML,
-		Raw:               []byte(raw),
-	})
-	if err != nil {
-		t.Fatalf("parseDocument returned error: %v", err)
-	}
-
-	_, err = newLoader(nil).convertDocument(parsed)
-	if !IsErrorKind(err, ErrorKindUnsupportedSwaggerConstruct) {
+	_, err := Convert(mustParsedSwagger(t, raw))
+	if !isPipelineErrorKind(err, pipeline.ErrorKindUnsupportedSwaggerConstruct) {
 		t.Fatalf("expected unsupported swagger construct error, got %v", err)
 	}
 }
 
-func TestLoadReturnsConversionErrorForUnsupportedSwaggerInput(t *testing.T) {
-	t.Parallel()
-
-	path := writeTempSpecFile(t, "swagger.yaml", `swagger: "2.0"
-info:
-  title: Demo
-  version: 1.0.0
-paths:
-  /upload:
-    post:
-      parameters:
-        - name: file
-          in: formData
-          type: string
-      responses:
-        "200":
-          description: ok
-`)
-
-	_, err := NewLoader(nil).Load(context.Background(), Source{Value: path})
-	if !IsErrorKind(err, ErrorKindUnsupportedSwaggerConstruct) {
-		t.Fatalf("expected unsupported swagger construct error, got %v", err)
-	}
-}
-
-func TestConvertDocumentConvertsSwaggerReusableRefsAndResponseHeaders(t *testing.T) {
+func TestConvertConvertsSwaggerReusableRefsAndResponseHeaders(t *testing.T) {
 	t.Parallel()
 
 	raw := `swagger: "2.0"
@@ -231,21 +194,12 @@ paths:
           $ref: "#/responses/Error"
 `
 
-	parsed, err := newLoader(nil).parseDocument(&loadedDocument{
-		CanonicalLocation: "swagger.yaml",
-		Format:            DocumentFormatYAML,
-		Raw:               []byte(raw),
-	})
+	converted, err := Convert(mustParsedSwagger(t, raw))
 	if err != nil {
-		t.Fatalf("parseDocument returned error: %v", err)
+		t.Fatalf("Convert returned error: %v", err)
 	}
 
-	converted, err := newLoader(nil).convertDocument(parsed)
-	if err != nil {
-		t.Fatalf("convertDocument returned error: %v", err)
-	}
-
-	limit := converted.openAPI3Doc.Components.Parameters["Limit"]
+	limit := converted.OpenAPI3Doc.Components.Parameters["Limit"]
 	if limit == nil || limit.Value == nil {
 		t.Fatal("expected converted reusable parameter")
 	}
@@ -253,7 +207,7 @@ paths:
 		t.Fatalf("expected multi query collectionFormat to map to form+explode, got style=%q explode=%v", limit.Value.Style, limit.Value.Explode)
 	}
 
-	pathItem := converted.openAPI3Doc.Paths.Value("/pets")
+	pathItem := converted.OpenAPI3Doc.Paths.Value("/pets")
 	if pathItem == nil || pathItem.Get == nil {
 		t.Fatal("expected converted get operation")
 	}
@@ -264,7 +218,7 @@ paths:
 		t.Fatalf("expected response ref rewrite, got %q", got)
 	}
 
-	errorResponse := converted.openAPI3Doc.Components.Responses["Error"]
+	errorResponse := converted.OpenAPI3Doc.Components.Responses["Error"]
 	if errorResponse == nil || errorResponse.Value == nil {
 		t.Fatal("expected converted reusable response")
 	}
@@ -277,7 +231,7 @@ paths:
 	}
 }
 
-func TestConvertDocumentRewritesExternalSwaggerRefs(t *testing.T) {
+func TestConvertRewritesExternalSwaggerRefs(t *testing.T) {
 	t.Parallel()
 
 	raw := `swagger: "2.0"
@@ -294,21 +248,12 @@ paths:
           $ref: "https://example.com/common.yaml#/responses/Error"
 `
 
-	parsed, err := newLoader(nil).parseDocument(&loadedDocument{
-		CanonicalLocation: "swagger.yaml",
-		Format:            DocumentFormatYAML,
-		Raw:               []byte(raw),
-	})
+	converted, err := Convert(mustParsedSwagger(t, raw))
 	if err != nil {
-		t.Fatalf("parseDocument returned error: %v", err)
+		t.Fatalf("Convert returned error: %v", err)
 	}
 
-	converted, err := newLoader(nil).convertDocument(parsed)
-	if err != nil {
-		t.Fatalf("convertDocument returned error: %v", err)
-	}
-
-	pathItem := converted.openAPI3Doc.Paths.Value("/pets")
+	pathItem := converted.OpenAPI3Doc.Paths.Value("/pets")
 	if got := pathItem.Get.Parameters[0].Ref; got != "common.yaml#/components/parameters/Limit" {
 		t.Fatalf("expected external parameter ref rewrite, got %q", got)
 	}
@@ -317,7 +262,7 @@ paths:
 	}
 }
 
-func TestConvertDocumentPreservesSwaggerPathItemRefs(t *testing.T) {
+func TestConvertPreservesSwaggerPathItemRefs(t *testing.T) {
 	t.Parallel()
 
 	raw := `swagger: "2.0"
@@ -329,21 +274,12 @@ paths:
     $ref: "common.yaml#/paths/~1pets"
 `
 
-	parsed, err := newLoader(nil).parseDocument(&loadedDocument{
-		CanonicalLocation: "swagger.yaml",
-		Format:            DocumentFormatYAML,
-		Raw:               []byte(raw),
-	})
+	converted, err := Convert(mustParsedSwagger(t, raw))
 	if err != nil {
-		t.Fatalf("parseDocument returned error: %v", err)
+		t.Fatalf("Convert returned error: %v", err)
 	}
 
-	converted, err := newLoader(nil).convertDocument(parsed)
-	if err != nil {
-		t.Fatalf("convertDocument returned error: %v", err)
-	}
-
-	pathItem := converted.openAPI3Doc.Paths.Value("/pets")
+	pathItem := converted.OpenAPI3Doc.Paths.Value("/pets")
 	if pathItem == nil {
 		t.Fatal("expected converted path item")
 	}
@@ -352,7 +288,7 @@ paths:
 	}
 }
 
-func TestConvertDocumentConvertsSwaggerOAuth2Definitions(t *testing.T) {
+func TestConvertConvertsSwaggerOAuth2Definitions(t *testing.T) {
 	t.Parallel()
 
 	raw := `swagger: "2.0"
@@ -375,21 +311,12 @@ paths:
           description: ok
 `
 
-	parsed, err := newLoader(nil).parseDocument(&loadedDocument{
-		CanonicalLocation: "swagger.yaml",
-		Format:            DocumentFormatYAML,
-		Raw:               []byte(raw),
-	})
+	converted, err := Convert(mustParsedSwagger(t, raw))
 	if err != nil {
-		t.Fatalf("parseDocument returned error: %v", err)
+		t.Fatalf("Convert returned error: %v", err)
 	}
 
-	converted, err := newLoader(nil).convertDocument(parsed)
-	if err != nil {
-		t.Fatalf("convertDocument returned error: %v", err)
-	}
-
-	scheme := converted.openAPI3Doc.Components.SecuritySchemes["petstore_auth"]
+	scheme := converted.OpenAPI3Doc.Components.SecuritySchemes["petstore_auth"]
 	if scheme == nil || scheme.Value == nil {
 		t.Fatal("expected converted oauth2 scheme")
 	}
@@ -401,7 +328,7 @@ paths:
 	}
 }
 
-func TestConvertDocumentMapsSwaggerCollectionFormats(t *testing.T) {
+func TestConvertMapsSwaggerCollectionFormats(t *testing.T) {
 	t.Parallel()
 
 	raw := `swagger: "2.0"
@@ -441,21 +368,12 @@ paths:
           description: ok
 `
 
-	parsed, err := newLoader(nil).parseDocument(&loadedDocument{
-		CanonicalLocation: "swagger.yaml",
-		Format:            DocumentFormatYAML,
-		Raw:               []byte(raw),
-	})
+	converted, err := Convert(mustParsedSwagger(t, raw))
 	if err != nil {
-		t.Fatalf("parseDocument returned error: %v", err)
+		t.Fatalf("Convert returned error: %v", err)
 	}
 
-	converted, err := newLoader(nil).convertDocument(parsed)
-	if err != nil {
-		t.Fatalf("convertDocument returned error: %v", err)
-	}
-
-	params := converted.openAPI3Doc.Paths.Value("/pets").Get.Parameters
+	params := converted.OpenAPI3Doc.Paths.Value("/pets").Get.Parameters
 	if got := params[0].Value.Style; got != "form" {
 		t.Fatalf("expected multi to map to form, got %q", got)
 	}
@@ -474,7 +392,76 @@ paths:
 	if params[2].Value.Explode == nil || *params[2].Value.Explode {
 		t.Fatalf("expected pipes to map to explode=false, got %v", params[2].Value.Explode)
 	}
-	if got := params[3].Value.Extensions[swaggerCollectionFormatExtension]; got != "tsv" {
+	if got := params[3].Value.Extensions[pipeline.SwaggerCollectionFormatExtension]; got != "tsv" {
 		t.Fatalf("expected tsv to be preserved in extensions, got %#v", got)
 	}
+}
+
+func mustParsedSwagger(t *testing.T, raw string) *pipeline.ParsedDocument {
+	t.Helper()
+
+	var decoded map[string]any
+	if err := yaml.Unmarshal([]byte(raw), &decoded); err != nil {
+		t.Fatalf("yaml.Unmarshal: %v", err)
+	}
+
+	return &pipeline.ParsedDocument{
+		BaseDocument: pipeline.BaseDocument{
+			Document:      &pipeline.LoadedDocument{CanonicalLocation: "swagger.yaml", Format: pipeline.DocumentFormatYAML},
+			SourceFamily:  model.SourceFamilySwagger2,
+			SourceVersion: strings.TrimSpace(decoded["swagger"].(string)),
+		},
+		SwaggerDoc: decoded,
+	}
+}
+
+func mustOpenAPI3Doc(t *testing.T, raw string) *openapi3.T {
+	t.Helper()
+
+	var decoded map[string]any
+	var err error
+	if strings.HasPrefix(strings.TrimSpace(raw), "{") {
+		err = json.Unmarshal([]byte(raw), &decoded)
+	} else {
+		err = yaml.Unmarshal([]byte(raw), &decoded)
+	}
+	if err != nil {
+		t.Fatalf("decode spec: %v", err)
+	}
+
+	payload, err := json.Marshal(decoded)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+
+	var doc openapi3.T
+	if err := json.Unmarshal(payload, &doc); err != nil {
+		t.Fatalf("json.Unmarshal openapi3: %v", err)
+	}
+
+	return &doc
+}
+
+func isPipelineErrorKind(err error, kind pipeline.ErrorKind) bool {
+	var pipelineErr *pipeline.Error
+	return err != nil && kind != "" && errorAs(err, &pipelineErr) && pipelineErr.Kind == kind
+}
+
+func errorAs(err error, target any) bool {
+	switch typed := target.(type) {
+	case **pipeline.Error:
+		for err != nil {
+			if candidate, ok := err.(*pipeline.Error); ok {
+				*typed = candidate
+				return true
+			}
+			unwrapper, ok := err.(interface{ Unwrap() error })
+			if !ok {
+				return false
+			}
+			err = unwrapper.Unwrap()
+		}
+	}
+
+	return false
 }

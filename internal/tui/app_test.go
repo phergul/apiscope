@@ -232,6 +232,24 @@ func TestModelFilterModeUpdatesVisibleOperationsLive(t *testing.T) {
 	}
 }
 
+func TestModelFilterStillMatchesOperationSummaryWhenSummaryIsNotRendered(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	updated := updatedModel.(*Model)
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("list")})
+	updated = updatedModel.(*Model)
+
+	if len(updated.viewState.VisibleOperationKeys) != 1 {
+		t.Fatalf("expected 1 visible operation after summary filter, got %d", len(updated.viewState.VisibleOperationKeys))
+	}
+	if updated.session.SelectedOperationKey != model.NewOperationKey("GET", "/pets") {
+		t.Fatalf("expected summary filter to match GET /pets, got %q", updated.session.SelectedOperationKey)
+	}
+}
+
 func TestModelFilterModeBackspaceAndDeleteTrimCharacters(t *testing.T) {
 	t.Parallel()
 
@@ -348,19 +366,26 @@ func TestModelDetailsSectionNavigationSkipsUnavailableSections(t *testing.T) {
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
 	updated := updatedModel.(*Model)
-	if updated.activeDetailsSection != detailsSectionParameters {
-		t.Fatalf("expected ] to move to parameters, got %q", updated.activeDetailsSection)
+	if updated.activeDetailsSection != detailsSectionSecurity {
+		t.Fatalf("expected ] to move to security, got %q", updated.activeDetailsSection)
 	}
 
 	updated.session.SelectedOperationKey = model.NewOperationKey("POST", "/pets")
 	updated.syncActiveDetailsSection()
+	if updated.activeDetailsSection != detailsSectionSecurity {
+		t.Fatalf("expected active section to stay on security when still available, got %q", updated.activeDetailsSection)
+	}
+
+	updated.session.Spec.Security = nil
+	updated.session.SelectedOperationKey = model.NewOperationKey("GET", "/health")
+	updated.syncActiveDetailsSection()
 	if updated.activeDetailsSection != detailsSectionSummary {
-		t.Fatalf("expected active section to fall back to summary, got %q", updated.activeDetailsSection)
+		t.Fatalf("expected active section to fall back to summary when security is unavailable, got %q", updated.activeDetailsSection)
 	}
 
 	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnd})
 	updated = updatedModel.(*Model)
-	if updated.activeDetailsSection != detailsSectionSecurity {
+	if updated.activeDetailsSection != detailsSectionSummary {
 		t.Fatalf("expected end to jump to last available details section, got %q", updated.activeDetailsSection)
 	}
 }

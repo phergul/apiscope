@@ -10,12 +10,9 @@ import (
 type detailsSection string
 
 const (
-	detailsSectionSummary     detailsSection = "Summary"
-	detailsSectionParameters  detailsSection = "Parameters"
-	detailsSectionRequestBody detailsSection = "Request Body"
-	detailsSectionResponses   detailsSection = "Responses"
-	detailsSectionSecurity    detailsSection = "Security"
-	detailsSectionWarnings    detailsSection = "Warnings"
+	detailsSectionSummary  detailsSection = "Summary"
+	detailsSectionSecurity detailsSection = "Security"
+	detailsSectionWarnings detailsSection = "Warnings"
 )
 
 type operationGroup struct {
@@ -184,15 +181,6 @@ func (m *Model) availableDetailsSections() []detailsSection {
 	}
 
 	sections := []detailsSection{detailsSectionSummary}
-	if len(selected.Parameters) > 0 {
-		sections = append(sections, detailsSectionParameters)
-	}
-	if selected.RequestBody != nil {
-		sections = append(sections, detailsSectionRequestBody)
-	}
-	if len(selected.Responses) > 0 {
-		sections = append(sections, detailsSectionResponses)
-	}
 	requirement := m.effectiveSecurityRequirement(selected)
 	if requirement != nil && len(requirement.Alternatives) > 0 {
 		sections = append(sections, detailsSectionSecurity)

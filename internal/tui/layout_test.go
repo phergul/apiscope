@@ -28,6 +28,9 @@ func TestOperationsPaneContentHighlightsSelectedOperationAndPreservesOrder(t *te
 	if firstGroup > secondGroup || selected > second {
 		t.Fatalf("expected operations to preserve visible order, got %q", content)
 	}
+	if strings.Contains(content, "List pets") || strings.Contains(content, "Create pet") {
+		t.Fatalf("expected operations rows to omit summaries, got %q", content)
+	}
 }
 
 func TestOperationsPaneContentFallsBackToFirstVisibleWhenSelectionMissing(t *testing.T) {
@@ -83,7 +86,7 @@ func TestDetailsPaneContentRendersSummarySection(t *testing.T) {
 	content := m.detailsPaneContent()
 
 	wantSnippets := []string{
-		"[Summary]  Parameters  Request Body  Responses  Security  Warnings",
+		"[Summary]  Security  Warnings",
 		"Operation: GET /pets",
 		"Summary: List pets",
 		"Description: Returns pets.",
@@ -97,72 +100,6 @@ func TestDetailsPaneContentRendersSummarySection(t *testing.T) {
 	}
 }
 
-func TestDetailsPaneContentShowsParametersSectionWhenActive(t *testing.T) {
-	t.Parallel()
-
-	m := newLoadedModelForRendering()
-	m.activeDetailsSection = detailsSectionParameters
-
-	content := m.detailsPaneContent()
-
-	wantSnippets := []string{
-		"Summary  [Parameters]  Request Body  Responses  Security  Warnings",
-		"PATH:",
-		"- petId (required, string)",
-		"QUERY:",
-		"- limit (optional, integer/int32)",
-		"HEADER:",
-		"- X-Trace-ID (optional, string)",
-		"COOKIE:",
-		"- session (optional, string)",
-	}
-	for _, snippet := range wantSnippets {
-		if !strings.Contains(content, snippet) {
-			t.Fatalf("expected details parameters section to include %q, got %q", snippet, content)
-		}
-	}
-}
-
-func TestDetailsPaneContentShowsRequestBodySectionWhenActive(t *testing.T) {
-	t.Parallel()
-
-	m := newLoadedModelForRendering()
-	m.activeDetailsSection = detailsSectionRequestBody
-
-	content := m.detailsPaneContent()
-
-	wantSnippets := []string{
-		"Summary  Parameters  [Request Body]  Responses  Security  Warnings",
-		"Required: required",
-		"Media types: application/json, application/xml",
-	}
-	for _, snippet := range wantSnippets {
-		if !strings.Contains(content, snippet) {
-			t.Fatalf("expected request body section to include %q, got %q", snippet, content)
-		}
-	}
-}
-
-func TestDetailsPaneContentShowsResponsesSectionWhenActive(t *testing.T) {
-	t.Parallel()
-
-	m := newLoadedModelForRendering()
-	m.activeDetailsSection = detailsSectionResponses
-
-	content := m.detailsPaneContent()
-
-	wantSnippets := []string{
-		"Summary  Parameters  Request Body  [Responses]  Security  Warnings",
-		"- 200: OK [application/json]",
-		"- default: Unexpected error [application/problem+json]",
-	}
-	for _, snippet := range wantSnippets {
-		if !strings.Contains(content, snippet) {
-			t.Fatalf("expected responses section to include %q, got %q", snippet, content)
-		}
-	}
-}
-
 func TestDetailsPaneContentShowsSecuritySectionWhenActive(t *testing.T) {
 	t.Parallel()
 
@@ -172,7 +109,7 @@ func TestDetailsPaneContentShowsSecuritySectionWhenActive(t *testing.T) {
 	content := m.detailsPaneContent()
 
 	wantSnippets := []string{
-		"Summary  Parameters  Request Body  Responses  [Security]  Warnings",
+		"Summary  [Security]  Warnings",
 		"- api_key AND secondary_header",
 		"OR",
 		"- oauth (pets:read)",
@@ -193,7 +130,7 @@ func TestDetailsPaneContentShowsWarningsSectionWhenActive(t *testing.T) {
 	content := m.detailsPaneContent()
 
 	wantSnippets := []string{
-		"Summary  Parameters  Request Body  Responses  Security  [Warnings]",
+		"Summary  Security  [Warnings]",
 		"- unsupported_feature: callbacks are not supported in v1",
 		"  path: #/paths/~1pets/get/callbacks",
 		"- downgraded_feature: collectionFormat was simplified during normalization",
@@ -201,6 +138,30 @@ func TestDetailsPaneContentShowsWarningsSectionWhenActive(t *testing.T) {
 	for _, snippet := range wantSnippets {
 		if !strings.Contains(content, snippet) {
 			t.Fatalf("expected warnings section to include %q, got %q", snippet, content)
+		}
+	}
+}
+
+func TestDetailsPaneContentDoesNotShowRequestOrResponseSections(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForRendering()
+
+	content := m.detailsPaneContent()
+
+	unwantedSnippets := []string{
+		"Parameters",
+		"Request Body",
+		"Responses",
+		"PATH:",
+		"QUERY:",
+		"Required: required",
+		"Media types: application/json, application/xml",
+		"- 200: OK [application/json]",
+	}
+	for _, snippet := range unwantedSnippets {
+		if strings.Contains(content, snippet) {
+			t.Fatalf("expected details pane to omit %q, got %q", snippet, content)
 		}
 	}
 }
@@ -308,6 +269,22 @@ func TestDetailsPaneContentShowsExplicitNoneStates(t *testing.T) {
 		if !strings.Contains(content, snippet) {
 			t.Fatalf("expected details content to include %q, got %q", snippet, content)
 		}
+	}
+}
+
+func TestRequestAndResponsePaneCopyExplainsFutureOwnership(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForRendering()
+
+	requestContent := m.requestPaneContent()
+	if !strings.Contains(requestContent, "path/query/header params, auth, and request body input") {
+		t.Fatalf("expected request pane copy to explain ownership, got %q", requestContent)
+	}
+
+	responseContent := m.responsePaneContent()
+	if !strings.Contains(responseContent, "response details and examples") {
+		t.Fatalf("expected response pane copy to explain ownership, got %q", responseContent)
 	}
 }
 

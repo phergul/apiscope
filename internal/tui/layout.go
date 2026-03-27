@@ -225,9 +225,6 @@ func (m *Model) operationsPaneContent() string {
 			}
 
 			line := fmt.Sprintf("%s%-6s %s", prefix, strings.ToUpper(operation.Method), operation.Path)
-			if summary := strings.TrimSpace(operation.Summary); summary != "" {
-				line += " - " + summary
-			}
 			lines = append(lines, line)
 		}
 		lines = append(lines, "")
@@ -268,12 +265,6 @@ func (m *Model) detailsPaneContent() string {
 
 func (m *Model) activeDetailsSectionContent(selected *model.Operation) string {
 	switch m.activeDetailsSection {
-	case detailsSectionParameters:
-		return formatParameterSections(selected.Parameters)
-	case detailsSectionRequestBody:
-		return formatRequestBody(selected.RequestBody)
-	case detailsSectionResponses:
-		return formatResponses(selected.Responses)
 	case detailsSectionSecurity:
 		return formatSecurityRequirement(m.effectiveSecurityRequirement(selected))
 	case detailsSectionWarnings:
@@ -294,7 +285,7 @@ func (m *Model) requestPaneContent() string {
 		return "Loading spec..."
 	}
 
-	return "Request editing arrives in M3.\nThis pane will become the working area for parameters, auth, and body input."
+	return "Request editing arrives in M3.\nThis pane will hold path/query/header params, auth, and request body input."
 }
 
 func (m *Model) responsePaneContent() string {
@@ -302,7 +293,7 @@ func (m *Model) responsePaneContent() string {
 		return "Loading spec..."
 	}
 
-	return "Responses will appear here after execution arrives in M3."
+	return "Response inspection arrives in M3.\nThis pane will hold response details and examples after execution."
 }
 
 func (m *Model) renderStatusBar(width int) string {

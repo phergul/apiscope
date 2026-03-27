@@ -64,10 +64,49 @@ func RenderDetails(data DetailsData) string {
 
 func renderSummaryDetailsContent(data DetailsData) string {
 	return strings.Join([]string{
-		fmt.Sprintf("Operation: %s %s", strings.ToUpper(data.Selected.Method), data.Selected.Path),
 		fmt.Sprintf("Summary: %s", fallbackText(data.Selected.Summary, "None")),
 		fmt.Sprintf("Description: %s", fallbackText(data.Selected.Description, "None")),
 		fmt.Sprintf("Tags: %s", formatTags(data.Selected.Tags)),
 		fmt.Sprintf("Deprecated: %s", yesNo(data.Selected.Deprecated)),
 	}, "\n")
+}
+
+func RenderActiveDetailsSectionForProjection(data DetailsData) string {
+	switch data.ActiveSection {
+	case DetailsSectionSecurity:
+		return formatSecurityRequirement(data.Security)
+	case DetailsSectionWarnings:
+		return formatWarnings(data.Warnings)
+	default:
+		return renderSummaryDetailsContent(data)
+	}
+}
+
+func BuildDetailsSectionsForProjection(data DetailsData) []Section {
+	sections := []Section{
+		{Label: DetailsSectionSummary, Body: RenderActiveDetailsSectionForProjection(DetailsData{
+			Selected:      data.Selected,
+			ActiveSection: DetailsSectionSummary,
+		})},
+	}
+	if data.Security != nil && len(data.Security.Alternatives) > 0 {
+		sections = append(sections, Section{
+			Label: DetailsSectionSecurity,
+			Body: RenderActiveDetailsSectionForProjection(DetailsData{
+				Security:      data.Security,
+				ActiveSection: DetailsSectionSecurity,
+			}),
+		})
+	}
+	if len(data.Warnings) > 0 {
+		sections = append(sections, Section{
+			Label: DetailsSectionWarnings,
+			Body: RenderActiveDetailsSectionForProjection(DetailsData{
+				Warnings:      data.Warnings,
+				ActiveSection: DetailsSectionWarnings,
+			}),
+		})
+	}
+
+	return sections
 }

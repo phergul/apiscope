@@ -14,7 +14,6 @@ func TestRenderDetailsRendersSummarySection(t *testing.T) {
 
 	wantSnippets := []string{
 		"[Summary]  Security  Warnings",
-		"Operation: GET /pets",
 		"Summary: List pets",
 		"Description: Returns pets.",
 		"Tags: pets, public",
@@ -24,6 +23,9 @@ func TestRenderDetailsRendersSummarySection(t *testing.T) {
 		if !strings.Contains(content, snippet) {
 			t.Fatalf("expected details content to include %q, got %q", snippet, content)
 		}
+	}
+	if strings.Contains(content, "Operation: GET /pets") {
+		t.Fatalf("expected details summary to omit redundant operation row, got %q", content)
 	}
 }
 

@@ -117,3 +117,26 @@ func TestRenderResponseShowsExplicitEmptyState(t *testing.T) {
 		t.Fatalf("expected response pane empty state, got %q", responseContent)
 	}
 }
+
+func TestRenderResponseNormalisesEmbeddedDescriptionLineBreaks(t *testing.T) {
+	t.Parallel()
+
+	responseContent := RenderResponse(ResponseData{
+		Sections: []Section{
+			{
+				Label: "401",
+				Body: strings.Join([]string{
+					"Description: Bad or expired token. This can happen if the user revoked a token or the access token has expired. You should re-authenticate the user.",
+					"Headers:",
+					"- none",
+					"Media types: application/json",
+				}, "\n"),
+			},
+		},
+		ActiveSection: "401",
+	})
+
+	if strings.Contains(responseContent, "token or\nthe access token") {
+		t.Fatalf("expected response description to collapse embedded line breaks, got %q", responseContent)
+	}
+}

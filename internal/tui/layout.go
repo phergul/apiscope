@@ -109,17 +109,18 @@ func (m *Model) renderWideLayout(width, height int) string {
 
 	operationsView := m.paneView(model.FocusedPaneOperations)
 	detailsView := m.paneView(model.FocusedPaneDetails)
+	detailsView.Body = m.detailsPaneContentForHeight(heights.Details)
 	requestView := m.paneView(model.FocusedPaneRequest)
 	responseView := m.paneView(model.FocusedPaneResponse)
 
-	operationsPane := m.renderPane(operationsView.Title, operationsView.Body, leftWidth, height, operationsView.Focused)
+	operationsPane := m.renderPane(operationsView.Title, operationsView.Body, operationsView.Footer, leftWidth, height, operationsView.Focused)
 
 	rightParts := []string{
-		m.renderPane(detailsView.Title, detailsView.Body, rightWidth, heights.Details, detailsView.Focused),
-		m.renderPane(requestView.Title, requestView.Body, rightWidth, requestHeight, requestView.Focused),
+		m.renderPane(detailsView.Title, detailsView.Body, detailsView.Footer, rightWidth, heights.Details, detailsView.Focused),
+		m.renderPane(requestView.Title, requestView.Body, requestView.Footer, rightWidth, requestHeight, requestView.Focused),
 	}
 	if responseHeight > 0 {
-		rightParts = append(rightParts, m.renderPane(responseView.Title, responseView.Body, rightWidth, responseHeight, responseView.Focused))
+		rightParts = append(rightParts, m.renderPane(responseView.Title, responseView.Body, responseView.Footer, rightWidth, responseHeight, responseView.Focused))
 	}
 
 	rightColumn := lipgloss.JoinVertical(lipgloss.Left, rightParts...)
@@ -133,16 +134,17 @@ func (m *Model) renderNarrowLayout(width, height int) string {
 
 	operationsView := m.paneView(model.FocusedPaneOperations)
 	detailsView := m.paneView(model.FocusedPaneDetails)
+	detailsView.Body = m.detailsPaneContentForHeight(heights.Details)
 	requestView := m.paneView(model.FocusedPaneRequest)
 	responseView := m.paneView(model.FocusedPaneResponse)
 
 	parts := []string{
-		m.renderPane(operationsView.Title, operationsView.Body, width, heights.Operations, operationsView.Focused),
-		m.renderPane(detailsView.Title, detailsView.Body, width, heights.Details, detailsView.Focused),
-		m.renderPane(requestView.Title, requestView.Body, width, requestHeight, requestView.Focused),
+		m.renderPane(operationsView.Title, operationsView.Body, operationsView.Footer, width, heights.Operations, operationsView.Focused),
+		m.renderPane(detailsView.Title, detailsView.Body, detailsView.Footer, width, heights.Details, detailsView.Focused),
+		m.renderPane(requestView.Title, requestView.Body, requestView.Footer, width, requestHeight, requestView.Focused),
 	}
 	if responseHeight > 0 {
-		parts = append(parts, m.renderPane(responseView.Title, responseView.Body, width, responseHeight, responseView.Focused))
+		parts = append(parts, m.renderPane(responseView.Title, responseView.Body, responseView.Footer, width, responseHeight, responseView.Focused))
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
@@ -150,10 +152,13 @@ func (m *Model) renderNarrowLayout(width, height int) string {
 
 func (m *Model) renderZoomLayout(width, height int) string {
 	view := m.paneView(m.viewState.FocusedPane)
-	return m.renderPane(view.Title, view.Body, width, height, true)
+	if m.viewState.FocusedPane == model.FocusedPaneDetails {
+		view.Body = m.detailsPaneContentForHeight(height)
+	}
+	return m.renderPane(view.Title, view.Body, view.Footer, width, height, true)
 }
 
-func (m *Model) renderPane(title, body string, width, height int, focused bool) string {
+func (m *Model) renderPane(title, body, footer string, width, height int, focused bool) string {
 	width = maxInt(width, 12)
 	height = maxInt(height, 4)
 
@@ -164,12 +169,29 @@ func (m *Model) renderPane(title, body string, width, height int, focused bool) 
 
 	contentWidth := maxInt(width-4, 1)
 	contentHeight := maxInt(height-2, 1)
-	content := lipgloss.NewStyle().
+	footerBlock := ""
+	footerHeight := 0
+	if strings.TrimSpace(footer) != "" {
+		footerBlock = lipgloss.NewStyle().
+			BorderTop(true).
+			BorderStyle(paneBorder).
+			Width(contentWidth).
+			Render(footer)
+		footerHeight = lipgloss.Height(footerBlock)
+	}
+
+	bodyHeight := maxInt(contentHeight-footerHeight, 1)
+	bodyBlock := lipgloss.NewStyle().
 		Width(contentWidth).
-		Height(contentHeight).
+		Height(bodyHeight).
 		MaxWidth(contentWidth).
-		MaxHeight(contentHeight).
+		MaxHeight(bodyHeight).
 		Render(titleLine + "\n\n" + body)
+
+	content := bodyBlock
+	if footerBlock != "" {
+		content = lipgloss.JoinVertical(lipgloss.Left, bodyBlock, footerBlock)
+	}
 
 	style := lipgloss.NewStyle().
 		Border(paneBorder).

@@ -537,6 +537,70 @@ func TestModelRequestSectionNavigationMovesAcrossParameterBodyAndAuth(t *testing
 	}
 }
 
+func TestModelRequestAndResponseSectionsResetToFirstOnOperationChange(t *testing.T) {
+	t.Parallel()
+
+	spec := &model.APISpec{
+		Operations: []model.Operation{
+			{
+				Key:    model.NewOperationKey("GET", "/first"),
+				Method: "GET",
+				Path:   "/first",
+				Parameters: []model.Parameter{
+					{Name: "id", In: model.ParameterLocationPath, Required: true, Schema: &model.Schema{Type: "string"}},
+					{Name: "market", In: model.ParameterLocationQuery, Schema: &model.Schema{Type: "string"}},
+				},
+				Responses: []model.ResponseSpec{
+					{StatusCode: "200", Description: "OK"},
+					{StatusCode: "default", Description: "Fallback"},
+				},
+			},
+			{
+				Key:    model.NewOperationKey("GET", "/second"),
+				Method: "GET",
+				Path:   "/second",
+				Parameters: []model.Parameter{
+					{Name: "owner", In: model.ParameterLocationPath, Required: true, Schema: &model.Schema{Type: "string"}},
+					{Name: "region", In: model.ParameterLocationQuery, Schema: &model.Schema{Type: "string"}},
+				},
+				Responses: []model.ResponseSpec{
+					{StatusCode: "200", Description: "OK"},
+					{StatusCode: "default", Description: "Fallback"},
+				},
+			},
+		},
+	}
+
+	m := &Model{
+		session: model.SessionState{
+			Spec:                 spec,
+			SelectedOperationKey: model.NewOperationKey("GET", "/first"),
+		},
+		viewState: model.ViewState{
+			FocusedPane: model.FocusedPaneOperations,
+			VisibleOperationKeys: []model.OperationKey{
+				model.NewOperationKey("GET", "/first"),
+				model.NewOperationKey("GET", "/second"),
+			},
+		},
+		activeDetailsSection:  detailsSectionSummary,
+		activeRequestSection:  "Query",
+		activeResponseSection: "default",
+	}
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	updated := updatedModel.(*Model)
+	if updated.session.SelectedOperationKey != model.NewOperationKey("GET", "/second") {
+		t.Fatalf("expected second operation to be selected, got %q", updated.session.SelectedOperationKey)
+	}
+	if updated.activeRequestSection != "Path" {
+		t.Fatalf("expected request section to reset to first available, got %q", updated.activeRequestSection)
+	}
+	if updated.activeResponseSection != "200" {
+		t.Fatalf("expected response section to reset to first available, got %q", updated.activeResponseSection)
+	}
+}
+
 func TestModelResponseSectionNavigationAndFallback(t *testing.T) {
 	t.Parallel()
 
@@ -554,6 +618,96 @@ func TestModelResponseSectionNavigationAndFallback(t *testing.T) {
 	updated.syncActivePaneSections()
 	if updated.activeResponseSection != "" {
 		t.Fatalf("expected response section to clear when no responses remain, got %q", updated.activeResponseSection)
+	}
+}
+
+func TestModelDetailsScrollingUsesJKAndResetsOnSectionChange(t *testing.T) {
+	t.Parallel()
+
+	m := &Model{
+		session: model.SessionState{
+			Spec: &model.APISpec{
+				Operations: []model.Operation{
+					{
+						Key:         model.NewOperationKey("GET", "/pets"),
+						Method:      "GET",
+						Path:        "/pets",
+						Summary:     "List pets",
+						Description: "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8",
+						Tags:        []string{"pets"},
+						Security: &model.SecurityRequirement{
+							Alternatives: []model.SecurityAlternative{
+								{Schemes: []model.SecurityRequirementRef{{Name: "api_key"}}},
+							},
+						},
+					},
+				},
+			},
+			SelectedOperationKey: model.NewOperationKey("GET", "/pets"),
+		},
+		viewState: model.ViewState{
+			FocusedPane: model.FocusedPaneDetails,
+		},
+		width:                80,
+		height:               12,
+		activeDetailsSection: detailsSectionSummary,
+	}
+	m.viewState.RightPaneLayoutPreset = chooseLayoutPreset(m.width)
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	updated := updatedModel.(*Model)
+	if updated.viewState.DetailsScrollOffset == 0 {
+		t.Fatal("expected details scroll offset to increase with j")
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	updated = updatedModel.(*Model)
+	if updated.activeDetailsSection != detailsSectionSecurity {
+		t.Fatalf("expected ] to switch to security, got %q", updated.activeDetailsSection)
+	}
+	if updated.viewState.DetailsScrollOffset != 0 {
+		t.Fatalf("expected details scroll offset to reset on section change, got %d", updated.viewState.DetailsScrollOffset)
+	}
+}
+
+func TestModelDetailsHomeAndEndControlScroll(t *testing.T) {
+	t.Parallel()
+
+	m := &Model{
+		session: model.SessionState{
+			Spec: &model.APISpec{
+				Operations: []model.Operation{
+					{
+						Key:         model.NewOperationKey("GET", "/pets"),
+						Method:      "GET",
+						Path:        "/pets",
+						Summary:     "List pets",
+						Description: "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8",
+					},
+				},
+			},
+			SelectedOperationKey: model.NewOperationKey("GET", "/pets"),
+		},
+		viewState: model.ViewState{
+			FocusedPane:           model.FocusedPaneDetails,
+			DetailsScrollOffset:   2,
+			RightPaneLayoutPreset: layoutPresetNarrow,
+		},
+		width:                80,
+		height:               12,
+		activeDetailsSection: detailsSectionSummary,
+	}
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnd})
+	updated := updatedModel.(*Model)
+	if updated.viewState.DetailsScrollOffset == 0 {
+		t.Fatal("expected end to jump to the bottom of details content")
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyHome})
+	updated = updatedModel.(*Model)
+	if updated.viewState.DetailsScrollOffset != 0 {
+		t.Fatalf("expected home to jump to top of details content, got %d", updated.viewState.DetailsScrollOffset)
 	}
 }
 

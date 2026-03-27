@@ -36,15 +36,7 @@ func RenderOperations(data OperationsData) string {
 		return "No spec loaded."
 	}
 
-	filterValue := fallbackText(data.FilterText, "None")
-	if data.FilterEditing {
-		filterValue += " (editing)"
-	}
-
-	lines := []string{
-		fmt.Sprintf("Filter: %s", filterValue),
-		"",
-	}
+	lines := []string{}
 
 	if data.TotalOperations == 0 {
 		lines = append(lines, "This spec loaded successfully, but it does not define any operations.")
@@ -72,4 +64,13 @@ func RenderOperations(data OperationsData) string {
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+func FilterBarText(filterText string, editing bool) string {
+	value := fallbackText(filterText, "None")
+	if editing {
+		value += " (editing)"
+	}
+
+	return fmt.Sprintf("Filter: %s", value)
 }

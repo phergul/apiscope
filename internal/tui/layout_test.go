@@ -90,6 +90,57 @@ func TestRenderLoadErrorContentUsesStructuredMessage(t *testing.T) {
 	}
 }
 
+func TestDetailsPaneContentForHeightClipsLongSummaryBody(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForRendering()
+	m.session.Spec.Operations[0].Description = "line1\nline2\nline3\nline4\nline5\nline6"
+	m.width = 80
+	m.height = 12
+	m.viewState.RightPaneLayoutPreset = layoutPresetNarrow
+
+	content := m.detailsPaneContentForHeight(5)
+	if strings.Contains(content, "line5") || strings.Contains(content, "line6") {
+		t.Fatalf("expected details pane content to clip long body for short height, got %q", content)
+	}
+
+	m.viewState.DetailsScrollOffset = 2
+	content = m.detailsPaneContentForHeight(5)
+	if !strings.Contains(content, "line2") {
+		t.Fatalf("expected clipped details body to respect scroll offset, got %q", content)
+	}
+}
+
+func TestRenderShowsOperationsFilterInPaneFooterOnly(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForRendering()
+	m.width = 120
+	m.height = 30
+	m.viewState.ActiveEditorMode = model.EditorModeFilter
+
+	content := m.render()
+	if !strings.Contains(content, "Filter: None (editing)") {
+		t.Fatalf("expected operations filter footer while editing, got %q", content)
+	}
+	if strings.Contains(m.operationsPaneContent(), "Filter:") {
+		t.Fatalf("expected operations body to omit inline filter text, got %q", m.operationsPaneContent())
+	}
+}
+
+func TestRenderHidesOperationsFilterFooterWhenIdle(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForRendering()
+	m.width = 120
+	m.height = 30
+
+	content := m.render()
+	if strings.Contains(content, "Filter: None") {
+		t.Fatalf("expected no filter footer when idle, got %q", content)
+	}
+}
+
 func TestRenderBlockingLoadErrorShowsCenteredQuitPopup(t *testing.T) {
 	t.Parallel()
 

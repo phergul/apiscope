@@ -5,6 +5,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/phergul/apiscope/internal/model"
+	"github.com/phergul/apiscope/internal/tui/panes"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 type detailsSection string
@@ -75,31 +78,33 @@ func operationMatchesFilter(operation model.Operation, filter string) bool {
 }
 
 func (m *Model) syncSelectedOperationAfterVisibilityChange() {
+	previous := m.session.SelectedOperationKey
 	if len(m.viewState.VisibleOperationKeys) == 0 {
 		m.session.SelectedOperationKey = ""
 		m.viewState.OperationsCursor = 0
-		m.syncActivePaneSections()
+		m.onSelectionChanged(previous, "")
 		return
 	}
 
 	for index, key := range m.viewState.VisibleOperationKeys {
 		if key == m.session.SelectedOperationKey {
 			m.viewState.OperationsCursor = index
-			m.syncActivePaneSections()
+			m.syncActiveDetailsSection()
 			return
 		}
 	}
 
 	m.session.SelectedOperationKey = m.viewState.VisibleOperationKeys[0]
 	m.viewState.OperationsCursor = 0
-	m.syncActivePaneSections()
+	m.onSelectionChanged(previous, m.session.SelectedOperationKey)
 }
 
 func (m *Model) setSelectedOperationByVisibleIndex(index int) {
+	previous := m.session.SelectedOperationKey
 	if len(m.viewState.VisibleOperationKeys) == 0 {
 		m.session.SelectedOperationKey = ""
 		m.viewState.OperationsCursor = 0
-		m.syncActivePaneSections()
+		m.onSelectionChanged(previous, "")
 		return
 	}
 
@@ -112,7 +117,7 @@ func (m *Model) setSelectedOperationByVisibleIndex(index int) {
 
 	m.viewState.OperationsCursor = index
 	m.session.SelectedOperationKey = m.viewState.VisibleOperationKeys[index]
-	m.syncActivePaneSections()
+	m.onSelectionChanged(previous, m.session.SelectedOperationKey)
 }
 
 func (m *Model) groupedVisibleOperations() []operationGroup {
@@ -274,6 +279,16 @@ func (m *Model) syncActiveRequestSection() {
 	m.activeRequestSection = available[0]
 }
 
+func (m *Model) resetActiveRequestSection() {
+	available := m.availableRequestSections()
+	if len(available) == 0 {
+		m.activeRequestSection = ""
+		return
+	}
+
+	m.activeRequestSection = available[0]
+}
+
 func (m *Model) moveRequestSection(direction int) {
 	m.activeRequestSection = moveStringSection(m.activeRequestSection, m.availableRequestSections(), direction)
 }
@@ -312,6 +327,16 @@ func (m *Model) syncActiveResponseSection() {
 	m.activeResponseSection = available[0]
 }
 
+func (m *Model) resetActiveResponseSection() {
+	available := m.availableResponseSections()
+	if len(available) == 0 {
+		m.activeResponseSection = ""
+		return
+	}
+
+	m.activeResponseSection = available[0]
+}
+
 func (m *Model) moveResponseSection(direction int) {
 	m.activeResponseSection = moveStringSection(m.activeResponseSection, m.availableResponseSections(), direction)
 }
@@ -322,8 +347,18 @@ func (m *Model) setResponseSectionBoundary(last bool) {
 
 func (m *Model) syncActivePaneSections() {
 	m.syncActiveDetailsSection()
-	m.syncActiveRequestSection()
-	m.syncActiveResponseSection()
+	m.resetActiveRequestSection()
+	m.resetActiveResponseSection()
+	m.viewState.DetailsScrollOffset = 0
+}
+
+func (m *Model) onSelectionChanged(previous, current model.OperationKey) {
+	m.syncActiveDetailsSection()
+	if previous != current {
+		m.resetActiveRequestSection()
+		m.resetActiveResponseSection()
+		m.viewState.DetailsScrollOffset = 0
+	}
 }
 
 func hasParametersInLocation(parameters []model.Parameter, location model.ParameterLocation) bool {
@@ -404,6 +439,7 @@ func (m *Model) moveDetailsSection(direction int) {
 	}
 
 	m.activeDetailsSection = available[targetIndex]
+	m.viewState.DetailsScrollOffset = 0
 }
 
 func (m *Model) setDetailsSectionBoundary(last bool) {
@@ -415,10 +451,12 @@ func (m *Model) setDetailsSectionBoundary(last bool) {
 
 	if last {
 		m.activeDetailsSection = available[len(available)-1]
+		m.viewState.DetailsScrollOffset = 0
 		return
 	}
 
 	m.activeDetailsSection = available[0]
+	m.viewState.DetailsScrollOffset = 0
 }
 
 func (m *Model) detailsSectionStrip() string {
@@ -433,6 +471,52 @@ func (m *Model) detailsSectionStrip() string {
 	}
 
 	return strings.Join(parts, "  ")
+}
+
+func (m *Model) scrollDetailsBy(delta int) {
+	maxOffset := m.maxDetailsScrollOffset()
+	target := m.viewState.DetailsScrollOffset + delta
+	if target < 0 {
+		target = 0
+	}
+	if target > maxOffset {
+		target = maxOffset
+	}
+
+	m.viewState.DetailsScrollOffset = target
+}
+
+func (m *Model) scrollDetailsToBoundary(last bool) {
+	if last {
+		m.viewState.DetailsScrollOffset = m.maxDetailsScrollOffset()
+		return
+	}
+
+	m.viewState.DetailsScrollOffset = 0
+}
+
+func (m *Model) maxDetailsScrollOffset() int {
+	data := m.projectDetailsPane()
+	lines := len(splitLines(panes.RenderActiveDetailsSectionForProjection(data)))
+	visible := m.detailsVisibleBodyLines()
+	if lines <= visible {
+		return 0
+	}
+
+	return lines - visible
+}
+
+func (m *Model) detailsVisibleBodyLines() int {
+	width, height := m.resolvedDimensions()
+	bodyHeight := maxInt(height-lipgloss.Height(m.renderStatusBar(width)), 12)
+	var paneHeight int
+	if m.viewState.RightPaneLayoutPreset == layoutPresetWide {
+		paneHeight = computeWidePaneHeights(bodyHeight).Details
+	} else {
+		paneHeight = computeNarrowPaneHeights(bodyHeight).Details
+	}
+
+	return maxInt(paneHeight-6, 1)
 }
 
 func appendFilterInput(existing string, runes []rune) string {

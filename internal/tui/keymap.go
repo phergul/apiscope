@@ -55,17 +55,21 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "j", "down":
 		if m.viewState.FocusedPane == model.FocusedPaneOperations {
 			m.setSelectedOperationByVisibleIndex(m.viewState.OperationsCursor + 1)
+		} else if m.viewState.FocusedPane == model.FocusedPaneDetails {
+			m.scrollDetailsBy(1)
 		}
 	case "k", "up":
 		if m.viewState.FocusedPane == model.FocusedPaneOperations {
 			m.setSelectedOperationByVisibleIndex(m.viewState.OperationsCursor - 1)
+		} else if m.viewState.FocusedPane == model.FocusedPaneDetails {
+			m.scrollDetailsBy(-1)
 		}
 	case "home":
 		switch m.viewState.FocusedPane {
 		case model.FocusedPaneOperations:
 			m.setSelectedOperationByVisibleIndex(0)
 		case model.FocusedPaneDetails:
-			m.setDetailsSectionBoundary(false)
+			m.scrollDetailsToBoundary(false)
 		case model.FocusedPaneRequest:
 			m.setRequestSectionBoundary(false)
 		case model.FocusedPaneResponse:
@@ -76,7 +80,7 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case model.FocusedPaneOperations:
 			m.setSelectedOperationByVisibleIndex(len(m.viewState.VisibleOperationKeys) - 1)
 		case model.FocusedPaneDetails:
-			m.setDetailsSectionBoundary(true)
+			m.scrollDetailsToBoundary(true)
 		case model.FocusedPaneRequest:
 			m.setRequestSectionBoundary(true)
 		case model.FocusedPaneResponse:

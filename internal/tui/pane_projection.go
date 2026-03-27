@@ -11,6 +11,7 @@ import (
 type paneView struct {
 	Title   string
 	Body    string
+	Footer  string
 	Focused bool
 }
 
@@ -20,6 +21,30 @@ func (m *Model) operationsPaneContent() string {
 
 func (m *Model) detailsPaneContent() string {
 	return panes.RenderDetails(m.projectDetailsPane())
+}
+
+func (m *Model) detailsPaneContentForHeight(height int) string {
+	data := m.projectDetailsPane()
+	if data.LoadInFlight || strings.TrimSpace(data.LoadErrorBody) != "" || data.Selected == nil {
+		return panes.RenderDetails(data)
+	}
+
+	visibleLines := maxInt(height-6, 1)
+	lines := splitLines(panes.RenderActiveDetailsSectionForProjection(data))
+	clipped := strings.Join(clampLines(lines, m.viewState.DetailsScrollOffset, visibleLines), "\n")
+	sections := panes.BuildDetailsSectionsForProjection(data)
+	for index := range sections {
+		if sections[index].Label == data.ActiveSection {
+			sections[index].Body = clipped
+			return panes.RenderSectionView(sections, data.ActiveSection, "")
+		}
+	}
+
+	if len(sections) > 0 {
+		sections[0].Body = clipped
+	}
+
+	return panes.RenderSectionView(sections, data.ActiveSection, "")
 }
 
 func (m *Model) requestPaneContent() string {
@@ -54,9 +79,18 @@ func (m *Model) paneView(pane model.FocusedPane) paneView {
 		return paneView{
 			Title:   "1 Operations",
 			Body:    m.operationsPaneContent(),
+			Footer:  m.operationsPaneFooter(),
 			Focused: m.viewState.FocusedPane == pane,
 		}
 	}
+}
+
+func (m *Model) operationsPaneFooter() string {
+	if m.viewState.ActiveEditorMode != model.EditorModeFilter && strings.TrimSpace(m.viewState.FilterText) == "" {
+		return ""
+	}
+
+	return panes.FilterBarText(m.viewState.FilterText, m.viewState.ActiveEditorMode == model.EditorModeFilter)
 }
 
 func (m *Model) projectOperationsPane() panes.OperationsData {
@@ -182,9 +216,6 @@ func (m *Model) projectStatusBar() panes.StatusBarData {
 		data.OperationCount = len(m.session.Spec.Operations)
 		data.VisibleCount = len(m.viewState.VisibleOperationKeys)
 		data.WarningCount = len(m.session.Spec.Warnings)
-	}
-	if strings.TrimSpace(m.viewState.FilterText) != "" {
-		data.FilterText = m.viewState.FilterText
 	}
 
 	return data
@@ -418,7 +449,7 @@ func requestBodySectionBody(body *model.RequestBodySpec) string {
 
 func responseSectionBody(response model.ResponseSpec) string {
 	lines := []string{
-		"Description: " + fallbackText(response.Description, "None"),
+		"Description: " + normaliseInlineText(fallbackText(response.Description, "None")),
 		"Headers:",
 	}
 	if len(response.Headers) == 0 {
@@ -431,6 +462,15 @@ func responseSectionBody(response model.ResponseSpec) string {
 	lines = append(lines, "Media types: "+strings.Join(defaultIfEmpty(mediaTypesForContent(response.Content), "none"), ", "))
 
 	return strings.Join(lines, "\n")
+}
+
+func normaliseInlineText(value string) string {
+	fields := strings.Fields(value)
+	if len(fields) == 0 {
+		return "None"
+	}
+
+	return strings.Join(fields, " ")
 }
 
 func defaultIfEmpty(values []string, fallback string) []string {

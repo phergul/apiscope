@@ -250,8 +250,25 @@ func TestModelFilterModeExitsOnEnterAndEsc(t *testing.T) {
 	if updated.viewState.ActiveEditorMode != model.EditorModeBrowse {
 		t.Fatalf("expected esc to exit filter mode, got %q", updated.viewState.ActiveEditorMode)
 	}
-	if updated.viewState.FilterText != "pets" {
-		t.Fatalf("expected esc to preserve filter text, got %q", updated.viewState.FilterText)
+	if updated.viewState.FilterText != "" {
+		t.Fatalf("expected esc to clear filter text, got %q", updated.viewState.FilterText)
+	}
+}
+
+func TestModelEscClearsFilterOutsideFilterMode(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FilterText = "pets"
+	m.syncVisibleOperations()
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated := updatedModel.(*Model)
+	if updated.viewState.FilterText != "" {
+		t.Fatalf("expected esc to clear filter text, got %q", updated.viewState.FilterText)
+	}
+	if len(updated.viewState.VisibleOperationKeys) != 3 {
+		t.Fatalf("expected visible operations to reset after clearing filter, got %d", len(updated.viewState.VisibleOperationKeys))
 	}
 }
 

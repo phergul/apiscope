@@ -36,6 +36,11 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "/":
 		m.viewState.FocusedPane = model.FocusedPaneOperations
 		m.viewState.ActiveEditorMode = model.EditorModeFilter
+	case "esc":
+		if m.viewState.FilterText != "" {
+			m.viewState.FilterText = ""
+			m.syncVisibleOperations()
+		}
 	case "j", "down":
 		if m.viewState.FocusedPane == model.FocusedPaneOperations {
 			m.setSelectedOperationByVisibleIndex(m.viewState.OperationsCursor + 1)
@@ -81,7 +86,11 @@ func (m *Model) updateFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
 		return m, tea.Quit
-	case "enter", "esc":
+	case "enter":
+		m.viewState.ActiveEditorMode = model.EditorModeBrowse
+	case "esc":
+		m.viewState.FilterText = ""
+		m.syncVisibleOperations()
 		m.viewState.ActiveEditorMode = model.EditorModeBrowse
 	case "backspace", "ctrl+h", "delete":
 		m.viewState.FilterText = trimLastRune(m.viewState.FilterText)

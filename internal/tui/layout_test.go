@@ -249,6 +249,29 @@ func TestRenderBlockingLoadErrorShowsCenteredQuitPopup(t *testing.T) {
 	}
 }
 
+func TestRenderZoomLayoutShowsOnlyFocusedPaneAndStatusBar(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForRendering()
+	m.width = 120
+	m.height = 30
+	m.viewState.FocusedPane = model.FocusedPaneResponse
+	m.viewState.ExpandedRightPane = model.FocusedPaneResponse
+	m.viewState.ZoomedPane = true
+
+	content := m.render()
+
+	if !strings.Contains(content, "> 4 Response") {
+		t.Fatalf("expected focused response pane to render in zoom mode, got %q", content)
+	}
+	if strings.Contains(content, "1 Operations") || strings.Contains(content, "2 Details") || strings.Contains(content, "3 Request") {
+		t.Fatalf("expected only the focused pane to render in zoom mode, got %q", content)
+	}
+	if !strings.Contains(content, "z zoom") || !strings.Contains(content, "q quit") {
+		t.Fatalf("expected status bar to remain visible in zoom mode, got %q", content)
+	}
+}
+
 func TestDetailsPaneContentShowsExplicitNoneStates(t *testing.T) {
 	t.Parallel()
 
@@ -303,12 +326,75 @@ func TestStatusBarIncludesOperationIdentityAndCount(t *testing.T) {
 		"Count: 2",
 		"Visible: 2",
 		"Warnings: 2",
-		"Keys: 1-4 switch Tab cycle q quit",
+		"Keys: 1-4 switch Tab cycle z zoom q quit",
 	}
 	for _, snippet := range wantSnippets {
 		if !strings.Contains(content, snippet) {
 			t.Fatalf("expected status bar to include %q, got %q", snippet, content)
 		}
+	}
+}
+
+func TestComputeWidePaneHeightsPreserveTotalAndExpandedPriority(t *testing.T) {
+	t.Parallel()
+
+	heights := computeWidePaneHeights(24)
+	if heights.Details+heights.Expanded+heights.Folded != 24 {
+		t.Fatalf("expected wide pane heights to preserve total height, got %+v", heights)
+	}
+	if heights.Expanded <= heights.Folded {
+		t.Fatalf("expected expanded pane to be taller than folded pane, got %+v", heights)
+	}
+}
+
+func TestComputeWidePaneHeightsCanCollapseFoldedPaneInCompactMode(t *testing.T) {
+	t.Parallel()
+
+	heights := computeWidePaneHeights(10)
+	if heights.Folded != 0 {
+		t.Fatalf("expected folded pane to collapse first in compact mode, got %+v", heights)
+	}
+	if heights.Details < 4 {
+		t.Fatalf("expected details pane to respect its hard minimum, got %+v", heights)
+	}
+	if heights.Details+heights.Expanded+heights.Folded != 10 {
+		t.Fatalf("expected compact wide heights to preserve total height, got %+v", heights)
+	}
+}
+
+func TestComputeNarrowPaneHeightsPreserveTotalAcrossPresets(t *testing.T) {
+	t.Parallel()
+
+	for _, total := range []int{30, 24, 12} {
+		heights := computeNarrowPaneHeights(total)
+		if heights.Operations+heights.Details+heights.Expanded+heights.Folded != total {
+			t.Fatalf("expected narrow pane heights to preserve total %d, got %+v", total, heights)
+		}
+		if heights.Expanded < heights.Folded {
+			t.Fatalf("expected expanded pane to keep at least as much space as folded pane, got %+v", heights)
+		}
+		if heights.Operations < 4 || heights.Details < 4 {
+			t.Fatalf("expected narrow layout hard minimums to hold, got %+v", heights)
+		}
+	}
+}
+
+func TestRenderWideLayoutKeepsRequestAboveResponseWhenResponseIsExpanded(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForRendering()
+	m.width = 120
+	m.height = 30
+	m.viewState.ExpandedRightPane = model.FocusedPaneResponse
+
+	content := m.render()
+	responseIndex := strings.Index(content, "4 Response")
+	requestIndex := strings.Index(content, "3 Request")
+	if responseIndex == -1 || requestIndex == -1 {
+		t.Fatalf("expected request and response panes to render, got %q", content)
+	}
+	if requestIndex > responseIndex {
+		t.Fatalf("expected request pane to remain above response pane, got %q", content)
 	}
 }
 
@@ -384,6 +470,7 @@ func newLoadedModelForRendering() *Model {
 		},
 		viewState: model.ViewState{
 			FocusedPane:          model.FocusedPaneOperations,
+			ExpandedRightPane:    model.FocusedPaneRequest,
 			VisibleOperationKeys: []model.OperationKey{model.NewOperationKey("GET", "/pets"), model.NewOperationKey("POST", "/pets")},
 		},
 	}

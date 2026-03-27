@@ -31,20 +31,22 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+c", "q":
 		return m, tea.Quit
 	case "1":
-		m.viewState.FocusedPane = model.FocusedPaneOperations
+		m.setFocusedPane(model.FocusedPaneOperations)
 	case "2":
-		m.viewState.FocusedPane = model.FocusedPaneDetails
+		m.setFocusedPane(model.FocusedPaneDetails)
 	case "3":
-		m.viewState.FocusedPane = model.FocusedPaneRequest
+		m.setFocusedPane(model.FocusedPaneRequest)
 	case "4":
-		m.viewState.FocusedPane = model.FocusedPaneResponse
+		m.setFocusedPane(model.FocusedPaneResponse)
 	case "tab":
-		m.viewState.FocusedPane = nextFocusedPane(m.viewState.FocusedPane)
+		m.setFocusedPane(nextFocusedPane(m.viewState.FocusedPane))
 	case "shift+tab":
-		m.viewState.FocusedPane = previousFocusedPane(m.viewState.FocusedPane)
+		m.setFocusedPane(previousFocusedPane(m.viewState.FocusedPane))
 	case "/":
-		m.viewState.FocusedPane = model.FocusedPaneOperations
+		m.setFocusedPane(model.FocusedPaneOperations)
 		m.viewState.ActiveEditorMode = model.EditorModeFilter
+	case "z":
+		m.viewState.ZoomedPane = !m.viewState.ZoomedPane
 	case "esc":
 		if m.viewState.FilterText != "" {
 			m.viewState.FilterText = ""
@@ -89,6 +91,14 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+func (m *Model) setFocusedPane(pane model.FocusedPane) {
+	m.viewState.FocusedPane = pane
+	switch pane {
+	case model.FocusedPaneRequest, model.FocusedPaneResponse:
+		m.viewState.ExpandedRightPane = pane
+	}
 }
 
 func (m *Model) updateFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {

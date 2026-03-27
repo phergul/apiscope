@@ -13,12 +13,44 @@ import (
 
 var paneBorder = lipgloss.NormalBorder()
 
+type layoutHeightPreset string
+
+const (
+	layoutHeightPresetCompact layoutHeightPreset = "compact"
+	layoutHeightPresetNormal  layoutHeightPreset = "normal"
+	layoutHeightPresetRoomy   layoutHeightPreset = "roomy"
+)
+
+type stackedPaneHeights struct {
+	Operations int
+	Details    int
+	Expanded   int
+	Folded     int
+}
+
+type paneView struct {
+	Title   string
+	Body    string
+	Focused bool
+}
+
 func chooseLayoutPreset(width int) string {
 	if width >= 100 {
 		return layoutPresetWide
 	}
 
 	return layoutPresetNarrow
+}
+
+func chooseHeightPreset(bodyHeight int) layoutHeightPreset {
+	switch {
+	case bodyHeight >= 28:
+		return layoutHeightPresetRoomy
+	case bodyHeight >= 20:
+		return layoutHeightPresetNormal
+	default:
+		return layoutHeightPresetCompact
+	}
 }
 
 func (m *Model) render() string {
@@ -34,6 +66,10 @@ func (m *Model) render() string {
 
 	statusBar := m.renderStatusBar(width)
 	bodyHeight := maxInt(height-lipgloss.Height(statusBar), 12)
+
+	if m.viewState.ZoomedPane {
+		return lipgloss.JoinVertical(lipgloss.Left, m.renderZoomLayout(width, bodyHeight), statusBar)
+	}
 
 	var body string
 	switch preset {
@@ -77,80 +113,53 @@ func (m *Model) renderWideLayout(width, height int) string {
 	leftWidth = minInt(leftWidth, width-20)
 	rightWidth := maxInt(width-leftWidth, 20)
 
-	detailsHeight := clampInt(height/4, 7, 10)
-	responseHeight := clampInt(height/5, 5, 7)
-	requestHeight := maxInt(height-detailsHeight-responseHeight, 8)
+	heights := computeWidePaneHeights(height)
+	requestHeight, responseHeight := m.rightPaneHeights(heights)
 
-	operationsPane := m.renderPane(
-		"1 Operations",
-		m.operationsPaneContent(),
-		leftWidth,
-		height,
-		m.viewState.FocusedPane == model.FocusedPaneOperations,
-	)
-	detailsPane := m.renderPane(
-		"2 Details",
-		m.detailsPaneContent(),
-		rightWidth,
-		detailsHeight,
-		m.viewState.FocusedPane == model.FocusedPaneDetails,
-	)
-	requestPane := m.renderPane(
-		"3 Request",
-		m.requestPaneContent(),
-		rightWidth,
-		requestHeight,
-		m.viewState.FocusedPane == model.FocusedPaneRequest,
-	)
-	responsePane := m.renderPane(
-		"4 Response",
-		m.responsePaneContent(),
-		rightWidth,
-		responseHeight,
-		m.viewState.FocusedPane == model.FocusedPaneResponse,
-	)
+	operationsView := m.paneView(model.FocusedPaneOperations)
+	detailsView := m.paneView(model.FocusedPaneDetails)
+	requestView := m.paneView(model.FocusedPaneRequest)
+	responseView := m.paneView(model.FocusedPaneResponse)
 
-	rightColumn := lipgloss.JoinVertical(lipgloss.Left, detailsPane, requestPane, responsePane)
+	operationsPane := m.renderPane(operationsView.Title, operationsView.Body, leftWidth, height, operationsView.Focused)
+
+	rightParts := []string{
+		m.renderPane(detailsView.Title, detailsView.Body, rightWidth, heights.Details, detailsView.Focused),
+		m.renderPane(requestView.Title, requestView.Body, rightWidth, requestHeight, requestView.Focused),
+	}
+	if responseHeight > 0 {
+		rightParts = append(rightParts, m.renderPane(responseView.Title, responseView.Body, rightWidth, responseHeight, responseView.Focused))
+	}
+
+	rightColumn := lipgloss.JoinVertical(lipgloss.Left, rightParts...)
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, operationsPane, rightColumn)
 }
 
 func (m *Model) renderNarrowLayout(width, height int) string {
-	operationsHeight := clampInt(height/3, 7, 10)
-	detailsHeight := clampInt(height/5, 7, 10)
-	responseHeight := clampInt(height/6, 5, 7)
-	requestHeight := maxInt(height-operationsHeight-detailsHeight-responseHeight, 8)
+	heights := computeNarrowPaneHeights(height)
+	requestHeight, responseHeight := m.rightPaneHeights(heights)
 
-	operationsPane := m.renderPane(
-		"1 Operations",
-		m.operationsPaneContent(),
-		width,
-		operationsHeight,
-		m.viewState.FocusedPane == model.FocusedPaneOperations,
-	)
-	detailsPane := m.renderPane(
-		"2 Details",
-		m.detailsPaneContent(),
-		width,
-		detailsHeight,
-		m.viewState.FocusedPane == model.FocusedPaneDetails,
-	)
-	requestPane := m.renderPane(
-		"3 Request",
-		m.requestPaneContent(),
-		width,
-		requestHeight,
-		m.viewState.FocusedPane == model.FocusedPaneRequest,
-	)
-	responsePane := m.renderPane(
-		"4 Response",
-		m.responsePaneContent(),
-		width,
-		responseHeight,
-		m.viewState.FocusedPane == model.FocusedPaneResponse,
-	)
+	operationsView := m.paneView(model.FocusedPaneOperations)
+	detailsView := m.paneView(model.FocusedPaneDetails)
+	requestView := m.paneView(model.FocusedPaneRequest)
+	responseView := m.paneView(model.FocusedPaneResponse)
 
-	return lipgloss.JoinVertical(lipgloss.Left, operationsPane, detailsPane, requestPane, responsePane)
+	parts := []string{
+		m.renderPane(operationsView.Title, operationsView.Body, width, heights.Operations, operationsView.Focused),
+		m.renderPane(detailsView.Title, detailsView.Body, width, heights.Details, detailsView.Focused),
+		m.renderPane(requestView.Title, requestView.Body, width, requestHeight, requestView.Focused),
+	}
+	if responseHeight > 0 {
+		parts = append(parts, m.renderPane(responseView.Title, responseView.Body, width, responseHeight, responseView.Focused))
+	}
+
+	return lipgloss.JoinVertical(lipgloss.Left, parts...)
+}
+
+func (m *Model) renderZoomLayout(width, height int) string {
+	view := m.paneView(m.viewState.FocusedPane)
+	return m.renderPane(view.Title, view.Body, width, height, true)
 }
 
 func (m *Model) renderPane(title, body string, width, height int, focused bool) string {
@@ -315,7 +324,7 @@ func (m *Model) renderStatusBar(width int) string {
 	if strings.TrimSpace(m.viewState.FilterText) != "" {
 		parts = append(parts, fmt.Sprintf("Filter: %s", m.viewState.FilterText))
 	}
-	parts = append(parts, "Keys: 1-4 switch Tab cycle q quit")
+	parts = append(parts, "Keys: 1-4 switch Tab cycle z zoom q quit")
 
 	line := strings.Join(parts, " | ")
 
@@ -337,6 +346,119 @@ func (m *Model) loadStateLabel() string {
 	default:
 		return "idle"
 	}
+}
+
+func (m *Model) paneView(pane model.FocusedPane) paneView {
+	switch pane {
+	case model.FocusedPaneDetails:
+		return paneView{
+			Title:   "2 Details",
+			Body:    m.detailsPaneContent(),
+			Focused: m.viewState.FocusedPane == pane,
+		}
+	case model.FocusedPaneRequest:
+		return paneView{
+			Title:   "3 Request",
+			Body:    m.requestPaneContent(),
+			Focused: m.viewState.FocusedPane == pane,
+		}
+	case model.FocusedPaneResponse:
+		return paneView{
+			Title:   "4 Response",
+			Body:    m.responsePaneContent(),
+			Focused: m.viewState.FocusedPane == pane,
+		}
+	default:
+		return paneView{
+			Title:   "1 Operations",
+			Body:    m.operationsPaneContent(),
+			Focused: m.viewState.FocusedPane == pane,
+		}
+	}
+}
+
+func (m *Model) resolvedExpandedRightPane() model.FocusedPane {
+	if m.viewState.ExpandedRightPane == model.FocusedPaneResponse {
+		return model.FocusedPaneResponse
+	}
+
+	return model.FocusedPaneRequest
+}
+
+func (m *Model) rightPaneHeights(heights stackedPaneHeights) (int, int) {
+	if m.resolvedExpandedRightPane() == model.FocusedPaneResponse {
+		return heights.Folded, heights.Expanded
+	}
+
+	return heights.Expanded, heights.Folded
+}
+
+func computeWidePaneHeights(total int) stackedPaneHeights {
+	var detailsTarget, foldedTarget int
+	switch chooseHeightPreset(total) {
+	case layoutHeightPresetRoomy:
+		detailsTarget, foldedTarget = 9, 6
+	case layoutHeightPresetNormal:
+		detailsTarget, foldedTarget = 7, 5
+	default:
+		detailsTarget, foldedTarget = 5, 4
+	}
+
+	fixedHeights, expanded := allocateExpandedStackHeights(total, []int{detailsTarget, foldedTarget}, []int{4, 0}, 6, []int{1, 0})
+	return stackedPaneHeights{
+		Details:  fixedHeights[0],
+		Expanded: expanded,
+		Folded:   fixedHeights[1],
+	}
+}
+
+func computeNarrowPaneHeights(total int) stackedPaneHeights {
+	var operationsTarget, detailsTarget, foldedTarget int
+	switch chooseHeightPreset(total) {
+	case layoutHeightPresetRoomy:
+		operationsTarget, detailsTarget, foldedTarget = 10, 8, 6
+	case layoutHeightPresetNormal:
+		operationsTarget, detailsTarget, foldedTarget = 8, 6, 5
+	default:
+		operationsTarget, detailsTarget, foldedTarget = 6, 5, 4
+	}
+
+	fixedHeights, expanded := allocateExpandedStackHeights(total, []int{operationsTarget, detailsTarget, foldedTarget}, []int{4, 4, 0}, 6, []int{2, 1, 0})
+	return stackedPaneHeights{
+		Operations: fixedHeights[0],
+		Details:    fixedHeights[1],
+		Expanded:   expanded,
+		Folded:     fixedHeights[2],
+	}
+}
+
+func allocateExpandedStackHeights(total int, fixedTargets, fixedMinimums []int, expandedMinimum int, compressionOrder []int) ([]int, int) {
+	fixedHeights := append([]int(nil), fixedTargets...)
+	expanded := total - sumInts(fixedHeights)
+	if expanded >= expandedMinimum {
+		return fixedHeights, expanded
+	}
+
+	deficit := expandedMinimum - expanded
+	for _, index := range compressionOrder {
+		if index < 0 || index >= len(fixedHeights) || index >= len(fixedMinimums) {
+			continue
+		}
+
+		reducible := fixedHeights[index] - fixedMinimums[index]
+		if reducible <= 0 {
+			continue
+		}
+
+		delta := minInt(deficit, reducible)
+		fixedHeights[index] -= delta
+		deficit -= delta
+		if deficit == 0 {
+			break
+		}
+	}
+
+	return fixedHeights, total - sumInts(fixedHeights)
 }
 
 func (m *Model) operationByKey(key model.OperationKey) *model.Operation {
@@ -439,6 +561,15 @@ func maxInt(left, right int) int {
 	}
 
 	return right
+}
+
+func sumInts(values []int) int {
+	total := 0
+	for _, value := range values {
+		total += value
+	}
+
+	return total
 }
 
 func fallbackText(value, fallback string) string {

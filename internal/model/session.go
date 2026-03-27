@@ -41,6 +41,7 @@ type SessionState struct {
 
 type ViewState struct {
 	FocusedPane            FocusedPane
+	ExpandedRightPane      FocusedPane
 	FilterText             string
 	VisibleOperationKeys   []OperationKey
 	OperationsCursor       int
@@ -48,8 +49,8 @@ type ViewState struct {
 	RequestScrollOffset    int
 	ResponseScrollOffset   int
 	ActiveEditorMode       EditorMode
+	ZoomedPane             bool
 	OperationsPaneVisible  bool
-	ResponsePaneExpanded   bool
 	RightPaneLayoutPreset  string
 	Notice                 string
 	LoadInFlight           bool

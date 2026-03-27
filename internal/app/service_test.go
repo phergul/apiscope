@@ -64,14 +64,17 @@ func TestServiceLoadSourceInitializesSessionAndView(t *testing.T) {
 	if result.View.FocusedPane != model.FocusedPaneOperations {
 		t.Fatalf("expected operations pane focus, got %q", result.View.FocusedPane)
 	}
+	if result.View.ExpandedRightPane != model.FocusedPaneRequest {
+		t.Fatalf("expected request pane to start expanded, got %q", result.View.ExpandedRightPane)
+	}
 	if result.View.ActiveEditorMode != model.EditorModeBrowse {
 		t.Fatalf("expected browse mode, got %q", result.View.ActiveEditorMode)
 	}
 	if !result.View.OperationsPaneVisible {
 		t.Fatal("expected operations pane to remain visible")
 	}
-	if result.View.ResponsePaneExpanded {
-		t.Fatal("expected response pane to start collapsed")
+	if result.View.ZoomedPane {
+		t.Fatal("expected zoom mode to start disabled")
 	}
 	if len(result.View.VisibleOperationKeys) != 2 {
 		t.Fatalf("expected 2 visible operations, got %d", len(result.View.VisibleOperationKeys))

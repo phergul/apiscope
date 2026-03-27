@@ -67,6 +67,12 @@ func TestModelInitLoadsSpecAsynchronously(t *testing.T) {
 	if updated.viewState.LoadInFlight {
 		t.Fatal("expected loading state to clear after success")
 	}
+	if updated.viewState.ExpandedRightPane != model.FocusedPaneRequest {
+		t.Fatalf("expected request pane to start expanded, got %q", updated.viewState.ExpandedRightPane)
+	}
+	if updated.viewState.ZoomedPane {
+		t.Fatal("expected zoom mode to start disabled")
+	}
 	if updated.activeDetailsSection != detailsSectionSummary {
 		t.Fatalf("expected summary details section after load, got %q", updated.activeDetailsSection)
 	}
@@ -96,6 +102,33 @@ func TestModelUpdatesFocusFromNumberKeys(t *testing.T) {
 	}
 }
 
+func TestModelRightPaneExpansionTracksFocusChanges(t *testing.T) {
+	t.Parallel()
+
+	m := NewModel(app.NewService(&stubLoader{}), "demo.yaml")
+	if m.viewState.ExpandedRightPane != model.FocusedPaneRequest {
+		t.Fatalf("expected request pane to be expanded by default, got %q", m.viewState.ExpandedRightPane)
+	}
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'4'}})
+	updated := updatedModel.(*Model)
+	if updated.viewState.ExpandedRightPane != model.FocusedPaneResponse {
+		t.Fatalf("expected response pane to expand when focused, got %q", updated.viewState.ExpandedRightPane)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
+	updated = updatedModel.(*Model)
+	if updated.viewState.ExpandedRightPane != model.FocusedPaneResponse {
+		t.Fatalf("expected details focus to preserve right pane emphasis, got %q", updated.viewState.ExpandedRightPane)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'3'}})
+	updated = updatedModel.(*Model)
+	if updated.viewState.ExpandedRightPane != model.FocusedPaneRequest {
+		t.Fatalf("expected request pane to expand when focused, got %q", updated.viewState.ExpandedRightPane)
+	}
+}
+
 func TestModelRotatesFocusWithTabAndShiftTab(t *testing.T) {
 	t.Parallel()
 
@@ -106,11 +139,64 @@ func TestModelRotatesFocusWithTabAndShiftTab(t *testing.T) {
 	if updated.viewState.FocusedPane != model.FocusedPaneDetails {
 		t.Fatalf("expected tab to move focus to details, got %q", updated.viewState.FocusedPane)
 	}
+	if updated.viewState.ExpandedRightPane != model.FocusedPaneRequest {
+		t.Fatalf("expected details focus to preserve request emphasis, got %q", updated.viewState.ExpandedRightPane)
+	}
 
 	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
 	updated = updatedModel.(*Model)
 	if updated.viewState.FocusedPane != model.FocusedPaneOperations {
 		t.Fatalf("expected shift-tab to move focus back to operations, got %q", updated.viewState.FocusedPane)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyTab})
+	updated = updatedModel.(*Model)
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyTab})
+	updated = updatedModel.(*Model)
+	if updated.viewState.FocusedPane != model.FocusedPaneRequest {
+		t.Fatalf("expected tab to move focus to request, got %q", updated.viewState.FocusedPane)
+	}
+	if updated.viewState.ExpandedRightPane != model.FocusedPaneRequest {
+		t.Fatalf("expected request focus to expand request pane, got %q", updated.viewState.ExpandedRightPane)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyTab})
+	updated = updatedModel.(*Model)
+	if updated.viewState.FocusedPane != model.FocusedPaneResponse {
+		t.Fatalf("expected tab to move focus to response, got %q", updated.viewState.FocusedPane)
+	}
+	if updated.viewState.ExpandedRightPane != model.FocusedPaneResponse {
+		t.Fatalf("expected response focus to expand response pane, got %q", updated.viewState.ExpandedRightPane)
+	}
+}
+
+func TestModelZoomToggleAndFocusChangesFollowWhileZoomed(t *testing.T) {
+	t.Parallel()
+
+	m := NewModel(app.NewService(&stubLoader{}), "demo.yaml")
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'z'}})
+	updated := updatedModel.(*Model)
+	if !updated.viewState.ZoomedPane {
+		t.Fatal("expected z to enable zoom mode")
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'4'}})
+	updated = updatedModel.(*Model)
+	if !updated.viewState.ZoomedPane {
+		t.Fatal("expected zoom mode to remain enabled after focus change")
+	}
+	if updated.viewState.FocusedPane != model.FocusedPaneResponse {
+		t.Fatalf("expected focus to move to response, got %q", updated.viewState.FocusedPane)
+	}
+	if updated.viewState.ExpandedRightPane != model.FocusedPaneResponse {
+		t.Fatalf("expected response emphasis to update while zoomed, got %q", updated.viewState.ExpandedRightPane)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'z'}})
+	updated = updatedModel.(*Model)
+	if updated.viewState.ZoomedPane {
+		t.Fatal("expected z to disable zoom mode")
 	}
 }
 

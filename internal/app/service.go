@@ -40,10 +40,11 @@ func (s *Service) LoadSource(ctx context.Context, rawSource string) (LoadResult,
 		},
 		View: model.ViewState{
 			FocusedPane:           model.FocusedPaneOperations,
+			ExpandedRightPane:     model.FocusedPaneRequest,
 			VisibleOperationKeys:  make([]model.OperationKey, 0, len(apiSpec.Operations)),
 			ActiveEditorMode:      model.EditorModeBrowse,
 			OperationsPaneVisible: true,
-			ResponsePaneExpanded:  false,
+			ZoomedPane:            false,
 		},
 	}
 

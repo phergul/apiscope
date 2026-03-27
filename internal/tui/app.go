@@ -59,9 +59,10 @@ func NewModel(service *app.Service, source string) *Model {
 		activeDetailsSection: detailsSectionSummary,
 		viewState: model.ViewState{
 			FocusedPane:           model.FocusedPaneOperations,
+			ExpandedRightPane:     model.FocusedPaneRequest,
 			ActiveEditorMode:      model.EditorModeBrowse,
 			OperationsPaneVisible: true,
-			ResponsePaneExpanded:  false,
+			ZoomedPane:            false,
 			RightPaneLayoutPreset: layoutPresetNarrow,
 		},
 	}

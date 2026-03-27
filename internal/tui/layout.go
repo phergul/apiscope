@@ -160,31 +160,49 @@ func (m *Model) operationsPaneContent() string {
 		return "No spec loaded."
 	}
 
+	filterValue := fallbackText(m.viewState.FilterText, "None")
+	if m.viewState.ActiveEditorMode == model.EditorModeFilter {
+		filterValue += " (editing)"
+	}
+
+	lines := []string{
+		fmt.Sprintf("Filter: %s", filterValue),
+		"",
+	}
+
+	if len(m.session.Spec.Operations) == 0 {
+		lines = append(lines, "No operations in spec.")
+		return strings.Join(lines, "\n")
+	}
 	if len(m.viewState.VisibleOperationKeys) == 0 {
-		return "No operations in spec."
+		lines = append(lines, "No operations match filter.")
+		return strings.Join(lines, "\n")
 	}
 
 	selected := m.resolvedSelectedOperation()
-	lines := make([]string, 0, len(m.viewState.VisibleOperationKeys))
-	for _, key := range m.viewState.VisibleOperationKeys {
-		operation := m.operationByKey(key)
-		if operation == nil {
-			continue
-		}
+	for _, group := range m.groupedVisibleOperations() {
+		lines = append(lines, strings.ToUpper(group.Name))
+		for _, key := range group.Keys {
+			operation := m.operationByKey(key)
+			if operation == nil {
+				continue
+			}
 
-		prefix := "  "
-		if selected != nil && operation.Key == selected.Key {
-			prefix = "> "
-		}
+			prefix := "  "
+			if selected != nil && operation.Key == selected.Key {
+				prefix = "> "
+			}
 
-		line := fmt.Sprintf("%s%-6s %s", prefix, strings.ToUpper(operation.Method), operation.Path)
-		if summary := strings.TrimSpace(operation.Summary); summary != "" {
-			line += " - " + summary
+			line := fmt.Sprintf("%s%-6s %s", prefix, strings.ToUpper(operation.Method), operation.Path)
+			if summary := strings.TrimSpace(operation.Summary); summary != "" {
+				line += " - " + summary
+			}
+			lines = append(lines, line)
 		}
-		lines = append(lines, line)
+		lines = append(lines, "")
 	}
-	if len(lines) == 0 {
-		return "No visible operations."
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
 	}
 
 	return strings.Join(lines, "\n")
@@ -203,27 +221,32 @@ func (m *Model) detailsPaneContent() string {
 		return "No operation selected."
 	}
 
-	sections := []string{
-		fmt.Sprintf("Operation: %s %s", strings.ToUpper(selected.Method), selected.Path),
-		fmt.Sprintf("Summary: %s", fallbackText(selected.Summary, "None")),
-		fmt.Sprintf("Description: %s", fallbackText(selected.Description, "None")),
-		fmt.Sprintf("Tags: %s", formatTags(selected.Tags)),
-		fmt.Sprintf("Deprecated: %s", yesNo(selected.Deprecated)),
+	return strings.Join([]string{
+		m.detailsSectionStrip(),
 		"",
-		"Parameters",
-		formatParameterSections(selected.Parameters),
-		"",
-		"Request Body",
-		formatRequestBody(selected.RequestBody),
-		"",
-		"Responses",
-		formatResponses(selected.Responses),
-		"",
-		"Security",
-		formatSecurityRequirement(m.effectiveSecurityRequirement(selected)),
-	}
+		m.activeDetailsSectionContent(selected),
+	}, "\n")
+}
 
-	return strings.Join(sections, "\n")
+func (m *Model) activeDetailsSectionContent(selected *model.Operation) string {
+	switch m.activeDetailsSection {
+	case detailsSectionParameters:
+		return formatParameterSections(selected.Parameters)
+	case detailsSectionRequestBody:
+		return formatRequestBody(selected.RequestBody)
+	case detailsSectionResponses:
+		return formatResponses(selected.Responses)
+	case detailsSectionSecurity:
+		return formatSecurityRequirement(m.effectiveSecurityRequirement(selected))
+	default:
+		return strings.Join([]string{
+			fmt.Sprintf("Operation: %s %s", strings.ToUpper(selected.Method), selected.Path),
+			fmt.Sprintf("Summary: %s", fallbackText(selected.Summary, "None")),
+			fmt.Sprintf("Description: %s", fallbackText(selected.Description, "None")),
+			fmt.Sprintf("Tags: %s", formatTags(selected.Tags)),
+			fmt.Sprintf("Deprecated: %s", yesNo(selected.Deprecated)),
+		}, "\n")
+	}
 }
 
 func (m *Model) requestPaneContent() string {
@@ -253,6 +276,10 @@ func (m *Model) renderStatusBar(width int) string {
 	}
 	if m.session.Spec != nil {
 		parts = append(parts, fmt.Sprintf("Count: %d", len(m.session.Spec.Operations)))
+		parts = append(parts, fmt.Sprintf("Visible: %d", len(m.viewState.VisibleOperationKeys)))
+	}
+	if strings.TrimSpace(m.viewState.FilterText) != "" {
+		parts = append(parts, fmt.Sprintf("Filter: %s", m.viewState.FilterText))
 	}
 	parts = append(parts, "Keys: 1-4 switch Tab cycle q quit")
 
@@ -304,6 +331,18 @@ func (m *Model) resolvedSelectedOperation() *model.Operation {
 	}
 
 	return m.operationByKey(m.viewState.VisibleOperationKeys[0])
+}
+
+func (m *Model) effectiveSecurityRequirement(operation *model.Operation) *model.SecurityRequirement {
+	if operation != nil && operation.Security != nil {
+		return operation.Security
+	}
+
+	if m.session.Spec == nil {
+		return nil
+	}
+
+	return m.session.Spec.Security
 }
 
 func (m *Model) resolvedDimensions() (int, int) {
@@ -526,18 +565,6 @@ func formatResponses(responses []model.ResponseSpec) string {
 	}
 
 	return strings.Join(lines, "\n")
-}
-
-func (m *Model) effectiveSecurityRequirement(operation *model.Operation) *model.SecurityRequirement {
-	if operation != nil && operation.Security != nil {
-		return operation.Security
-	}
-
-	if m.session.Spec == nil {
-		return nil
-	}
-
-	return m.session.Spec.Security
 }
 
 func formatSecurityRequirement(requirement *model.SecurityRequirement) string {

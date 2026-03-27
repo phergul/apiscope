@@ -14,6 +14,10 @@ var paneFocusOrder = []model.FocusedPane{
 }
 
 func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.viewState.ActiveEditorMode == model.EditorModeFilter {
+		return m.updateFilterKey(msg)
+	}
+
 	switch msg.String() {
 	case "ctrl+c", "q":
 		return m, tea.Quit
@@ -29,6 +33,64 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.viewState.FocusedPane = nextFocusedPane(m.viewState.FocusedPane)
 	case "shift+tab":
 		m.viewState.FocusedPane = previousFocusedPane(m.viewState.FocusedPane)
+	case "/":
+		m.viewState.FocusedPane = model.FocusedPaneOperations
+		m.viewState.ActiveEditorMode = model.EditorModeFilter
+	case "j", "down":
+		if m.viewState.FocusedPane == model.FocusedPaneOperations {
+			m.setSelectedOperationByVisibleIndex(m.viewState.OperationsCursor + 1)
+		}
+	case "k", "up":
+		if m.viewState.FocusedPane == model.FocusedPaneOperations {
+			m.setSelectedOperationByVisibleIndex(m.viewState.OperationsCursor - 1)
+		}
+	case "home":
+		switch m.viewState.FocusedPane {
+		case model.FocusedPaneOperations:
+			m.setSelectedOperationByVisibleIndex(0)
+		case model.FocusedPaneDetails:
+			m.setDetailsSectionBoundary(false)
+		}
+	case "end":
+		switch m.viewState.FocusedPane {
+		case model.FocusedPaneOperations:
+			m.setSelectedOperationByVisibleIndex(len(m.viewState.VisibleOperationKeys) - 1)
+		case model.FocusedPaneDetails:
+			m.setDetailsSectionBoundary(true)
+		}
+	case "]":
+		switch m.viewState.FocusedPane {
+		case model.FocusedPaneOperations:
+			m.jumpToAdjacentOperationGroup(1)
+		case model.FocusedPaneDetails:
+			m.moveDetailsSection(1)
+		}
+	case "[":
+		switch m.viewState.FocusedPane {
+		case model.FocusedPaneOperations:
+			m.jumpToAdjacentOperationGroup(-1)
+		case model.FocusedPaneDetails:
+			m.moveDetailsSection(-1)
+		}
+	}
+
+	return m, nil
+}
+
+func (m *Model) updateFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "enter", "esc":
+		m.viewState.ActiveEditorMode = model.EditorModeBrowse
+	case "backspace", "ctrl+h", "delete":
+		m.viewState.FilterText = trimLastRune(m.viewState.FilterText)
+		m.syncVisibleOperations()
+	default:
+		if msg.Type == tea.KeyRunes && len(msg.Runes) > 0 {
+			m.viewState.FilterText = appendFilterInput(m.viewState.FilterText, msg.Runes)
+			m.syncVisibleOperations()
+		}
 	}
 
 	return m, nil

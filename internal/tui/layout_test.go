@@ -14,12 +14,17 @@ func TestOperationsPaneContentHighlightsSelectedOperationAndPreservesOrder(t *te
 
 	content := m.operationsPaneContent()
 
-	first := strings.Index(content, "> GET    /pets")
+	firstGroup := strings.Index(content, "PETS")
+	secondGroup := strings.Index(content, "ADMIN")
+	selected := strings.Index(content, "> GET    /pets")
 	second := strings.Index(content, "  POST   /pets")
-	if first == -1 || second == -1 {
+	if firstGroup == -1 || secondGroup == -1 {
+		t.Fatalf("expected grouped operations list, got %q", content)
+	}
+	if selected == -1 || second == -1 {
 		t.Fatalf("expected operations list to contain selected and unselected rows, got %q", content)
 	}
-	if first > second {
+	if firstGroup > secondGroup || selected > second {
 		t.Fatalf("expected operations to preserve visible order, got %q", content)
 	}
 }
@@ -41,6 +46,7 @@ func TestOperationsPaneContentShowsEmptyState(t *testing.T) {
 	t.Parallel()
 
 	m := newLoadedModelForRendering()
+	m.session.Spec.Operations = nil
 	m.viewState.VisibleOperationKeys = nil
 
 	content := m.operationsPaneContent()
@@ -50,19 +56,53 @@ func TestOperationsPaneContentShowsEmptyState(t *testing.T) {
 	}
 }
 
-func TestDetailsPaneContentRendersStructuredOperationDetails(t *testing.T) {
+func TestOperationsPaneContentShowsFilteredEmptyState(t *testing.T) {
 	t.Parallel()
 
 	m := newLoadedModelForRendering()
+	m.viewState.FilterText = "zzz"
+	m.viewState.VisibleOperationKeys = nil
+
+	content := m.operationsPaneContent()
+
+	if !strings.Contains(content, "No operations match filter.") {
+		t.Fatalf("expected filtered empty state, got %q", content)
+	}
+}
+
+func TestDetailsPaneContentRendersSummarySection(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForRendering()
+	m.activeDetailsSection = detailsSectionSummary
 
 	content := m.detailsPaneContent()
 
 	wantSnippets := []string{
+		"[Summary]  Parameters  Request Body  Responses  Security",
 		"Operation: GET /pets",
 		"Summary: List pets",
 		"Description: Returns pets.",
 		"Tags: pets, public",
 		"Deprecated: no",
+	}
+	for _, snippet := range wantSnippets {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected details content to include %q, got %q", snippet, content)
+		}
+	}
+}
+
+func TestDetailsPaneContentShowsParametersSectionWhenActive(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForRendering()
+	m.activeDetailsSection = detailsSectionParameters
+
+	content := m.detailsPaneContent()
+
+	wantSnippets := []string{
+		"Summary  [Parameters]  Request Body  Responses  Security",
 		"PATH:",
 		"- petId (required, string)",
 		"QUERY:",
@@ -71,20 +111,71 @@ func TestDetailsPaneContentRendersStructuredOperationDetails(t *testing.T) {
 		"- X-Trace-ID (optional, string)",
 		"COOKIE:",
 		"- session (optional, string)",
-		"Request Body",
+	}
+	for _, snippet := range wantSnippets {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected details parameters section to include %q, got %q", snippet, content)
+		}
+	}
+}
+
+func TestDetailsPaneContentShowsRequestBodySectionWhenActive(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForRendering()
+	m.activeDetailsSection = detailsSectionRequestBody
+
+	content := m.detailsPaneContent()
+
+	wantSnippets := []string{
+		"Summary  Parameters  [Request Body]  Responses  Security",
 		"Required: required",
 		"Media types: application/json, application/xml",
-		"Responses",
+	}
+	for _, snippet := range wantSnippets {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected request body section to include %q, got %q", snippet, content)
+		}
+	}
+}
+
+func TestDetailsPaneContentShowsResponsesSectionWhenActive(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForRendering()
+	m.activeDetailsSection = detailsSectionResponses
+
+	content := m.detailsPaneContent()
+
+	wantSnippets := []string{
+		"Summary  Parameters  Request Body  [Responses]  Security",
 		"- 200: OK [application/json]",
 		"- default: Unexpected error [application/problem+json]",
-		"Security",
+	}
+	for _, snippet := range wantSnippets {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected responses section to include %q, got %q", snippet, content)
+		}
+	}
+}
+
+func TestDetailsPaneContentShowsSecuritySectionWhenActive(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForRendering()
+	m.activeDetailsSection = detailsSectionSecurity
+
+	content := m.detailsPaneContent()
+
+	wantSnippets := []string{
+		"Summary  Parameters  Request Body  Responses  [Security]",
 		"- api_key AND secondary_header",
 		"OR",
 		"- oauth (pets:read)",
 	}
 	for _, snippet := range wantSnippets {
 		if !strings.Contains(content, snippet) {
-			t.Fatalf("expected details content to include %q, got %q", snippet, content)
+			t.Fatalf("expected security section to include %q, got %q", snippet, content)
 		}
 	}
 }
@@ -94,6 +185,8 @@ func TestDetailsPaneContentUsesTopLevelSecurityFallback(t *testing.T) {
 
 	m := newLoadedModelForRendering()
 	m.session.SelectedOperationKey = model.NewOperationKey("POST", "/pets")
+	m.syncActiveDetailsSection()
+	m.activeDetailsSection = detailsSectionSecurity
 
 	content := m.detailsPaneContent()
 
@@ -107,21 +200,16 @@ func TestDetailsPaneContentShowsExplicitNoneStates(t *testing.T) {
 
 	m := newLoadedModelForRendering()
 	m.session.SelectedOperationKey = model.NewOperationKey("POST", "/pets")
+	m.syncActiveDetailsSection()
 
 	content := m.detailsPaneContent()
 
 	wantSnippets := []string{
+		"[Summary]  Security",
 		"Summary: Create pet",
 		"Description: None",
 		"Tags: admin",
 		"Deprecated: yes",
-		"PATH:\n- none",
-		"QUERY:\n- none",
-		"HEADER:\n- none",
-		"COOKIE:\n- none",
-		"Request Body\nNone",
-		"Responses\nNone",
-		"Security\n- global_auth",
 	}
 	for _, snippet := range wantSnippets {
 		if !strings.Contains(content, snippet) {
@@ -143,6 +231,7 @@ func TestStatusBarIncludesOperationIdentityAndCount(t *testing.T) {
 		"Focus: operations",
 		"Operation: GET /pets",
 		"Count: 2",
+		"Visible: 2",
 		"Keys: 1-4 switch Tab cycle q quit",
 	}
 	for _, snippet := range wantSnippets {
@@ -205,7 +294,8 @@ func newLoadedModelForRendering() *Model {
 	}
 
 	return &Model{
-		source: "demo.yaml",
+		source:               "demo.yaml",
+		activeDetailsSection: detailsSectionSummary,
 		session: model.SessionState{
 			Spec:                 spec,
 			SelectedOperationKey: model.NewOperationKey("GET", "/pets"),

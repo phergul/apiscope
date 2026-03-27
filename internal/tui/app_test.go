@@ -67,6 +67,9 @@ func TestModelInitLoadsSpecAsynchronously(t *testing.T) {
 	if updated.viewState.LoadInFlight {
 		t.Fatal("expected loading state to clear after success")
 	}
+	if updated.activeDetailsSection != detailsSectionSummary {
+		t.Fatalf("expected summary details section after load, got %q", updated.activeDetailsSection)
+	}
 }
 
 func TestModelUpdatesFocusFromNumberKeys(t *testing.T) {
@@ -181,5 +184,228 @@ func TestModelRendersLoadFailureWithoutCrashing(t *testing.T) {
 	}
 	if !strings.Contains(view, "Keys: 1-4 switch Tab cycle q quit") {
 		t.Fatalf("expected key hints in status bar, got %q", view)
+	}
+}
+
+func TestModelFilterModeUpdatesVisibleOperationsLive(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	updated := updatedModel.(*Model)
+	if updated.viewState.ActiveEditorMode != model.EditorModeFilter {
+		t.Fatalf("expected filter mode, got %q", updated.viewState.ActiveEditorMode)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("admin")})
+	updated = updatedModel.(*Model)
+	if updated.viewState.FilterText != "admin" {
+		t.Fatalf("expected filter text admin, got %q", updated.viewState.FilterText)
+	}
+	if len(updated.viewState.VisibleOperationKeys) != 1 {
+		t.Fatalf("expected 1 visible operation, got %d", len(updated.viewState.VisibleOperationKeys))
+	}
+	if updated.session.SelectedOperationKey != model.NewOperationKey("POST", "/pets") {
+		t.Fatalf("expected filtered selection to move to POST /pets, got %q", updated.session.SelectedOperationKey)
+	}
+}
+
+func TestModelFilterModeBackspaceAndDeleteTrimCharacters(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.ActiveEditorMode = model.EditorModeFilter
+	m.viewState.FilterText = "pets"
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	updated := updatedModel.(*Model)
+	if updated.viewState.FilterText != "pet" {
+		t.Fatalf("expected backspace to trim one character, got %q", updated.viewState.FilterText)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyDelete})
+	updated = updatedModel.(*Model)
+	if updated.viewState.FilterText != "pe" {
+		t.Fatalf("expected delete to trim one character, got %q", updated.viewState.FilterText)
+	}
+}
+
+func TestModelFilterModeExitsOnEnterAndEsc(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.ActiveEditorMode = model.EditorModeFilter
+	m.viewState.FilterText = "pets"
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated := updatedModel.(*Model)
+	if updated.viewState.ActiveEditorMode != model.EditorModeBrowse {
+		t.Fatalf("expected enter to exit filter mode, got %q", updated.viewState.ActiveEditorMode)
+	}
+
+	updated.viewState.ActiveEditorMode = model.EditorModeFilter
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated = updatedModel.(*Model)
+	if updated.viewState.ActiveEditorMode != model.EditorModeBrowse {
+		t.Fatalf("expected esc to exit filter mode, got %q", updated.viewState.ActiveEditorMode)
+	}
+	if updated.viewState.FilterText != "pets" {
+		t.Fatalf("expected esc to preserve filter text, got %q", updated.viewState.FilterText)
+	}
+}
+
+func TestModelOperationsMovementUpdatesSelectionAndCursor(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FocusedPane = model.FocusedPaneOperations
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	updated := updatedModel.(*Model)
+	if updated.session.SelectedOperationKey != model.NewOperationKey("POST", "/pets") {
+		t.Fatalf("expected j to move to next operation, got %q", updated.session.SelectedOperationKey)
+	}
+	if updated.viewState.OperationsCursor != 1 {
+		t.Fatalf("expected cursor 1, got %d", updated.viewState.OperationsCursor)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnd})
+	updated = updatedModel.(*Model)
+	if updated.viewState.OperationsCursor != 2 {
+		t.Fatalf("expected end to jump to last operation, got %d", updated.viewState.OperationsCursor)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyHome})
+	updated = updatedModel.(*Model)
+	if updated.viewState.OperationsCursor != 0 {
+		t.Fatalf("expected home to jump to first operation, got %d", updated.viewState.OperationsCursor)
+	}
+}
+
+func TestModelOperationsSectionJumpMovesBetweenGroups(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FocusedPane = model.FocusedPaneOperations
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	updated := updatedModel.(*Model)
+	if updated.session.SelectedOperationKey != model.NewOperationKey("POST", "/pets") {
+		t.Fatalf("expected ] to jump to next group, got %q", updated.session.SelectedOperationKey)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
+	updated = updatedModel.(*Model)
+	if updated.session.SelectedOperationKey != model.NewOperationKey("GET", "/pets") {
+		t.Fatalf("expected [ to jump to previous group, got %q", updated.session.SelectedOperationKey)
+	}
+}
+
+func TestModelDetailsSectionNavigationSkipsUnavailableSections(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FocusedPane = model.FocusedPaneDetails
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	updated := updatedModel.(*Model)
+	if updated.activeDetailsSection != detailsSectionParameters {
+		t.Fatalf("expected ] to move to parameters, got %q", updated.activeDetailsSection)
+	}
+
+	updated.session.SelectedOperationKey = model.NewOperationKey("POST", "/pets")
+	updated.syncActiveDetailsSection()
+	if updated.activeDetailsSection != detailsSectionSummary {
+		t.Fatalf("expected active section to fall back to summary, got %q", updated.activeDetailsSection)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnd})
+	updated = updatedModel.(*Model)
+	if updated.activeDetailsSection != detailsSectionSecurity {
+		t.Fatalf("expected end to jump to last available details section, got %q", updated.activeDetailsSection)
+	}
+}
+
+func TestModelFilterWithNoMatchesClearsSelection(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.ActiveEditorMode = model.EditorModeFilter
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("zzz")})
+	updated := updatedModel.(*Model)
+	if len(updated.viewState.VisibleOperationKeys) != 0 {
+		t.Fatalf("expected no visible operations, got %d", len(updated.viewState.VisibleOperationKeys))
+	}
+	if updated.session.SelectedOperationKey != "" {
+		t.Fatalf("expected selection to clear, got %q", updated.session.SelectedOperationKey)
+	}
+}
+
+func newLoadedModelForNavigation() *Model {
+	spec := &model.APISpec{
+		Operations: []model.Operation{
+			{
+				Key:         model.NewOperationKey("GET", "/pets"),
+				Method:      "GET",
+				Path:        "/pets",
+				Summary:     "List pets",
+				Description: "Returns pets.",
+				Tags:        []string{"pets"},
+				Parameters: []model.Parameter{
+					{Name: "petId", In: model.ParameterLocationPath, Required: true, Schema: &model.Schema{Type: "string"}},
+				},
+				RequestBody: &model.RequestBodySpec{
+					Required: true,
+					Content:  []model.MediaTypeSpec{{MediaType: "application/json"}},
+				},
+				Responses: []model.ResponseSpec{
+					{StatusCode: "200", Description: "OK", Content: []model.MediaTypeSpec{{MediaType: "application/json"}}},
+				},
+				Security: &model.SecurityRequirement{
+					Alternatives: []model.SecurityAlternative{
+						{Schemes: []model.SecurityRequirementRef{{Name: "api_key"}}},
+					},
+				},
+			},
+			{
+				Key:        model.NewOperationKey("POST", "/pets"),
+				Method:     "POST",
+				Path:       "/pets",
+				Summary:    "Create pet",
+				Tags:       []string{"admin"},
+				Deprecated: true,
+			},
+			{
+				Key:     model.NewOperationKey("GET", "/health"),
+				Method:  "GET",
+				Path:    "/health",
+				Summary: "Health",
+			},
+		},
+		Security: &model.SecurityRequirement{
+			Alternatives: []model.SecurityAlternative{
+				{Schemes: []model.SecurityRequirementRef{{Name: "global_auth"}}},
+			},
+		},
+	}
+
+	return &Model{
+		activeDetailsSection: detailsSectionSummary,
+		session: model.SessionState{
+			Spec:                 spec,
+			SelectedOperationKey: model.NewOperationKey("GET", "/pets"),
+		},
+		viewState: model.ViewState{
+			FocusedPane: model.FocusedPaneOperations,
+			VisibleOperationKeys: []model.OperationKey{
+				model.NewOperationKey("GET", "/pets"),
+				model.NewOperationKey("POST", "/pets"),
+				model.NewOperationKey("GET", "/health"),
+			},
+			OperationsCursor: 0,
+			ActiveEditorMode: model.EditorModeBrowse,
+		},
 	}
 }

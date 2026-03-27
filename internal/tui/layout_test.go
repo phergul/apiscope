@@ -36,6 +36,39 @@ func TestDetailsPaneContentUsesTopLevelSecurityFallback(t *testing.T) {
 	}
 }
 
+func TestRequestAndResponsePaneContentFallbackToFirstVisibleWhenSelectionMissing(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForRendering()
+	m.session.SelectedOperationKey = model.NewOperationKey("DELETE", "/missing")
+
+	requestContent := m.requestPaneContent()
+	responseContent := m.responsePaneContent()
+
+	requestSnippets := []string{
+		"[Path]  Query  Header  Cookie  Body  Auth",
+		"- petId (required, string)",
+	}
+	for _, snippet := range requestSnippets {
+		if !strings.Contains(requestContent, snippet) {
+			t.Fatalf("expected request pane fallback to include %q, got %q", snippet, requestContent)
+		}
+	}
+
+	responseSnippets := []string{
+		"[200]  default",
+		"Description: OK",
+		"Headers:",
+		"- none",
+		"Media types: application/json",
+	}
+	for _, snippet := range responseSnippets {
+		if !strings.Contains(responseContent, snippet) {
+			t.Fatalf("expected response pane fallback to include %q, got %q", snippet, responseContent)
+		}
+	}
+}
+
 func TestRenderLoadErrorContentUsesStructuredMessage(t *testing.T) {
 	t.Parallel()
 
@@ -232,8 +265,10 @@ func newLoadedModelForRendering() *Model {
 	}
 
 	return &Model{
-		source:               "demo.yaml",
-		activeDetailsSection: detailsSectionSummary,
+		source:                "demo.yaml",
+		activeDetailsSection:  detailsSectionSummary,
+		activeRequestSection:  "Path",
+		activeResponseSection: "200",
 		session: model.SessionState{
 			Spec:                 spec,
 			SelectedOperationKey: model.NewOperationKey("GET", "/pets"),

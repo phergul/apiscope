@@ -1,7 +1,10 @@
 package panes
 
 type ResponseData struct {
-	LoadInFlight bool
+	LoadInFlight  bool
+	Sections      []Section
+	ActiveSection string
+	EmptyState    string
 }
 
 func RenderResponse(data ResponseData) string {
@@ -9,5 +12,5 @@ func RenderResponse(data ResponseData) string {
 		return "Loading spec..."
 	}
 
-	return "Response inspection arrives later.\nThis pane will hold response details and examples after execution."
+	return RenderSectionView(data.Sections, data.ActiveSection, data.EmptyState)
 }

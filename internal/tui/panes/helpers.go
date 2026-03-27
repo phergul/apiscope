@@ -66,6 +66,51 @@ func formatParameterSections(parameters []model.Parameter) string {
 	return strings.Join(lines, "\n")
 }
 
+type ParameterSummary struct {
+	Name     string
+	Required bool
+	TypeHint string
+}
+
+type ParameterSection struct {
+	Location model.ParameterLocation
+	Items    []ParameterSummary
+}
+
+type RequestBodySummary struct {
+	Required    bool
+	Description string
+	MediaTypes  []string
+}
+
+type ResponseSummary struct {
+	StatusCode  string
+	Description string
+	HeaderNames []string
+	MediaTypes  []string
+}
+
+func renderParameterSections(sections []ParameterSection) string {
+	lines := make([]string, 0, len(sections)*3)
+	for index, section := range sections {
+		if index > 0 {
+			lines = append(lines, "")
+		}
+
+		lines = append(lines, strings.ToUpper(string(section.Location))+":")
+		if len(section.Items) == 0 {
+			lines = append(lines, "- none")
+			continue
+		}
+
+		for _, item := range section.Items {
+			lines = append(lines, fmt.Sprintf("- %s (%s, %s)", item.Name, requiredLabel(item.Required), fallbackText(item.TypeHint, "unknown")))
+		}
+	}
+
+	return strings.Join(lines, "\n")
+}
+
 func requiredLabel(required bool) string {
 	if required {
 		return "required"
@@ -145,6 +190,28 @@ func formatRequestBody(body *model.RequestBodySpec) string {
 	return strings.Join(lines, "\n")
 }
 
+func formatRequestBodySummary(body RequestBodySummary) string {
+	required := "optional"
+	if body.Required {
+		required = "required"
+	}
+
+	mediaTypes := append([]string(nil), body.MediaTypes...)
+	if len(mediaTypes) == 0 {
+		mediaTypes = append(mediaTypes, "none")
+	}
+
+	lines := []string{
+		fmt.Sprintf("Required: %s", required),
+		fmt.Sprintf("Media types: %s", strings.Join(mediaTypes, ", ")),
+	}
+	if description := strings.TrimSpace(body.Description); description != "" {
+		lines = append(lines, fmt.Sprintf("Description: %s", description))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
 func formatResponses(responses []model.ResponseSpec) string {
 	if len(responses) == 0 {
 		return "None"
@@ -162,6 +229,33 @@ func formatResponses(responses []model.ResponseSpec) string {
 
 		description := fallbackText(response.Description, "None")
 		lines = append(lines, fmt.Sprintf("- %s: %s [%s]", response.StatusCode, description, strings.Join(mediaTypes, ", ")))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func renderResponseSummaries(responses []ResponseSummary) string {
+	lines := make([]string, 0, len(responses)*5)
+	for index, response := range responses {
+		if index > 0 {
+			lines = append(lines, "")
+		}
+
+		mediaTypes := append([]string(nil), response.MediaTypes...)
+		if len(mediaTypes) == 0 {
+			mediaTypes = append(mediaTypes, "none")
+		}
+
+		headerSummary := "none"
+		if len(response.HeaderNames) > 0 {
+			headerSummary = strings.Join(response.HeaderNames, ", ")
+		}
+
+		lines = append(lines,
+			fmt.Sprintf("- %s: %s", response.StatusCode, fallbackText(response.Description, "None")),
+			fmt.Sprintf("  Headers: %s", headerSummary),
+			fmt.Sprintf("  Media types: %s", strings.Join(mediaTypes, ", ")),
+		)
 	}
 
 	return strings.Join(lines, "\n")
@@ -192,6 +286,10 @@ func formatSecurityRequirement(requirement *model.SecurityRequirement) string {
 	}
 
 	return strings.Join(lines, "\nOR\n")
+}
+
+func FormatSecurityRequirementForProjection(requirement *model.SecurityRequirement) string {
+	return formatSecurityRequirement(requirement)
 }
 
 func formatWarnings(warnings []model.SpecWarning) string {

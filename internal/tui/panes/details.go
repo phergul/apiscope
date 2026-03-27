@@ -43,39 +43,31 @@ func RenderDetails(data DetailsData) string {
 		return strings.Join(lines, "\n")
 	}
 
+	sections := []Section{
+		{Label: DetailsSectionSummary, Body: renderSummaryDetailsContent(data)},
+	}
+	if data.Security != nil && len(data.Security.Alternatives) > 0 {
+		sections = append(sections, Section{
+			Label: DetailsSectionSecurity,
+			Body:  formatSecurityRequirement(data.Security),
+		})
+	}
+	if len(data.Warnings) > 0 {
+		sections = append(sections, Section{
+			Label: DetailsSectionWarnings,
+			Body:  formatWarnings(data.Warnings),
+		})
+	}
+
+	return RenderSectionView(sections, data.ActiveSection, "")
+}
+
+func renderSummaryDetailsContent(data DetailsData) string {
 	return strings.Join([]string{
-		renderDetailsSectionStrip(data.Sections, data.ActiveSection),
-		"",
-		renderActiveDetailsSectionContent(data),
+		fmt.Sprintf("Operation: %s %s", strings.ToUpper(data.Selected.Method), data.Selected.Path),
+		fmt.Sprintf("Summary: %s", fallbackText(data.Selected.Summary, "None")),
+		fmt.Sprintf("Description: %s", fallbackText(data.Selected.Description, "None")),
+		fmt.Sprintf("Tags: %s", formatTags(data.Selected.Tags)),
+		fmt.Sprintf("Deprecated: %s", yesNo(data.Selected.Deprecated)),
 	}, "\n")
-}
-
-func renderActiveDetailsSectionContent(data DetailsData) string {
-	switch data.ActiveSection {
-	case DetailsSectionSecurity:
-		return formatSecurityRequirement(data.Security)
-	case DetailsSectionWarnings:
-		return formatWarnings(data.Warnings)
-	default:
-		return strings.Join([]string{
-			fmt.Sprintf("Operation: %s %s", strings.ToUpper(data.Selected.Method), data.Selected.Path),
-			fmt.Sprintf("Summary: %s", fallbackText(data.Selected.Summary, "None")),
-			fmt.Sprintf("Description: %s", fallbackText(data.Selected.Description, "None")),
-			fmt.Sprintf("Tags: %s", formatTags(data.Selected.Tags)),
-			fmt.Sprintf("Deprecated: %s", yesNo(data.Selected.Deprecated)),
-		}, "\n")
-	}
-}
-
-func renderDetailsSectionStrip(sections []string, active string) string {
-	parts := make([]string, 0, len(sections))
-	for _, section := range sections {
-		label := section
-		if section == active {
-			label = "[" + label + "]"
-		}
-		parts = append(parts, label)
-	}
-
-	return strings.Join(parts, "  ")
 }

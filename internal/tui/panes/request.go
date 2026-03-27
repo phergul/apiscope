@@ -1,7 +1,10 @@
 package panes
 
 type RequestData struct {
-	LoadInFlight bool
+	LoadInFlight  bool
+	Sections      []Section
+	ActiveSection string
+	EmptyState    string
 }
 
 func RenderRequest(data RequestData) string {
@@ -9,5 +12,5 @@ func RenderRequest(data RequestData) string {
 		return "Loading spec..."
 	}
 
-	return "Request editing arrives later.\nThis pane will hold path/query/header params, auth, and request body input."
+	return RenderSectionView(data.Sections, data.ActiveSection, data.EmptyState)
 }

@@ -66,6 +66,10 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.setSelectedOperationByVisibleIndex(0)
 		case model.FocusedPaneDetails:
 			m.setDetailsSectionBoundary(false)
+		case model.FocusedPaneRequest:
+			m.setRequestSectionBoundary(false)
+		case model.FocusedPaneResponse:
+			m.setResponseSectionBoundary(false)
 		}
 	case "end":
 		switch m.viewState.FocusedPane {
@@ -73,20 +77,32 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.setSelectedOperationByVisibleIndex(len(m.viewState.VisibleOperationKeys) - 1)
 		case model.FocusedPaneDetails:
 			m.setDetailsSectionBoundary(true)
+		case model.FocusedPaneRequest:
+			m.setRequestSectionBoundary(true)
+		case model.FocusedPaneResponse:
+			m.setResponseSectionBoundary(true)
 		}
-	case "]":
+	case "]", "l":
 		switch m.viewState.FocusedPane {
 		case model.FocusedPaneOperations:
 			m.jumpToAdjacentOperationGroup(1)
 		case model.FocusedPaneDetails:
 			m.moveDetailsSection(1)
+		case model.FocusedPaneRequest:
+			m.moveRequestSection(1)
+		case model.FocusedPaneResponse:
+			m.moveResponseSection(1)
 		}
-	case "[":
+	case "[", "h":
 		switch m.viewState.FocusedPane {
 		case model.FocusedPaneOperations:
 			m.jumpToAdjacentOperationGroup(-1)
 		case model.FocusedPaneDetails:
 			m.moveDetailsSection(-1)
+		case model.FocusedPaneRequest:
+			m.moveRequestSection(-1)
+		case model.FocusedPaneResponse:
+			m.moveResponseSection(-1)
 		}
 	}
 

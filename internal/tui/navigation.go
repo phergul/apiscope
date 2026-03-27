@@ -20,11 +20,24 @@ type operationGroup struct {
 	Keys []model.OperationKey
 }
 
+const (
+	requestSectionBody = "Body"
+	requestSectionAuth = "Auth"
+)
+
+var requestParameterLocations = []model.ParameterLocation{
+	model.ParameterLocationPath,
+	model.ParameterLocationQuery,
+	model.ParameterLocationHeader,
+	model.ParameterLocationCookie,
+}
+
 func (m *Model) syncVisibleOperations() {
 	if m.session.Spec == nil {
 		m.viewState.VisibleOperationKeys = nil
 		m.viewState.OperationsCursor = 0
 		m.session.SelectedOperationKey = ""
+		m.syncActivePaneSections()
 		return
 	}
 
@@ -36,7 +49,7 @@ func (m *Model) syncVisibleOperations() {
 		}
 	}
 
-	m.viewState.VisibleOperationKeys = visible
+	m.viewState.VisibleOperationKeys = m.groupOperationKeys(visible)
 	m.syncSelectedOperationAfterVisibilityChange()
 }
 
@@ -65,28 +78,28 @@ func (m *Model) syncSelectedOperationAfterVisibilityChange() {
 	if len(m.viewState.VisibleOperationKeys) == 0 {
 		m.session.SelectedOperationKey = ""
 		m.viewState.OperationsCursor = 0
-		m.syncActiveDetailsSection()
+		m.syncActivePaneSections()
 		return
 	}
 
 	for index, key := range m.viewState.VisibleOperationKeys {
 		if key == m.session.SelectedOperationKey {
 			m.viewState.OperationsCursor = index
-			m.syncActiveDetailsSection()
+			m.syncActivePaneSections()
 			return
 		}
 	}
 
 	m.session.SelectedOperationKey = m.viewState.VisibleOperationKeys[0]
 	m.viewState.OperationsCursor = 0
-	m.syncActiveDetailsSection()
+	m.syncActivePaneSections()
 }
 
 func (m *Model) setSelectedOperationByVisibleIndex(index int) {
 	if len(m.viewState.VisibleOperationKeys) == 0 {
 		m.session.SelectedOperationKey = ""
 		m.viewState.OperationsCursor = 0
-		m.syncActiveDetailsSection()
+		m.syncActivePaneSections()
 		return
 	}
 
@@ -99,17 +112,21 @@ func (m *Model) setSelectedOperationByVisibleIndex(index int) {
 
 	m.viewState.OperationsCursor = index
 	m.session.SelectedOperationKey = m.viewState.VisibleOperationKeys[index]
-	m.syncActiveDetailsSection()
+	m.syncActivePaneSections()
 }
 
 func (m *Model) groupedVisibleOperations() []operationGroup {
-	if len(m.viewState.VisibleOperationKeys) == 0 {
+	return m.groupedOperationKeys(m.viewState.VisibleOperationKeys)
+}
+
+func (m *Model) groupedOperationKeys(keys []model.OperationKey) []operationGroup {
+	if len(keys) == 0 {
 		return nil
 	}
 
 	groups := make([]operationGroup, 0)
 	indexByName := make(map[string]int)
-	for _, key := range m.viewState.VisibleOperationKeys {
+	for _, key := range keys {
 		operation := m.operationByKey(key)
 		if operation == nil {
 			continue
@@ -127,6 +144,16 @@ func (m *Model) groupedVisibleOperations() []operationGroup {
 	}
 
 	return groups
+}
+
+func (m *Model) groupOperationKeys(keys []model.OperationKey) []model.OperationKey {
+	groups := m.groupedOperationKeys(keys)
+	ordered := make([]model.OperationKey, 0, len(keys))
+	for _, group := range groups {
+		ordered = append(ordered, group.Keys...)
+	}
+
+	return ordered
 }
 
 func operationGroupName(operation *model.Operation) string {
@@ -206,6 +233,154 @@ func (m *Model) syncActiveDetailsSection() {
 	}
 
 	m.activeDetailsSection = available[0]
+}
+
+func (m *Model) availableRequestSections() []string {
+	selected := m.resolvedSelectedOperation()
+	if selected == nil {
+		return nil
+	}
+
+	sections := make([]string, 0, len(requestParameterLocations)+2)
+	for _, location := range requestParameterLocations {
+		if hasParametersInLocation(selected.Parameters, location) {
+			sections = append(sections, requestLocationSectionLabel(location))
+		}
+	}
+	if selected.RequestBody != nil {
+		sections = append(sections, requestSectionBody)
+	}
+	requirement := m.effectiveSecurityRequirement(selected)
+	if requirement != nil && len(requirement.Alternatives) > 0 {
+		sections = append(sections, requestSectionAuth)
+	}
+
+	return sections
+}
+
+func (m *Model) syncActiveRequestSection() {
+	available := m.availableRequestSections()
+	if len(available) == 0 {
+		m.activeRequestSection = ""
+		return
+	}
+
+	for _, section := range available {
+		if section == m.activeRequestSection {
+			return
+		}
+	}
+
+	m.activeRequestSection = available[0]
+}
+
+func (m *Model) moveRequestSection(direction int) {
+	m.activeRequestSection = moveStringSection(m.activeRequestSection, m.availableRequestSections(), direction)
+}
+
+func (m *Model) setRequestSectionBoundary(last bool) {
+	m.activeRequestSection = boundaryStringSection(m.availableRequestSections(), last)
+}
+
+func (m *Model) availableResponseSections() []string {
+	selected := m.resolvedSelectedOperation()
+	if selected == nil {
+		return nil
+	}
+
+	sections := make([]string, 0, len(selected.Responses))
+	for _, response := range selected.Responses {
+		sections = append(sections, response.StatusCode)
+	}
+
+	return sections
+}
+
+func (m *Model) syncActiveResponseSection() {
+	available := m.availableResponseSections()
+	if len(available) == 0 {
+		m.activeResponseSection = ""
+		return
+	}
+
+	for _, section := range available {
+		if section == m.activeResponseSection {
+			return
+		}
+	}
+
+	m.activeResponseSection = available[0]
+}
+
+func (m *Model) moveResponseSection(direction int) {
+	m.activeResponseSection = moveStringSection(m.activeResponseSection, m.availableResponseSections(), direction)
+}
+
+func (m *Model) setResponseSectionBoundary(last bool) {
+	m.activeResponseSection = boundaryStringSection(m.availableResponseSections(), last)
+}
+
+func (m *Model) syncActivePaneSections() {
+	m.syncActiveDetailsSection()
+	m.syncActiveRequestSection()
+	m.syncActiveResponseSection()
+}
+
+func hasParametersInLocation(parameters []model.Parameter, location model.ParameterLocation) bool {
+	for _, parameter := range parameters {
+		if parameter.In == location {
+			return true
+		}
+	}
+
+	return false
+}
+
+func requestLocationSectionLabel(location model.ParameterLocation) string {
+	switch location {
+	case model.ParameterLocationPath:
+		return "Path"
+	case model.ParameterLocationQuery:
+		return "Query"
+	case model.ParameterLocationHeader:
+		return "Header"
+	case model.ParameterLocationCookie:
+		return "Cookie"
+	default:
+		return string(location)
+	}
+}
+
+func moveStringSection(current string, available []string, direction int) string {
+	if len(available) == 0 {
+		return ""
+	}
+
+	currentIndex := 0
+	for index, section := range available {
+		if section == current {
+			currentIndex = index
+			break
+		}
+	}
+
+	targetIndex := currentIndex + direction
+	if targetIndex < 0 || targetIndex >= len(available) {
+		return available[currentIndex]
+	}
+
+	return available[targetIndex]
+}
+
+func boundaryStringSection(available []string, last bool) string {
+	if len(available) == 0 {
+		return ""
+	}
+	if last {
+		return available[len(available)-1]
+	}
+
+	return available[0]
 }
 
 func (m *Model) moveDetailsSection(direction int) {

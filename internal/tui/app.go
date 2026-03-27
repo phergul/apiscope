@@ -22,14 +22,16 @@ type Program struct {
 }
 
 type Model struct {
-	service              *app.Service
-	session              model.SessionState
-	viewState            model.ViewState
-	width                int
-	height               int
-	source               string
-	loadErr              error
-	activeDetailsSection detailsSection
+	service               *app.Service
+	session               model.SessionState
+	viewState             model.ViewState
+	width                 int
+	height                int
+	source                string
+	loadErr               error
+	activeDetailsSection  detailsSection
+	activeRequestSection  string
+	activeResponseSection string
 }
 
 func NewProgram(service *app.Service, source string, input io.Reader, output io.Writer) *Program {
@@ -54,9 +56,11 @@ func NewModel(service *app.Service, source string) *Model {
 	}
 
 	return &Model{
-		service:              service,
-		source:               source,
-		activeDetailsSection: detailsSectionSummary,
+		service:               service,
+		source:                source,
+		activeDetailsSection:  detailsSectionSummary,
+		activeRequestSection:  "",
+		activeResponseSection: "",
 		viewState: model.ViewState{
 			FocusedPane:           model.FocusedPaneOperations,
 			ExpandedRightPane:     model.FocusedPaneRequest,
@@ -102,7 +106,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewState.LoadInFlight = false
 		m.viewState.RightPaneLayoutPreset = chooseLayoutPreset(m.width)
 		m.syncVisibleOperations()
-		m.syncActiveDetailsSection()
+		m.syncActivePaneSections()
 		return m, nil
 	default:
 		return m, nil

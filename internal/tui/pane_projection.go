@@ -128,15 +128,43 @@ func (m *Model) availableDetailsSectionLabels() []string {
 }
 
 func (m *Model) projectRequestPane() panes.RequestData {
-	return panes.RequestData{
+	data := panes.RequestData{
 		LoadInFlight: m.viewState.LoadInFlight,
 	}
+
+	selected := m.resolvedSelectedOperation()
+	if selected == nil {
+		data.EmptyState = "No operation selected.\nChoose an operation in pane 1 to inspect request details."
+		return data
+	}
+
+	data.Sections = projectRequestSections(selected, m.effectiveSecurityRequirement(selected))
+	data.ActiveSection = m.activeRequestSection
+	if len(data.Sections) == 0 {
+		data.EmptyState = "This operation does not declare request parameters, request body, or auth requirements."
+	}
+
+	return data
 }
 
 func (m *Model) projectResponsePane() panes.ResponseData {
-	return panes.ResponseData{
+	data := panes.ResponseData{
 		LoadInFlight: m.viewState.LoadInFlight,
 	}
+
+	selected := m.resolvedSelectedOperation()
+	if selected == nil {
+		data.EmptyState = "No operation selected.\nChoose an operation in pane 1 to inspect response details."
+		return data
+	}
+
+	data.Sections = projectResponseSections(selected.Responses)
+	data.ActiveSection = m.activeResponseSection
+	if len(data.Sections) == 0 {
+		data.EmptyState = "This operation does not declare any responses."
+	}
+
+	return data
 }
 
 func (m *Model) projectStatusBar() panes.StatusBarData {
@@ -239,4 +267,184 @@ func focusedPaneLabel(pane model.FocusedPane) string {
 	default:
 		return "operations"
 	}
+}
+
+func projectRequestSections(operation *model.Operation, requirement *model.SecurityRequirement) []panes.Section {
+	if operation == nil {
+		return nil
+	}
+
+	sections := make([]panes.Section, 0, len(requestParameterLocations)+2)
+	for _, location := range requestParameterLocations {
+		locationParameters := parametersInLocation(operation.Parameters, location)
+		if len(locationParameters) == 0 {
+			continue
+		}
+
+		sections = append(sections, panes.Section{
+			Label: requestLocationSectionLabel(location),
+			Body:  parameterGroupSectionBody(locationParameters),
+		})
+	}
+	if operation.RequestBody != nil {
+		sections = append(sections, panes.Section{
+			Label: requestSectionBody,
+			Body:  requestBodySectionBody(operation.RequestBody),
+		})
+	}
+	if requirement != nil && len(requirement.Alternatives) > 0 {
+		sections = append(sections, panes.Section{
+			Label: requestSectionAuth,
+			Body:  panes.FormatSecurityRequirementForProjection(requirement),
+		})
+	}
+
+	return sections
+}
+
+func projectResponseSections(responses []model.ResponseSpec) []panes.Section {
+	sections := make([]panes.Section, 0, len(responses))
+	for _, response := range responses {
+		sections = append(sections, panes.Section{
+			Label: response.StatusCode,
+			Body:  responseSectionBody(response),
+		})
+	}
+
+	return sections
+}
+
+func mediaTypesForContent(content []model.MediaTypeSpec) []string {
+	mediaTypes := make([]string, 0, len(content))
+	for _, item := range content {
+		mediaTypes = append(mediaTypes, item.MediaType)
+	}
+
+	return mediaTypes
+}
+
+func parametersInLocation(parameters []model.Parameter, location model.ParameterLocation) []model.Parameter {
+	filtered := make([]model.Parameter, 0, len(parameters))
+	for _, parameter := range parameters {
+		if parameter.In == location {
+			filtered = append(filtered, parameter)
+		}
+	}
+
+	return filtered
+}
+
+func parameterTypeHint(parameter model.Parameter) string {
+	if parameter.Schema != nil {
+		return schemaTypeHint(parameter.Schema)
+	}
+	if len(parameter.Content) > 0 {
+		return "content"
+	}
+
+	return "unknown"
+}
+
+func schemaTypeHint(schema *model.Schema) string {
+	if schema == nil {
+		return "unknown"
+	}
+
+	parts := make([]string, 0, 2)
+	if schema.Type != "" {
+		parts = append(parts, schema.Type)
+	}
+	if schema.Format != "" {
+		parts = append(parts, schema.Format)
+	}
+	if len(parts) > 0 {
+		return strings.Join(parts, "/")
+	}
+	if schema.Ref != "" {
+		return schema.Ref
+	}
+	if len(schema.OneOf) > 0 {
+		return "oneOf"
+	}
+	if len(schema.AnyOf) > 0 {
+		return "anyOf"
+	}
+	if len(schema.AllOf) > 0 {
+		return "allOf"
+	}
+
+	return "object"
+}
+
+func parameterGroupSectionBody(parameters []model.Parameter) string {
+	lines := make([]string, 0, len(parameters)*3)
+	for index, parameter := range parameters {
+		if index > 0 {
+			lines = append(lines, "")
+		}
+
+		lines = append(lines, "- "+parameter.Name+" ("+booleanRequirementLabel(parameter.Required)+", "+parameterTypeHint(parameter)+")")
+		if description := strings.TrimSpace(parameter.Description); description != "" {
+			lines = append(lines, "  Description: "+description)
+		}
+		if len(parameter.Content) > 0 {
+			lines = append(lines, "  Content types: "+strings.Join(mediaTypesForContent(parameter.Content), ", "))
+		}
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func requestBodySectionBody(body *model.RequestBodySpec) string {
+	if body == nil {
+		return "No request body."
+	}
+
+	required := "optional"
+	if body.Required {
+		required = "required"
+	}
+
+	lines := []string{
+		"Required: " + required,
+		"Media types: " + strings.Join(defaultIfEmpty(mediaTypesForContent(body.Content), "none"), ", "),
+	}
+	if description := strings.TrimSpace(body.Description); description != "" {
+		lines = append(lines, "Description: "+description)
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func responseSectionBody(response model.ResponseSpec) string {
+	lines := []string{
+		"Description: " + fallbackText(response.Description, "None"),
+		"Headers:",
+	}
+	if len(response.Headers) == 0 {
+		lines = append(lines, "- none")
+	} else {
+		for _, header := range response.Headers {
+			lines = append(lines, "- "+header.Name+" ("+parameterTypeHint(header)+")")
+		}
+	}
+	lines = append(lines, "Media types: "+strings.Join(defaultIfEmpty(mediaTypesForContent(response.Content), "none"), ", "))
+
+	return strings.Join(lines, "\n")
+}
+
+func defaultIfEmpty(values []string, fallback string) []string {
+	if len(values) > 0 {
+		return values
+	}
+
+	return []string{fallback}
+}
+
+func booleanRequirementLabel(required bool) string {
+	if required {
+		return "required"
+	}
+
+	return "optional"
 }

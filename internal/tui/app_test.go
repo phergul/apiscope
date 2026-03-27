@@ -425,6 +425,41 @@ func TestModelOperationsMovementUpdatesSelectionAndCursor(t *testing.T) {
 	}
 }
 
+func TestModelOperationsMovementFollowsRenderedGroupedOrder(t *testing.T) {
+	t.Parallel()
+
+	m := &Model{
+		session: model.SessionState{
+			Spec: &model.APISpec{
+				Operations: []model.Operation{
+					{Key: model.NewOperationKey("GET", "/albums"), Method: "GET", Path: "/albums", Tags: []string{"albums"}},
+					{Key: model.NewOperationKey("GET", "/artists"), Method: "GET", Path: "/artists", Tags: []string{"artists"}},
+					{Key: model.NewOperationKey("GET", "/me/albums"), Method: "GET", Path: "/me/albums", Tags: []string{"albums"}},
+				},
+			},
+			SelectedOperationKey: model.NewOperationKey("GET", "/albums"),
+		},
+		viewState: model.ViewState{
+			FocusedPane: model.FocusedPaneOperations,
+		},
+		activeDetailsSection: detailsSectionSummary,
+	}
+	m.syncVisibleOperations()
+
+	if got := m.viewState.VisibleOperationKeys; len(got) != 3 ||
+		got[0] != model.NewOperationKey("GET", "/albums") ||
+		got[1] != model.NewOperationKey("GET", "/me/albums") ||
+		got[2] != model.NewOperationKey("GET", "/artists") {
+		t.Fatalf("expected grouped visible order, got %#v", got)
+	}
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	updated := updatedModel.(*Model)
+	if updated.session.SelectedOperationKey != model.NewOperationKey("GET", "/me/albums") {
+		t.Fatalf("expected cursor to move to grouped sibling /me/albums, got %q", updated.session.SelectedOperationKey)
+	}
+}
+
 func TestModelOperationsSectionJumpMovesBetweenGroups(t *testing.T) {
 	t.Parallel()
 
@@ -476,6 +511,52 @@ func TestModelDetailsSectionNavigationSkipsUnavailableSections(t *testing.T) {
 	}
 }
 
+func TestModelRequestSectionNavigationMovesAcrossParameterBodyAndAuth(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.activeRequestSection = "Path"
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	updated := updatedModel.(*Model)
+	if updated.activeRequestSection != "Body" {
+		t.Fatalf("expected ] to move to request body, got %q", updated.activeRequestSection)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnd})
+	updated = updatedModel.(*Model)
+	if updated.activeRequestSection != "Auth" {
+		t.Fatalf("expected end to jump to auth, got %q", updated.activeRequestSection)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyHome})
+	updated = updatedModel.(*Model)
+	if updated.activeRequestSection != "Path" {
+		t.Fatalf("expected home to jump to first request section, got %q", updated.activeRequestSection)
+	}
+}
+
+func TestModelResponseSectionNavigationAndFallback(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FocusedPane = model.FocusedPaneResponse
+	m.activeResponseSection = "200"
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	updated := updatedModel.(*Model)
+	if updated.activeResponseSection != "default" {
+		t.Fatalf("expected ] to move to default response, got %q", updated.activeResponseSection)
+	}
+
+	updated.session.SelectedOperationKey = model.NewOperationKey("POST", "/pets")
+	updated.syncActivePaneSections()
+	if updated.activeResponseSection != "" {
+		t.Fatalf("expected response section to clear when no responses remain, got %q", updated.activeResponseSection)
+	}
+}
+
 func TestModelFilterWithNoMatchesClearsSelection(t *testing.T) {
 	t.Parallel()
 
@@ -511,6 +592,7 @@ func newLoadedModelForNavigation() *Model {
 				},
 				Responses: []model.ResponseSpec{
 					{StatusCode: "200", Description: "OK", Content: []model.MediaTypeSpec{{MediaType: "application/json"}}},
+					{StatusCode: "default", Description: "Unexpected error", Content: []model.MediaTypeSpec{{MediaType: "application/problem+json"}}},
 				},
 				Security: &model.SecurityRequirement{
 					Alternatives: []model.SecurityAlternative{
@@ -541,7 +623,9 @@ func newLoadedModelForNavigation() *Model {
 	}
 
 	return &Model{
-		activeDetailsSection: detailsSectionSummary,
+		activeDetailsSection:  detailsSectionSummary,
+		activeRequestSection:  "Path",
+		activeResponseSection: "200",
 		session: model.SessionState{
 			Spec:                 spec,
 			SelectedOperationKey: model.NewOperationKey("GET", "/pets"),

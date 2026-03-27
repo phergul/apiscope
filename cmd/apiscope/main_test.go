@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"api-tui/internal/app"
+	"github.com/phergul/apiscope/internal/app"
 )
 
 type stubRunner struct {
@@ -29,7 +29,7 @@ func TestRunMissingArgumentPrintsUsage(t *testing.T) {
 	if exitCode == 0 {
 		t.Fatal("expected non-zero exit code when spec source is missing")
 	}
-	if !strings.Contains(stderr.String(), "usage: api-tui <spec-source>") {
+	if !strings.Contains(stderr.String(), "usage: apiscope <spec-source>") {
 		t.Fatalf("expected usage text, got %q", stderr.String())
 	}
 }

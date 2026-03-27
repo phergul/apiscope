@@ -1,6 +1,6 @@
 package app
 
-import "api-tui/internal/model"
+import "github.com/phergul/apiscope/internal/model"
 
 func newLoadResult(apiSpec *model.APISpec, rawSource string) LoadResult {
 	result := LoadResult{

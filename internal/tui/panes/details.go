@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"api-tui/internal/model"
+	"github.com/phergul/apiscope/internal/model"
 )
 
 const (

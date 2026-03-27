@@ -4,8 +4,8 @@ import (
 	"context"
 	"io"
 
-	"api-tui/internal/app"
-	"api-tui/internal/model"
+	"github.com/phergul/apiscope/internal/app"
+	"github.com/phergul/apiscope/internal/model"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

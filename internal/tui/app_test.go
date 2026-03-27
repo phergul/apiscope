@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"api-tui/internal/app"
-	"api-tui/internal/model"
-	"api-tui/internal/spec"
+	"github.com/phergul/apiscope/internal/app"
+	"github.com/phergul/apiscope/internal/model"
+	"github.com/phergul/apiscope/internal/spec"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"api-tui/internal/spec"
+	"github.com/phergul/apiscope/internal/spec"
 )
 
 type LoadErrorView struct {

@@ -1,7 +1,7 @@
 package normalise
 
 import (
-	"api-tui/internal/model"
+	"github.com/phergul/apiscope/internal/model"
 
 	"github.com/getkin/kin-openapi/openapi3"
 )

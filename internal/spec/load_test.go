@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"api-tui/internal/spec/internal/pipeline"
+	"github.com/phergul/apiscope/internal/spec/internal/pipeline"
 )
 
 func TestLoadDocumentFromFileJSON(t *testing.T) {

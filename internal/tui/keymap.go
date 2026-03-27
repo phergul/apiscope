@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"api-tui/internal/model"
+	"github.com/phergul/apiscope/internal/model"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

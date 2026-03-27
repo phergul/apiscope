@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"api-tui/internal/model"
-	"api-tui/internal/tui/panes"
+	"github.com/phergul/apiscope/internal/model"
+	"github.com/phergul/apiscope/internal/tui/panes"
 
 	"github.com/charmbracelet/lipgloss"
 )

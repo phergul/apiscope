@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"api-tui/internal/model"
-	"api-tui/internal/spec/internal/pipeline"
+	"github.com/phergul/apiscope/internal/model"
+	"github.com/phergul/apiscope/internal/spec/internal/pipeline"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"gopkg.in/yaml.v3"

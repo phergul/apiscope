@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"api-tui/internal/model"
+	"github.com/phergul/apiscope/internal/model"
 )
 
 func TestOperationsPaneContentFallsBackToFirstVisibleWhenSelectionMissing(t *testing.T) {

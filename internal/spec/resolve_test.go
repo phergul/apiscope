@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"testing"
 
-	"api-tui/internal/model"
-	subconverter "api-tui/internal/spec/internal/converter"
-	"api-tui/internal/spec/internal/pipeline"
+	"github.com/phergul/apiscope/internal/model"
+	subconverter "github.com/phergul/apiscope/internal/spec/internal/converter"
+	"github.com/phergul/apiscope/internal/spec/internal/pipeline"
 )
 
 func TestResolveDocumentResolvesInternalOpenAPIRefs(t *testing.T) {

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"api-tui/internal/model"
-	"api-tui/internal/spec"
+	"github.com/phergul/apiscope/internal/model"
+	"github.com/phergul/apiscope/internal/spec"
 )
 
 type stubLoader struct {

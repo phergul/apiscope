@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"api-tui/internal/spec"
+	"github.com/phergul/apiscope/internal/spec"
 )
 
 func TestDescribeLoadErrorInvalidSource(t *testing.T) {

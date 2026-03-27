@@ -4,7 +4,7 @@ import (
 	"net/url"
 	"strings"
 
-	"api-tui/internal/spec/internal/pipeline"
+	"github.com/phergul/apiscope/internal/spec/internal/pipeline"
 )
 
 type SourceKind = pipeline.SourceKind

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"api-tui/internal/model"
+	"github.com/phergul/apiscope/internal/model"
 )
 
 type detailsSection string

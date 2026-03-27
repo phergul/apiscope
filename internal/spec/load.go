@@ -10,10 +10,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"api-tui/internal/model"
-	"api-tui/internal/spec/internal/converter"
-	"api-tui/internal/spec/internal/normalise"
-	"api-tui/internal/spec/internal/pipeline"
+	"github.com/phergul/apiscope/internal/model"
+	"github.com/phergul/apiscope/internal/spec/internal/converter"
+	"github.com/phergul/apiscope/internal/spec/internal/normalise"
+	"github.com/phergul/apiscope/internal/spec/internal/pipeline"
 )
 
 var (

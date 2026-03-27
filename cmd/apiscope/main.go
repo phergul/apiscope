@@ -5,9 +5,9 @@ import (
 	"io"
 	"os"
 
-	"api-tui/internal/app"
-	"api-tui/internal/spec"
-	"api-tui/internal/tui"
+	"github.com/phergul/apiscope/internal/app"
+	"github.com/phergul/apiscope/internal/spec"
+	"github.com/phergul/apiscope/internal/tui"
 )
 
 type runner interface {
@@ -24,14 +24,14 @@ func main() {
 
 func run(args []string, input io.Reader, output, errOutput io.Writer) int {
 	if len(args) != 1 {
-		fmt.Fprintln(errOutput, "usage: api-tui <spec-source>")
+		fmt.Fprintln(errOutput, "usage: apiscope <spec-source>")
 		return 2
 	}
 
 	service := app.NewService(spec.NewLoader(nil))
 	program := newProgram(service, args[0], input, output)
 	if err := program.Run(); err != nil {
-		fmt.Fprintf(errOutput, "api-tui: %v\n", err)
+		fmt.Fprintf(errOutput, "apiscope: %v\n", err)
 		return 1
 	}
 

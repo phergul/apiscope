@@ -3,8 +3,8 @@ package app
 import (
 	"context"
 
-	"api-tui/internal/model"
-	"api-tui/internal/spec"
+	"github.com/phergul/apiscope/internal/model"
+	"github.com/phergul/apiscope/internal/spec"
 )
 
 type specLoader interface {

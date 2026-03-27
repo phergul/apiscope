@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"api-tui/internal/app"
+	"github.com/phergul/apiscope/internal/app"
 )
 
 func (m *Model) loadErrorView() app.LoadErrorView {

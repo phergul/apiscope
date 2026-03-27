@@ -3,7 +3,7 @@ package spec
 import (
 	"errors"
 
-	"api-tui/internal/spec/internal/pipeline"
+	"github.com/phergul/apiscope/internal/spec/internal/pipeline"
 )
 
 const (

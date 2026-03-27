@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"api-tui/internal/spec/internal/pipeline"
+	"github.com/phergul/apiscope/internal/spec/internal/pipeline"
 
 	"github.com/getkin/kin-openapi/openapi3"
 )

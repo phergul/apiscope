@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"api-tui/internal/model"
+	"github.com/phergul/apiscope/internal/model"
 )
 
 func TestRenderDetailsRendersSummarySection(t *testing.T) {

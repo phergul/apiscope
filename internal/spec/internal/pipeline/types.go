@@ -1,7 +1,7 @@
 package pipeline
 
 import (
-	"api-tui/internal/model"
+	"github.com/phergul/apiscope/internal/model"
 
 	"github.com/getkin/kin-openapi/openapi3"
 )
@@ -25,7 +25,7 @@ const (
 	DocumentFormatYAML DocumentFormat = "yaml"
 )
 
-const SwaggerCollectionFormatExtension = "x-api-tui-swagger-collection-format"
+const SwaggerCollectionFormatExtension = "x-apiscope-swagger-collection-format"
 
 type LoadedDocument struct {
 	Source            Source

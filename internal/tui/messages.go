@@ -1,6 +1,6 @@
 package tui
 
-import "api-tui/internal/app"
+import "github.com/phergul/apiscope/internal/app"
 
 type specLoadedMsg struct {
 	requestID uint64

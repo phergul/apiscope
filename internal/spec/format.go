@@ -6,7 +6,7 @@ import (
 	"path"
 	"strings"
 
-	"api-tui/internal/spec/internal/pipeline"
+	"github.com/phergul/apiscope/internal/spec/internal/pipeline"
 )
 
 type DocumentFormat = pipeline.DocumentFormat

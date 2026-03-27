@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"api-tui/internal/model"
+	"github.com/phergul/apiscope/internal/model"
 )
 
 func fingerprintForSpec(spec *model.APISpec) model.SpecFingerprint {

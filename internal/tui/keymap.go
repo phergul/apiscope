@@ -14,6 +14,15 @@ var paneFocusOrder = []model.FocusedPane{
 }
 
 func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.hasBlockingLoadError() {
+		switch msg.String() {
+		case "ctrl+c", "q", "enter", "esc":
+			return m, tea.Quit
+		default:
+			return m, nil
+		}
+	}
+
 	if m.viewState.ActiveEditorMode == model.EditorModeFilter {
 		return m.updateFilterKey(msg)
 	}

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -51,7 +52,7 @@ func TestOperationsPaneContentShowsEmptyState(t *testing.T) {
 
 	content := m.operationsPaneContent()
 
-	if !strings.Contains(content, "No operations in spec.") {
+	if !strings.Contains(content, "does not define any operations") {
 		t.Fatalf("expected empty operations state, got %q", content)
 	}
 }
@@ -65,8 +66,11 @@ func TestOperationsPaneContentShowsFilteredEmptyState(t *testing.T) {
 
 	content := m.operationsPaneContent()
 
-	if !strings.Contains(content, "No operations match filter.") {
+	if !strings.Contains(content, "No operations match the current filter.") {
 		t.Fatalf("expected filtered empty state, got %q", content)
+	}
+	if !strings.Contains(content, "Press Esc to clear the filter.") {
+		t.Fatalf("expected filtered empty state to mention Esc, got %q", content)
 	}
 }
 
@@ -79,7 +83,7 @@ func TestDetailsPaneContentRendersSummarySection(t *testing.T) {
 	content := m.detailsPaneContent()
 
 	wantSnippets := []string{
-		"[Summary]  Parameters  Request Body  Responses  Security",
+		"[Summary]  Parameters  Request Body  Responses  Security  Warnings",
 		"Operation: GET /pets",
 		"Summary: List pets",
 		"Description: Returns pets.",
@@ -102,7 +106,7 @@ func TestDetailsPaneContentShowsParametersSectionWhenActive(t *testing.T) {
 	content := m.detailsPaneContent()
 
 	wantSnippets := []string{
-		"Summary  [Parameters]  Request Body  Responses  Security",
+		"Summary  [Parameters]  Request Body  Responses  Security  Warnings",
 		"PATH:",
 		"- petId (required, string)",
 		"QUERY:",
@@ -128,7 +132,7 @@ func TestDetailsPaneContentShowsRequestBodySectionWhenActive(t *testing.T) {
 	content := m.detailsPaneContent()
 
 	wantSnippets := []string{
-		"Summary  Parameters  [Request Body]  Responses  Security",
+		"Summary  Parameters  [Request Body]  Responses  Security  Warnings",
 		"Required: required",
 		"Media types: application/json, application/xml",
 	}
@@ -148,7 +152,7 @@ func TestDetailsPaneContentShowsResponsesSectionWhenActive(t *testing.T) {
 	content := m.detailsPaneContent()
 
 	wantSnippets := []string{
-		"Summary  Parameters  Request Body  [Responses]  Security",
+		"Summary  Parameters  Request Body  [Responses]  Security  Warnings",
 		"- 200: OK [application/json]",
 		"- default: Unexpected error [application/problem+json]",
 	}
@@ -168,7 +172,7 @@ func TestDetailsPaneContentShowsSecuritySectionWhenActive(t *testing.T) {
 	content := m.detailsPaneContent()
 
 	wantSnippets := []string{
-		"Summary  Parameters  Request Body  Responses  [Security]",
+		"Summary  Parameters  Request Body  Responses  [Security]  Warnings",
 		"- api_key AND secondary_header",
 		"OR",
 		"- oauth (pets:read)",
@@ -176,6 +180,27 @@ func TestDetailsPaneContentShowsSecuritySectionWhenActive(t *testing.T) {
 	for _, snippet := range wantSnippets {
 		if !strings.Contains(content, snippet) {
 			t.Fatalf("expected security section to include %q, got %q", snippet, content)
+		}
+	}
+}
+
+func TestDetailsPaneContentShowsWarningsSectionWhenActive(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForRendering()
+	m.activeDetailsSection = detailsSectionWarnings
+
+	content := m.detailsPaneContent()
+
+	wantSnippets := []string{
+		"Summary  Parameters  Request Body  Responses  Security  [Warnings]",
+		"- unsupported_feature: callbacks are not supported in v1",
+		"  path: #/paths/~1pets/get/callbacks",
+		"- downgraded_feature: collectionFormat was simplified during normalization",
+	}
+	for _, snippet := range wantSnippets {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected warnings section to include %q, got %q", snippet, content)
 		}
 	}
 }
@@ -195,6 +220,74 @@ func TestDetailsPaneContentUsesTopLevelSecurityFallback(t *testing.T) {
 	}
 }
 
+func TestDetailsPaneContentExplainsMissingSelection(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForRendering()
+	m.viewState.FilterText = "zzz"
+	m.viewState.VisibleOperationKeys = nil
+	m.session.SelectedOperationKey = ""
+
+	content := m.detailsPaneContent()
+
+	wantSnippets := []string{
+		"No operation selected.",
+		"Choose an operation in pane 1",
+		"press Esc to clear the filter",
+	}
+	for _, snippet := range wantSnippets {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected missing selection copy to include %q, got %q", snippet, content)
+		}
+	}
+}
+
+func TestRenderLoadErrorContentUsesStructuredMessage(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForRendering()
+	m.loadErr = errors.New("boom")
+
+	content := m.renderLoadErrorContent()
+
+	wantSnippets := []string{
+		"Failed to load spec",
+		"Category: load error",
+		"Source: demo.yaml",
+		"Try this: Check the source and try again.",
+	}
+	for _, snippet := range wantSnippets {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected structured load error copy to include %q, got %q", snippet, content)
+		}
+	}
+}
+
+func TestRenderBlockingLoadErrorShowsCenteredQuitPopup(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForRendering()
+	m.loadErr = errors.New("boom")
+
+	content := m.render()
+
+	wantSnippets := []string{
+		"Failed to load spec",
+		"Category: load error",
+		"Source: demo.yaml",
+		"Try this: Check the source and try again.",
+		"[ Quit ]",
+	}
+	for _, snippet := range wantSnippets {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected blocking load popup to include %q, got %q", snippet, content)
+		}
+	}
+	if strings.Contains(content, "1 Operations") || strings.Contains(content, "2 Details") {
+		t.Fatalf("expected blocking load popup to replace pane layout, got %q", content)
+	}
+}
+
 func TestDetailsPaneContentShowsExplicitNoneStates(t *testing.T) {
 	t.Parallel()
 
@@ -205,7 +298,7 @@ func TestDetailsPaneContentShowsExplicitNoneStates(t *testing.T) {
 	content := m.detailsPaneContent()
 
 	wantSnippets := []string{
-		"[Summary]  Security",
+		"[Summary]  Security  Warnings",
 		"Summary: Create pet",
 		"Description: None",
 		"Tags: admin",
@@ -232,6 +325,7 @@ func TestStatusBarIncludesOperationIdentityAndCount(t *testing.T) {
 		"Operation: GET /pets",
 		"Count: 2",
 		"Visible: 2",
+		"Warnings: 2",
 		"Keys: 1-4 switch Tab cycle q quit",
 	}
 	for _, snippet := range wantSnippets {
@@ -289,6 +383,17 @@ func newLoadedModelForRendering() *Model {
 		Security: &model.SecurityRequirement{
 			Alternatives: []model.SecurityAlternative{
 				{Schemes: []model.SecurityRequirementRef{{Name: "global_auth"}}},
+			},
+		},
+		Warnings: []model.SpecWarning{
+			{
+				Code:    model.SpecWarningUnsupportedFeature,
+				Message: "callbacks are not supported in v1",
+				Path:    "#/paths/~1pets/get/callbacks",
+			},
+			{
+				Code:    model.SpecWarningDowngradedFeature,
+				Message: "collectionFormat was simplified during normalization",
 			},
 		},
 	}

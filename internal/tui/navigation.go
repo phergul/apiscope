@@ -15,6 +15,7 @@ const (
 	detailsSectionRequestBody detailsSection = "Request Body"
 	detailsSectionResponses   detailsSection = "Responses"
 	detailsSectionSecurity    detailsSection = "Security"
+	detailsSectionWarnings    detailsSection = "Warnings"
 )
 
 type operationGroup struct {
@@ -195,6 +196,9 @@ func (m *Model) availableDetailsSections() []detailsSection {
 	requirement := m.effectiveSecurityRequirement(selected)
 	if requirement != nil && len(requirement.Alternatives) > 0 {
 		sections = append(sections, detailsSectionSecurity)
+	}
+	if m.session.Spec != nil && len(m.session.Spec.Warnings) > 0 {
+		sections = append(sections, detailsSectionWarnings)
 	}
 
 	return sections

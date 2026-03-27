@@ -173,17 +173,38 @@ func TestModelRendersLoadFailureWithoutCrashing(t *testing.T) {
 	updated := updatedModel.(*Model)
 	view := updated.View()
 
-	if !strings.Contains(view, "Failed to load spec.") {
+	if !strings.Contains(view, "Failed to load spec") {
 		t.Fatalf("expected view to render load failure, got %q", view)
 	}
 	if !strings.Contains(view, "unable to parse spec") {
 		t.Fatalf("expected load error to appear in view, got %q", view)
 	}
-	if !strings.Contains(view, "State: load failed") {
-		t.Fatalf("expected status bar to show failed load state, got %q", view)
+	if !strings.Contains(view, "[ Quit ]") {
+		t.Fatalf("expected blocking load popup to show quit action, got %q", view)
 	}
-	if !strings.Contains(view, "Keys: 1-4 switch Tab cycle q quit") {
-		t.Fatalf("expected key hints in status bar, got %q", view)
+	if strings.Contains(view, "1 Operations") {
+		t.Fatalf("expected blocking load popup instead of pane layout, got %q", view)
+	}
+}
+
+func TestModelBlockingLoadErrorOnlyAllowsQuitKeys(t *testing.T) {
+	t.Parallel()
+
+	m := NewModel(app.NewService(&stubLoader{}), "broken.yaml")
+	m.loadErr = errors.New("boom")
+
+	updatedModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	updated := updatedModel.(*Model)
+	if cmd != nil {
+		t.Fatal("expected non-quit key to be ignored while blocking load error is shown")
+	}
+	if updated.viewState.FocusedPane != model.FocusedPaneOperations {
+		t.Fatalf("expected focus to remain unchanged, got %q", updated.viewState.FocusedPane)
+	}
+
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected enter to quit while blocking load error is shown")
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"api-tui/internal/app"
 	"api-tui/internal/model"
 
 	"github.com/charmbracelet/lipgloss"
@@ -22,6 +23,10 @@ func chooseLayoutPreset(width int) string {
 
 func (m *Model) render() string {
 	width, height := m.resolvedDimensions()
+	if m.hasBlockingLoadError() {
+		return m.renderBlockingLoadError(width, height)
+	}
+
 	preset := m.viewState.RightPaneLayoutPreset
 	if preset == "" {
 		preset = chooseLayoutPreset(width)
@@ -39,6 +44,32 @@ func (m *Model) render() string {
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, body, statusBar)
+}
+
+func (m *Model) renderBlockingLoadError(width, height int) string {
+	view := app.DescribeLoadError(m.loadErr, m.source)
+	popupWidth := clampInt(int(float64(width)*0.68), 56, 92)
+
+	body := strings.Join([]string{
+		view.Title,
+		"",
+		fmt.Sprintf("Category: %s", view.Category),
+		fmt.Sprintf("Source: %s", fallbackText(view.Source, m.source)),
+		"",
+		view.Summary,
+		"",
+		fmt.Sprintf("Try this: %s", view.Hint),
+		"",
+		"[ Quit ]",
+	}, "\n")
+
+	popup := lipgloss.NewStyle().
+		Width(maxInt(popupWidth-4, 1)).
+		Border(paneBorder).
+		Padding(1, 2).
+		Render(body)
+
+	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, popup)
 }
 
 func (m *Model) renderWideLayout(width, height int) string {
@@ -155,7 +186,7 @@ func (m *Model) operationsPaneContent() string {
 	case m.viewState.LoadInFlight:
 		return "Loading spec..."
 	case m.loadErr != nil:
-		return "Load failed.\nSee details pane for the error."
+		return "Spec load failed.\nSee pane 2 for details and recovery steps."
 	case m.session.Spec == nil:
 		return "No spec loaded."
 	}
@@ -171,11 +202,11 @@ func (m *Model) operationsPaneContent() string {
 	}
 
 	if len(m.session.Spec.Operations) == 0 {
-		lines = append(lines, "No operations in spec.")
+		lines = append(lines, "This spec loaded successfully, but it does not define any operations.")
 		return strings.Join(lines, "\n")
 	}
 	if len(m.viewState.VisibleOperationKeys) == 0 {
-		lines = append(lines, "No operations match filter.")
+		lines = append(lines, "No operations match the current filter.", "Press Esc to clear the filter.")
 		return strings.Join(lines, "\n")
 	}
 
@@ -213,12 +244,19 @@ func (m *Model) detailsPaneContent() string {
 	case m.viewState.LoadInFlight:
 		return "Loading spec..."
 	case m.loadErr != nil:
-		return fmt.Sprintf("Failed to load spec.\n\n%s", m.loadErr.Error())
+		return m.renderLoadErrorContent()
 	}
 
 	selected := m.resolvedSelectedOperation()
 	if selected == nil {
-		return "No operation selected."
+		lines := []string{
+			"No operation selected.",
+			"Choose an operation in pane 1 to inspect its details.",
+		}
+		if strings.TrimSpace(m.viewState.FilterText) != "" {
+			lines = append(lines, "If the list is empty, press Esc to clear the filter.")
+		}
+		return strings.Join(lines, "\n")
 	}
 
 	return strings.Join([]string{
@@ -238,6 +276,8 @@ func (m *Model) activeDetailsSectionContent(selected *model.Operation) string {
 		return formatResponses(selected.Responses)
 	case detailsSectionSecurity:
 		return formatSecurityRequirement(m.effectiveSecurityRequirement(selected))
+	case detailsSectionWarnings:
+		return formatWarnings(m.session.Spec.Warnings)
 	default:
 		return strings.Join([]string{
 			fmt.Sprintf("Operation: %s %s", strings.ToUpper(selected.Method), selected.Path),
@@ -254,7 +294,7 @@ func (m *Model) requestPaneContent() string {
 		return "Loading spec..."
 	}
 
-	return "Request editor arrives in M3."
+	return "Request editing arrives in M3.\nThis pane will become the working area for parameters, auth, and body input."
 }
 
 func (m *Model) responsePaneContent() string {
@@ -262,7 +302,7 @@ func (m *Model) responsePaneContent() string {
 		return "Loading spec..."
 	}
 
-	return "No response yet."
+	return "Responses will appear here after execution arrives in M3."
 }
 
 func (m *Model) renderStatusBar(width int) string {
@@ -277,6 +317,9 @@ func (m *Model) renderStatusBar(width int) string {
 	if m.session.Spec != nil {
 		parts = append(parts, fmt.Sprintf("Count: %d", len(m.session.Spec.Operations)))
 		parts = append(parts, fmt.Sprintf("Visible: %d", len(m.viewState.VisibleOperationKeys)))
+		if len(m.session.Spec.Warnings) > 0 {
+			parts = append(parts, fmt.Sprintf("Warnings: %d", len(m.session.Spec.Warnings)))
+		}
 	}
 	if strings.TrimSpace(m.viewState.FilterText) != "" {
 		parts = append(parts, fmt.Sprintf("Filter: %s", m.viewState.FilterText))
@@ -297,7 +340,7 @@ func (m *Model) loadStateLabel() string {
 	case m.viewState.LoadInFlight:
 		return "loading"
 	case m.loadErr != nil:
-		return "load failed: " + summarizeError(m.loadErr.Error(), 40)
+		return "load failed"
 	case m.session.Spec != nil:
 		return "loaded"
 	default:
@@ -592,4 +635,40 @@ func formatSecurityRequirement(requirement *model.SecurityRequirement) string {
 	}
 
 	return strings.Join(lines, "\nOR\n")
+}
+
+func (m *Model) renderLoadErrorContent() string {
+	view := app.DescribeLoadError(m.loadErr, m.source)
+	lines := []string{
+		view.Title,
+		"",
+		fmt.Sprintf("Category: %s", view.Category),
+		fmt.Sprintf("Source: %s", fallbackText(view.Source, m.source)),
+		"",
+		view.Summary,
+		"",
+		fmt.Sprintf("Try this: %s", view.Hint),
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func (m *Model) hasBlockingLoadError() bool {
+	return m.loadErr != nil
+}
+
+func formatWarnings(warnings []model.SpecWarning) string {
+	if len(warnings) == 0 {
+		return "No warnings."
+	}
+
+	lines := make([]string, 0, len(warnings)*3)
+	for _, warning := range warnings {
+		lines = append(lines, fmt.Sprintf("- %s: %s", warning.Code, warning.Message))
+		if strings.TrimSpace(warning.Path) != "" {
+			lines = append(lines, fmt.Sprintf("  path: %s", warning.Path))
+		}
+	}
+
+	return strings.Join(lines, "\n")
 }

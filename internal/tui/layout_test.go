@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/phergul/apiscope/internal/model"
+	detailsui "github.com/phergul/apiscope/internal/tui/details"
 )
 
 func TestOperationsPaneContentFallsBackToFirstVisibleWhenSelectionMissing(t *testing.T) {
@@ -29,7 +30,7 @@ func TestDetailsPaneContentUsesTopLevelSecurityFallback(t *testing.T) {
 	m := newLoadedModelForRendering()
 	m.session.SelectedOperationKey = model.NewOperationKey("POST", "/pets")
 	m.syncActiveDetailsSection()
-	m.activeDetailsSection = detailsSectionSecurity
+	m.activeDetailsSection = detailsui.SectionSecurity
 
 	content := m.detailsPaneContent()
 	content = stripANSI(content)
@@ -366,7 +367,7 @@ func newLoadedModelForRendering() *Model {
 
 	return &Model{
 		source:                "demo.yaml",
-		activeDetailsSection:  detailsSectionSummary,
+		activeDetailsSection:  detailsui.SectionSummary,
 		activeRequestSection:  "Path",
 		activeResponseSection: "200",
 		session: model.SessionState{

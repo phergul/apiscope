@@ -1,17 +1,17 @@
-package panes
+package details
 
 import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/phergul/apiscope/internal/model"
 )
 
-func TestRenderDetailsRendersSummarySection(t *testing.T) {
+func TestRenderRendersSummarySection(t *testing.T) {
 	t.Parallel()
 
-	content := RenderDetails(newDetailsData())
-	content = stripANSI(content)
+	content := ansi.Strip(Render(newTestData()))
 
 	wantSnippets := []string{
 		"Summary  Security  Warnings",
@@ -30,14 +30,13 @@ func TestRenderDetailsRendersSummarySection(t *testing.T) {
 	}
 }
 
-func TestRenderDetailsShowsSecuritySectionWhenActive(t *testing.T) {
+func TestRenderShowsSecuritySectionWhenActive(t *testing.T) {
 	t.Parallel()
 
-	data := newDetailsData()
-	data.ActiveSection = DetailsSectionSecurity
+	data := newTestData()
+	data.ActiveSection = SectionSecurity
 
-	content := RenderDetails(data)
-	content = stripANSI(content)
+	content := ansi.Strip(Render(data))
 
 	wantSnippets := []string{
 		"Summary  Security  Warnings",
@@ -52,14 +51,13 @@ func TestRenderDetailsShowsSecuritySectionWhenActive(t *testing.T) {
 	}
 }
 
-func TestRenderDetailsShowsWarningsSectionWhenActive(t *testing.T) {
+func TestRenderShowsWarningsSectionWhenActive(t *testing.T) {
 	t.Parallel()
 
-	data := newDetailsData()
-	data.ActiveSection = DetailsSectionWarnings
+	data := newTestData()
+	data.ActiveSection = SectionWarnings
 
-	content := RenderDetails(data)
-	content = stripANSI(content)
+	content := ansi.Strip(Render(data))
 
 	wantSnippets := []string{
 		"Summary  Security  Warnings",
@@ -74,11 +72,10 @@ func TestRenderDetailsShowsWarningsSectionWhenActive(t *testing.T) {
 	}
 }
 
-func TestRenderDetailsDoesNotShowRequestOrResponseSections(t *testing.T) {
+func TestRenderDoesNotShowRequestOrResponseSections(t *testing.T) {
 	t.Parallel()
 
-	content := RenderDetails(newDetailsData())
-	content = stripANSI(content)
+	content := ansi.Strip(Render(newTestData()))
 
 	unwantedSnippets := []string{
 		"Parameters",
@@ -97,13 +94,12 @@ func TestRenderDetailsDoesNotShowRequestOrResponseSections(t *testing.T) {
 	}
 }
 
-func TestRenderDetailsExplainsMissingSelection(t *testing.T) {
+func TestRenderExplainsMissingSelection(t *testing.T) {
 	t.Parallel()
 
-	content := RenderDetails(DetailsData{
+	content := ansi.Strip(Render(Data{
 		FilterText: "zzz",
-	})
-	content = stripANSI(content)
+	}))
 
 	wantSnippets := []string{
 		"No operation selected.",
@@ -117,10 +113,10 @@ func TestRenderDetailsExplainsMissingSelection(t *testing.T) {
 	}
 }
 
-func TestRenderDetailsShowsExplicitNoneStates(t *testing.T) {
+func TestRenderShowsExplicitNoneStates(t *testing.T) {
 	t.Parallel()
 
-	data := newDetailsData()
+	data := newTestData()
 	data.Selected = &model.Operation{
 		Method:     "POST",
 		Path:       "/pets",
@@ -129,8 +125,7 @@ func TestRenderDetailsShowsExplicitNoneStates(t *testing.T) {
 		Deprecated: true,
 	}
 
-	content := RenderDetails(data)
-	content = stripANSI(content)
+	content := ansi.Strip(Render(data))
 
 	wantSnippets := []string{
 		"Summary  Security  Warnings",
@@ -146,8 +141,8 @@ func TestRenderDetailsShowsExplicitNoneStates(t *testing.T) {
 	}
 }
 
-func newDetailsData() DetailsData {
-	return DetailsData{
+func newTestData() Data {
+	return Data{
 		Selected: &model.Operation{
 			Method:      "GET",
 			Path:        "/pets",
@@ -155,7 +150,7 @@ func newDetailsData() DetailsData {
 			Description: "Returns pets.",
 			Tags:        []string{"pets", "public"},
 		},
-		ActiveSection: DetailsSectionSummary,
+		ActiveSection: SectionSummary,
 		Security: &model.SecurityRequirement{
 			Alternatives: []model.SecurityAlternative{
 				{Schemes: []model.SecurityRequirementRef{{Name: "api_key"}, {Name: "secondary_header"}}},

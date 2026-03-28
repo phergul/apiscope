@@ -3,12 +3,14 @@ package tui
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/phergul/apiscope/internal/app"
 	"github.com/phergul/apiscope/internal/model"
 	"github.com/phergul/apiscope/internal/spec"
+	detailsui "github.com/phergul/apiscope/internal/tui/details"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -73,7 +75,7 @@ func TestModelInitLoadsSpecAsynchronously(t *testing.T) {
 	if updated.viewState.ZoomedPane {
 		t.Fatal("expected zoom mode to start disabled")
 	}
-	if updated.activeDetailsSection != detailsSectionSummary {
+	if updated.activeDetailsSection != detailsui.SectionSummary {
 		t.Fatalf("expected summary details section after load, got %q", updated.activeDetailsSection)
 	}
 }
@@ -443,7 +445,7 @@ func TestModelOperationsMovementFollowsRenderedGroupedOrder(t *testing.T) {
 		viewState: model.ViewState{
 			FocusedPane: model.FocusedPaneOperations,
 		},
-		activeDetailsSection: detailsSectionSummary,
+		activeDetailsSection: detailsui.SectionSummary,
 	}
 	m.syncVisibleOperations()
 
@@ -488,26 +490,26 @@ func TestModelDetailsSectionNavigationSkipsUnavailableSections(t *testing.T) {
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
 	updated := updatedModel.(*Model)
-	if updated.activeDetailsSection != detailsSectionSecurity {
+	if updated.activeDetailsSection != detailsui.SectionSecurity {
 		t.Fatalf("expected ] to move to security, got %q", updated.activeDetailsSection)
 	}
 
 	updated.session.SelectedOperationKey = model.NewOperationKey("POST", "/pets")
 	updated.syncActiveDetailsSection()
-	if updated.activeDetailsSection != detailsSectionSecurity {
+	if updated.activeDetailsSection != detailsui.SectionSecurity {
 		t.Fatalf("expected active section to stay on security when still available, got %q", updated.activeDetailsSection)
 	}
 
 	updated.session.Spec.Security = nil
 	updated.session.SelectedOperationKey = model.NewOperationKey("GET", "/health")
 	updated.syncActiveDetailsSection()
-	if updated.activeDetailsSection != detailsSectionSummary {
+	if updated.activeDetailsSection != detailsui.SectionSummary {
 		t.Fatalf("expected active section to fall back to summary when security is unavailable, got %q", updated.activeDetailsSection)
 	}
 
 	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnd})
 	updated = updatedModel.(*Model)
-	if updated.activeDetailsSection != detailsSectionSummary {
+	if updated.activeDetailsSection != detailsui.SectionSummary {
 		t.Fatalf("expected end to jump to last available details section, got %q", updated.activeDetailsSection)
 	}
 }
@@ -606,7 +608,7 @@ func TestModelRequestAndResponseSectionsResetToFirstOnOperationChange(t *testing
 			RequestActiveRow:    1,
 			RequestScrollOffset: 1,
 		},
-		activeDetailsSection:  detailsSectionSummary,
+		activeDetailsSection:  detailsui.SectionSummary,
 		activeRequestSection:  "Query",
 		activeResponseSection: "default",
 	}
@@ -879,7 +881,7 @@ func TestModelDetailsScrollingUsesJKAndResetsOnSectionChange(t *testing.T) {
 		},
 		width:                80,
 		height:               12,
-		activeDetailsSection: detailsSectionSummary,
+		activeDetailsSection: detailsui.SectionSummary,
 	}
 	m.viewState.RightPaneLayoutPreset = chooseLayoutPreset(m.width)
 
@@ -891,7 +893,7 @@ func TestModelDetailsScrollingUsesJKAndResetsOnSectionChange(t *testing.T) {
 
 	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
 	updated = updatedModel.(*Model)
-	if updated.activeDetailsSection != detailsSectionSecurity {
+	if updated.activeDetailsSection != detailsui.SectionSecurity {
 		t.Fatalf("expected ] to switch to security, got %q", updated.activeDetailsSection)
 	}
 	if updated.viewState.DetailsScrollOffset != 0 {
@@ -924,7 +926,7 @@ func TestModelDetailsHomeAndEndControlScroll(t *testing.T) {
 		},
 		width:                80,
 		height:               12,
-		activeDetailsSection: detailsSectionSummary,
+		activeDetailsSection: detailsui.SectionSummary,
 	}
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnd})
@@ -968,7 +970,7 @@ func TestModelOperationsScrollingKeepsFiveRowsBelowCursorWhenMovingDown(t *testi
 	m.session.Spec.Operations = nil
 	m.viewState.VisibleOperationKeys = nil
 	for index := 0; index < 20; index++ {
-		path := "/pets/" + strconvInt(index)
+		path := "/pets/" + strconv.Itoa(index)
 		key := model.NewOperationKey("GET", path)
 		m.session.Spec.Operations = append(m.session.Spec.Operations, model.Operation{
 			Key:    key,
@@ -1044,7 +1046,7 @@ func newLoadedModelForNavigation() *Model {
 	}
 
 	return &Model{
-		activeDetailsSection:  detailsSectionSummary,
+		activeDetailsSection:  detailsui.SectionSummary,
 		activeRequestSection:  "Path",
 		activeResponseSection: "200",
 		session: model.SessionState{

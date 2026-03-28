@@ -1,26 +1,32 @@
-package panes
+package operations
 
 import (
 	"fmt"
 	"strings"
 
+	"github.com/phergul/apiscope/internal/model"
 	"github.com/phergul/apiscope/internal/tui/widgets"
 
 	"github.com/charmbracelet/lipgloss"
 )
 
-type OperationRow struct {
+type Row struct {
 	Method   string
 	Path     string
 	Selected bool
 }
 
-type OperationsGroup struct {
+type Group struct {
 	Name string
-	Rows []OperationRow
+	Rows []Row
 }
 
-type OperationsData struct {
+type KeyGroup struct {
+	Name string
+	Keys []model.OperationKey
+}
+
+type Data struct {
 	LoadInFlight    bool
 	LoadFailed      bool
 	HasSpec         bool
@@ -28,10 +34,80 @@ type OperationsData struct {
 	ScrollOffset    int
 	MaxLines        int
 	TotalOperations int
-	Groups          []OperationsGroup
+	Groups          []Group
 }
 
-func RenderOperations(data OperationsData) string {
+func MatchFilter(operation model.Operation, filter string) bool {
+	if filter == "" {
+		return true
+	}
+
+	fields := []string{
+		operation.Method,
+		operation.Path,
+		operation.Summary,
+	}
+	fields = append(fields, operation.Tags...)
+
+	for _, field := range fields {
+		if strings.Contains(strings.ToLower(field), filter) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func GroupKeys(keys []model.OperationKey, lookup func(model.OperationKey) *model.Operation) []KeyGroup {
+	if len(keys) == 0 {
+		return nil
+	}
+
+	groups := make([]KeyGroup, 0)
+	indexByName := make(map[string]int)
+	for _, key := range keys {
+		operation := lookup(key)
+		if operation == nil {
+			continue
+		}
+
+		groupName := GroupName(operation)
+		groupIndex, ok := indexByName[groupName]
+		if !ok {
+			groupIndex = len(groups)
+			indexByName[groupName] = groupIndex
+			groups = append(groups, KeyGroup{Name: groupName})
+		}
+
+		groups[groupIndex].Keys = append(groups[groupIndex].Keys, key)
+	}
+
+	return groups
+}
+
+func FlattenKeys(groups []KeyGroup) []model.OperationKey {
+	total := 0
+	for _, group := range groups {
+		total += len(group.Keys)
+	}
+
+	ordered := make([]model.OperationKey, 0, total)
+	for _, group := range groups {
+		ordered = append(ordered, group.Keys...)
+	}
+
+	return ordered
+}
+
+func GroupName(operation *model.Operation) string {
+	if operation == nil || len(operation.Tags) == 0 || strings.TrimSpace(operation.Tags[0]) == "" {
+		return "Untagged"
+	}
+
+	return operation.Tags[0]
+}
+
+func Render(data Data) string {
 	switch {
 	case data.LoadInFlight:
 		return "Loading spec..."
@@ -41,32 +117,31 @@ func RenderOperations(data OperationsData) string {
 		return "No spec loaded."
 	}
 
-	lines := []string{}
-
 	if data.TotalOperations == 0 {
-		lines = append(lines, "This spec loaded successfully, but it does not define any operations.")
-		return strings.Join(lines, "\n")
+		return "This spec loaded successfully, but it does not define any operations."
 	}
 	if len(data.Groups) == 0 {
-		lines = append(lines, "No operations match the current filter.", "Press Esc to clear the filter.")
-		return strings.Join(lines, "\n")
+		return strings.Join([]string{
+			"No operations match the current filter.",
+			"Press Esc to clear the filter.",
+		}, "\n")
 	}
 
-	lines, _ = collectOperationLines(data)
+	lines, _ := collectLines(data)
 	return strings.Join(lines, "\n")
 }
 
-func VisibleOperationRowCount(data OperationsData) int {
+func VisibleRowCount(data Data) int {
 	switch {
 	case data.LoadInFlight, data.LoadFailed, !data.HasSpec, data.TotalOperations == 0, len(data.Groups) == 0:
 		return 0
 	}
 
-	_, rowCount := collectOperationLines(data)
+	_, rowCount := collectLines(data)
 	return rowCount
 }
 
-func collectOperationLines(data OperationsData) ([]string, int) {
+func collectLines(data Data) ([]string, int) {
 	lines := []string{}
 	skippedRows := 0
 	usedLines := 0
@@ -82,7 +157,7 @@ func collectOperationLines(data OperationsData) ([]string, int) {
 				continue
 			}
 
-			rendered := renderOperationRow(row, data.ContentWidth)
+			rendered := renderRow(row, data.ContentWidth)
 			rowHeight := lipgloss.Height(rendered)
 			additionalLines := rowHeight
 			if len(groupLines) == 0 {
@@ -121,7 +196,7 @@ func collectOperationLines(data OperationsData) ([]string, int) {
 	return lines, renderedRows
 }
 
-func renderOperationRow(row OperationRow, width int) string {
+func renderRow(row Row, width int) string {
 	methodLabel := fmt.Sprintf(" %-6s ", strings.ToUpper(row.Method))
 	methodStyle := lipgloss.NewStyle().Foreground(widgets.MethodColor(row.Method)).Bold(true)
 	pathStyle := widgets.BodyTextStyle()
@@ -135,7 +210,7 @@ func renderOperationRow(row OperationRow, width int) string {
 
 	content := fmt.Sprintf("%s%s", methodStyle.Render(methodLabel), pathStyle.Render(row.Path))
 	if width > 0 {
-		rowStyle = rowStyle.Width(width).MaxWidth(width)
+		rowStyle = rowStyle.MaxWidth(width)
 	}
 
 	return rowStyle.Render(content)

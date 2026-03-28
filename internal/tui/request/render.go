@@ -1,4 +1,4 @@
-package panes
+package request
 
 import (
 	"strings"
@@ -6,31 +6,31 @@ import (
 	"github.com/phergul/apiscope/internal/tui/widgets"
 )
 
-type RequestRow struct {
+type Row struct {
 	Label    string
 	Meta     string
 	Value    string
 	Editable bool
 }
 
-type RequestEditView struct {
+type EditView struct {
 	Kind      string
 	Buffer    string
 	MediaType string
 	View      string
 }
 
-type RequestData struct {
+type Data struct {
 	LoadInFlight  bool
 	Sections      []string
 	ActiveSection string
-	Rows          []RequestRow
+	Rows          []Row
 	ActiveRow     int
-	Edit          RequestEditView
+	Edit          EditView
 	EmptyState    string
 }
 
-func RenderRequest(data RequestData) string {
+func Render(data Data) string {
 	if data.LoadInFlight {
 		return "Loading spec..."
 	}
@@ -44,13 +44,13 @@ func RenderRequest(data RequestData) string {
 			Active: data.ActiveSection,
 		}),
 		"",
-		RenderActiveRequestSection(data),
+		RenderActiveSection(data),
 	}, "\n")
 }
 
-func RenderActiveRequestSection(data RequestData) string {
+func RenderActiveSection(data Data) string {
 	if data.Edit.Kind == "body" {
-		return renderRequestBodyEditor(data.Edit)
+		return renderBodyEditor(data.Edit)
 	}
 
 	if len(data.Rows) == 0 {
@@ -91,7 +91,7 @@ func RenderActiveRequestSection(data RequestData) string {
 	return widgets.RenderList(items)
 }
 
-func renderRequestBodyEditor(edit RequestEditView) string {
+func renderBodyEditor(edit EditView) string {
 	lines := []string{
 		"Media type: " + fallbackText(edit.MediaType, "none"),
 		"Ctrl+S save | Esc cancel",
@@ -110,7 +110,7 @@ func renderRequestBodyEditor(edit RequestEditView) string {
 	return strings.Join(lines, "\n")
 }
 
-func requestActiveRowIndex(rows []RequestRow, activeRow int) int {
+func requestActiveRowIndex(rows []Row, activeRow int) int {
 	if len(rows) == 0 {
 		return 0
 	}
@@ -122,4 +122,13 @@ func requestActiveRowIndex(rows []RequestRow, activeRow int) int {
 	}
 
 	return activeRow
+}
+
+func fallbackText(value, fallback string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fallback
+	}
+
+	return value
 }

@@ -2,38 +2,17 @@ package tui
 
 import (
 	"strings"
-	"unicode/utf8"
 
 	"github.com/phergul/apiscope/internal/model"
-	"github.com/phergul/apiscope/internal/tui/panes"
+	detailsui "github.com/phergul/apiscope/internal/tui/details"
+	operationsui "github.com/phergul/apiscope/internal/tui/operations"
+	requestui "github.com/phergul/apiscope/internal/tui/request"
+	responseui "github.com/phergul/apiscope/internal/tui/response"
+	"github.com/phergul/apiscope/internal/tui/widgets"
+	"github.com/phergul/apiscope/internal/util"
 
 	"github.com/charmbracelet/lipgloss"
 )
-
-type detailsSection string
-
-const (
-	detailsSectionSummary  detailsSection = "Summary"
-	detailsSectionSecurity detailsSection = "Security"
-	detailsSectionWarnings detailsSection = "Warnings"
-)
-
-type operationGroup struct {
-	Name string
-	Keys []model.OperationKey
-}
-
-const (
-	requestSectionBody = "Body"
-	requestSectionAuth = "Auth"
-)
-
-var requestParameterLocations = []model.ParameterLocation{
-	model.ParameterLocationPath,
-	model.ParameterLocationQuery,
-	model.ParameterLocationHeader,
-	model.ParameterLocationCookie,
-}
 
 func (m *Model) syncVisibleOperations() {
 	if m.session.Spec == nil {
@@ -48,34 +27,13 @@ func (m *Model) syncVisibleOperations() {
 	filter := strings.TrimSpace(strings.ToLower(m.viewState.FilterText))
 	visible := make([]model.OperationKey, 0, len(m.session.Spec.Operations))
 	for _, operation := range m.session.Spec.Operations {
-		if filter == "" || operationMatchesFilter(operation, filter) {
+		if filter == "" || operationsui.MatchFilter(operation, filter) {
 			visible = append(visible, operation.Key)
 		}
 	}
 
 	m.viewState.VisibleOperationKeys = m.groupOperationKeys(visible)
 	m.syncSelectedOperationAfterVisibilityChange()
-}
-
-func operationMatchesFilter(operation model.Operation, filter string) bool {
-	if filter == "" {
-		return true
-	}
-
-	fields := []string{
-		operation.Method,
-		operation.Path,
-		operation.Summary,
-	}
-	fields = append(fields, operation.Tags...)
-
-	for _, field := range fields {
-		if strings.Contains(strings.ToLower(field), filter) {
-			return true
-		}
-	}
-
-	return false
 }
 
 func (m *Model) syncSelectedOperationAfterVisibilityChange() {
@@ -126,53 +84,12 @@ func (m *Model) setSelectedOperationByVisibleIndex(index int) {
 	m.onSelectionChanged(previous, m.session.SelectedOperationKey)
 }
 
-func (m *Model) groupedVisibleOperations() []operationGroup {
-	return m.groupedOperationKeys(m.viewState.VisibleOperationKeys)
-}
-
-func (m *Model) groupedOperationKeys(keys []model.OperationKey) []operationGroup {
-	if len(keys) == 0 {
-		return nil
-	}
-
-	groups := make([]operationGroup, 0)
-	indexByName := make(map[string]int)
-	for _, key := range keys {
-		operation := m.operationByKey(key)
-		if operation == nil {
-			continue
-		}
-
-		groupName := operationGroupName(operation)
-		groupIndex, ok := indexByName[groupName]
-		if !ok {
-			groupIndex = len(groups)
-			indexByName[groupName] = groupIndex
-			groups = append(groups, operationGroup{Name: groupName})
-		}
-
-		groups[groupIndex].Keys = append(groups[groupIndex].Keys, key)
-	}
-
-	return groups
+func (m *Model) groupedVisibleOperations() []operationsui.KeyGroup {
+	return operationsui.GroupKeys(m.viewState.VisibleOperationKeys, m.operationByKey)
 }
 
 func (m *Model) groupOperationKeys(keys []model.OperationKey) []model.OperationKey {
-	groups := m.groupedOperationKeys(keys)
-	ordered := make([]model.OperationKey, 0, len(keys))
-	for _, group := range groups {
-		ordered = append(ordered, group.Keys...)
-	}
-
-	return ordered
-}
-
-func operationGroupName(operation *model.Operation) string {
-	if operation == nil || len(operation.Tags) == 0 || strings.TrimSpace(operation.Tags[0]) == "" {
-		return "Untagged"
-	}
-
-	return operation.Tags[0]
+	return operationsui.FlattenKeys(operationsui.GroupKeys(keys, m.operationByKey))
 }
 
 func (m *Model) jumpToAdjacentOperationGroup(direction int) {
@@ -234,7 +151,7 @@ func (m *Model) ensureActiveOperationVisible() {
 	if endAlignedOffset < maxOffset {
 		maxOffset = endAlignedOffset
 	}
-	m.viewState.OperationsScrollOffset = clampInt(m.viewState.OperationsScrollOffset, 0, maxOffset)
+	m.viewState.OperationsScrollOffset = util.Clamp(m.viewState.OperationsScrollOffset, 0, maxOffset)
 
 	scrolloff := 5
 	for range 3 {
@@ -244,7 +161,7 @@ func (m *Model) ensureActiveOperationVisible() {
 			return
 		}
 
-		maxScrolloff := maxInt(visibleRows-1, 0)
+		maxScrolloff := max(visibleRows-1, 0)
 		if scrolloff > maxScrolloff {
 			scrolloff = maxScrolloff
 		}
@@ -265,7 +182,7 @@ func (m *Model) ensureActiveOperationVisible() {
 			return
 		}
 
-		nextOffset = clampInt(nextOffset, 0, maxOffset)
+		nextOffset = util.Clamp(nextOffset, 0, maxOffset)
 		if nextOffset == m.viewState.OperationsScrollOffset {
 			return
 		}
@@ -288,82 +205,43 @@ func (m *Model) maxOperationsScrollOffset() int {
 	return totalRows - 1
 }
 
-func (m *Model) availableDetailsSections() []detailsSection {
-	selected := m.resolvedSelectedOperation()
-	if selected == nil {
-		return []detailsSection{detailsSectionSummary}
+func (m *Model) availableDetailsSections() []string {
+	var warnings []model.SpecWarning
+	if m.session.Spec != nil {
+		warnings = m.session.Spec.Warnings
 	}
 
-	sections := []detailsSection{detailsSectionSummary}
-	requirement := m.effectiveSecurityRequirement(selected)
-	if requirement != nil && len(requirement.Alternatives) > 0 {
-		sections = append(sections, detailsSectionSecurity)
-	}
-	if m.session.Spec != nil && len(m.session.Spec.Warnings) > 0 {
-		sections = append(sections, detailsSectionWarnings)
-	}
-
-	return sections
+	return detailsui.AvailableSections(
+		m.resolvedSelectedOperation(),
+		m.effectiveSecurityRequirement(m.resolvedSelectedOperation()),
+		warnings,
+	)
 }
 
 func (m *Model) syncActiveDetailsSection() {
 	available := m.availableDetailsSections()
-	if len(available) == 0 {
-		m.activeDetailsSection = detailsSectionSummary
-		return
-	}
-
-	for _, section := range available {
-		if section == m.activeDetailsSection {
-			return
-		}
-	}
-
-	m.activeDetailsSection = available[0]
+	m.activeDetailsSection = widgets.ResolveActiveSection(m.activeDetailsSection, available, detailsui.SectionSummary)
 }
 
 func (m *Model) availableRequestSections() []string {
-	selected := m.resolvedSelectedOperation()
-	if selected == nil {
-		return nil
-	}
-
-	sections := make([]string, 0, len(requestParameterLocations)+2)
-	for _, location := range requestParameterLocations {
-		if hasParametersInLocation(selected.Parameters, location) {
-			sections = append(sections, requestLocationSectionLabel(location))
-		}
-	}
-	if selected.RequestBody != nil {
-		sections = append(sections, requestSectionBody)
-	}
-	requirement := m.effectiveSecurityRequirement(selected)
-	if requirement != nil && len(requirement.Alternatives) > 0 {
-		sections = append(sections, requestSectionAuth)
-	}
-
-	return sections
+	return requestui.AvailableSections(m.resolvedSelectedOperation(), m.effectiveSecurityRequirement(m.resolvedSelectedOperation()))
 }
 
 func (m *Model) resetActiveRequestSection() {
 	available := m.availableRequestSections()
-	if len(available) == 0 {
-		m.activeRequestSection = ""
-		m.resetRequestCursorAndScroll()
-		return
-	}
-
-	m.activeRequestSection = available[0]
+	m.activeRequestSection = widgets.ResolveActiveSection("", available, "")
 	m.resetRequestCursorAndScroll()
 }
 
 func (m *Model) moveRequestSection(direction int) {
-	m.activeRequestSection = moveStringSection(m.activeRequestSection, m.availableRequestSections(), direction)
+	available := m.availableRequestSections()
+	m.activeRequestSection = widgets.MoveActiveSection(m.activeRequestSection, available, direction, "")
 	m.resetRequestCursorAndScroll()
 }
 
 func (m *Model) setRequestSectionBoundary(last bool) {
-	m.activeRequestSection = boundaryStringSection(m.availableRequestSections(), last)
+	available := m.availableRequestSections()
+	m.activeRequestSection = widgets.BoundaryActiveSection(available, last, "")
 	m.resetRequestCursorAndScroll()
 }
 
@@ -373,30 +251,22 @@ func (m *Model) availableResponseSections() []string {
 		return nil
 	}
 
-	sections := make([]string, 0, len(selected.Responses))
-	for _, response := range selected.Responses {
-		sections = append(sections, response.StatusCode)
-	}
-
-	return sections
+	return responseui.AvailableSections(selected.Responses)
 }
 
 func (m *Model) resetActiveResponseSection() {
 	available := m.availableResponseSections()
-	if len(available) == 0 {
-		m.activeResponseSection = ""
-		return
-	}
-
-	m.activeResponseSection = available[0]
+	m.activeResponseSection = widgets.ResolveActiveSection("", available, "")
 }
 
 func (m *Model) moveResponseSection(direction int) {
-	m.activeResponseSection = moveStringSection(m.activeResponseSection, m.availableResponseSections(), direction)
+	available := m.availableResponseSections()
+	m.activeResponseSection = widgets.MoveActiveSection(m.activeResponseSection, available, direction, "")
 }
 
 func (m *Model) setResponseSectionBoundary(last bool) {
-	m.activeResponseSection = boundaryStringSection(m.availableResponseSections(), last)
+	available := m.availableResponseSections()
+	m.activeResponseSection = widgets.BoundaryActiveSection(available, last, "")
 }
 
 func (m *Model) syncActivePaneSections() {
@@ -417,101 +287,15 @@ func (m *Model) onSelectionChanged(previous, current model.OperationKey) {
 	}
 }
 
-func hasParametersInLocation(parameters []model.Parameter, location model.ParameterLocation) bool {
-	for _, parameter := range parameters {
-		if parameter.In == location {
-			return true
-		}
-	}
-
-	return false
-}
-
-func requestLocationSectionLabel(location model.ParameterLocation) string {
-	switch location {
-	case model.ParameterLocationPath:
-		return "Path"
-	case model.ParameterLocationQuery:
-		return "Query"
-	case model.ParameterLocationHeader:
-		return "Header"
-	case model.ParameterLocationCookie:
-		return "Cookie"
-	default:
-		return string(location)
-	}
-}
-
-func moveStringSection(current string, available []string, direction int) string {
-	if len(available) == 0 {
-		return ""
-	}
-
-	currentIndex := 0
-	for index, section := range available {
-		if section == current {
-			currentIndex = index
-			break
-		}
-	}
-
-	targetIndex := currentIndex + direction
-	if targetIndex < 0 || targetIndex >= len(available) {
-		return available[currentIndex]
-	}
-
-	return available[targetIndex]
-}
-
-func boundaryStringSection(available []string, last bool) string {
-	if len(available) == 0 {
-		return ""
-	}
-	if last {
-		return available[len(available)-1]
-	}
-
-	return available[0]
-}
-
 func (m *Model) moveDetailsSection(direction int) {
 	available := m.availableDetailsSections()
-	if len(available) == 0 {
-		m.activeDetailsSection = detailsSectionSummary
-		return
-	}
-
-	currentIndex := 0
-	for index, section := range available {
-		if section == m.activeDetailsSection {
-			currentIndex = index
-			break
-		}
-	}
-
-	targetIndex := currentIndex + direction
-	if targetIndex < 0 || targetIndex >= len(available) {
-		return
-	}
-
-	m.activeDetailsSection = available[targetIndex]
+	m.activeDetailsSection = widgets.MoveActiveSection(m.activeDetailsSection, available, direction, detailsui.SectionSummary)
 	m.viewState.DetailsScrollOffset = 0
 }
 
 func (m *Model) setDetailsSectionBoundary(last bool) {
 	available := m.availableDetailsSections()
-	if len(available) == 0 {
-		m.activeDetailsSection = detailsSectionSummary
-		return
-	}
-
-	if last {
-		m.activeDetailsSection = available[len(available)-1]
-		m.viewState.DetailsScrollOffset = 0
-		return
-	}
-
-	m.activeDetailsSection = available[0]
+	m.activeDetailsSection = widgets.BoundaryActiveSection(available, last, detailsui.SectionSummary)
 	m.viewState.DetailsScrollOffset = 0
 }
 
@@ -539,7 +323,7 @@ func (m *Model) scrollDetailsToBoundary(last bool) {
 
 func (m *Model) maxDetailsScrollOffset() int {
 	data := m.projectDetailsPane()
-	lines := len(splitLines(panes.RenderActiveDetailsSectionForProjection(data)))
+	lines := len(splitLines(detailsui.RenderActiveSection(data)))
 	visible := m.detailsVisibleBodyLines()
 	if lines <= visible {
 		return 0
@@ -550,7 +334,7 @@ func (m *Model) maxDetailsScrollOffset() int {
 
 func (m *Model) detailsVisibleBodyLines() int {
 	width, height := m.resolvedDimensions()
-	bodyHeight := maxInt(height-lipgloss.Height(m.renderStatusBar(width)), 12)
+	bodyHeight := max(height-lipgloss.Height(m.renderStatusBar(width)), 12)
 	var paneHeight int
 	if m.viewState.RightPaneLayoutPreset == layoutPresetWide {
 		paneHeight = computeWidePaneHeights(bodyHeight).Details
@@ -558,18 +342,5 @@ func (m *Model) detailsVisibleBodyLines() int {
 		paneHeight = computeNarrowPaneHeights(bodyHeight).Details
 	}
 
-	return maxInt(paneHeight-6, 1)
-}
-
-func trimLastRune(value string) string {
-	if value == "" {
-		return ""
-	}
-
-	_, size := utf8.DecodeLastRuneInString(value)
-	if size <= 0 {
-		return ""
-	}
-
-	return value[:len(value)-size]
+	return max(paneHeight-6, 1)
 }

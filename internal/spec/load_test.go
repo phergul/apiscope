@@ -326,7 +326,7 @@ func stringResponse(req *http.Request, statusCode int, contentType, body string)
 		resp.Header.Set("Content-Type", contentType)
 	}
 	if body != "" {
-		resp.Body = ioNopCloser(body)
+		resp.Body = io.NopCloser(strings.NewReader(body))
 	}
 
 	return resp
@@ -340,8 +340,4 @@ func clonedRequest(req *http.Request, rawURL string) *http.Request {
 	}
 
 	return clone
-}
-
-func ioNopCloser(body string) io.ReadCloser {
-	return io.NopCloser(strings.NewReader(body))
 }

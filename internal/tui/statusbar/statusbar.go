@@ -1,11 +1,11 @@
-package panes
+package statusbar
 
 import (
 	"fmt"
 	"strings"
 )
 
-type StatusBarData struct {
+type Data struct {
 	Source         string
 	State          string
 	Focus          string
@@ -17,7 +17,7 @@ type StatusBarData struct {
 	FilterText     string
 }
 
-func RenderStatusBar(data StatusBarData) string {
+func Render(data Data) string {
 	parts := []string{
 		fmt.Sprintf("Source: %s", data.Source),
 		fmt.Sprintf("State: %s", data.State),

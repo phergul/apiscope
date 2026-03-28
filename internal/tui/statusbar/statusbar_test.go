@@ -1,14 +1,16 @@
-package panes
+package statusbar
 
 import (
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
-func TestRenderStatusBarIncludesOperationIdentityAndCount(t *testing.T) {
+func TestRenderIncludesOperationIdentityAndCount(t *testing.T) {
 	t.Parallel()
 
-	content := RenderStatusBar(StatusBarData{
+	content := ansi.Strip(Render(Data{
 		Source:         "demo.yaml",
 		State:          "loaded",
 		Focus:          "operations",
@@ -17,8 +19,7 @@ func TestRenderStatusBarIncludesOperationIdentityAndCount(t *testing.T) {
 		OperationCount: 2,
 		VisibleCount:   2,
 		WarningCount:   2,
-	})
-	content = stripANSI(content)
+	}))
 
 	wantSnippets := []string{
 		"Source: demo.yaml",

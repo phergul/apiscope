@@ -30,12 +30,3 @@ func (m *Model) renderLoadErrorContent() string {
 func (m *Model) hasBlockingLoadError() bool {
 	return m.loadErr != nil
 }
-
-func fallbackText(value, fallback string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return fallback
-	}
-
-	return value
-}

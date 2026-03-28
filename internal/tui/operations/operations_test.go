@@ -1,33 +1,34 @@
-package panes
+package operations
 
 import (
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
-func TestRenderOperationsHighlightsSelectedOperationAndPreservesOrder(t *testing.T) {
+func TestRenderHighlightsSelectedOperationAndPreservesOrder(t *testing.T) {
 	t.Parallel()
 
-	content := RenderOperations(OperationsData{
+	content := ansi.Strip(Render(Data{
 		HasSpec:         true,
 		TotalOperations: 2,
-		Groups: []OperationsGroup{
+		Groups: []Group{
 			{
 				Name: "pets",
-				Rows: []OperationRow{
+				Rows: []Row{
 					{Method: "GET", Path: "/pets", Selected: true},
 					{Method: "POST", Path: "/pets"},
 				},
 			},
 			{
 				Name: "admin",
-				Rows: []OperationRow{
+				Rows: []Row{
 					{Method: "DELETE", Path: "/pets/{id}"},
 				},
 			},
 		},
-	})
-	content = stripANSI(content)
+	}))
 
 	firstGroup := strings.Index(content, "PETS")
 	secondGroup := strings.Index(content, "ADMIN")
@@ -47,28 +48,26 @@ func TestRenderOperationsHighlightsSelectedOperationAndPreservesOrder(t *testing
 	}
 }
 
-func TestRenderOperationsShowsEmptyState(t *testing.T) {
+func TestRenderShowsEmptyState(t *testing.T) {
 	t.Parallel()
 
-	content := RenderOperations(OperationsData{
+	content := ansi.Strip(Render(Data{
 		HasSpec:         true,
 		TotalOperations: 0,
-	})
-	content = stripANSI(content)
+	}))
 
 	if !strings.Contains(content, "does not define any operations") {
 		t.Fatalf("expected empty operations state, got %q", content)
 	}
 }
 
-func TestRenderOperationsShowsFilteredEmptyState(t *testing.T) {
+func TestRenderShowsFilteredEmptyState(t *testing.T) {
 	t.Parallel()
 
-	content := RenderOperations(OperationsData{
+	content := ansi.Strip(Render(Data{
 		HasSpec:         true,
 		TotalOperations: 2,
-	})
-	content = stripANSI(content)
+	}))
 
 	if !strings.Contains(content, "No operations match the current filter.") {
 		t.Fatalf("expected filtered empty state, got %q", content)

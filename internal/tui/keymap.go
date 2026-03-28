@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"unicode/utf8"
+
 	"github.com/phergul/apiscope/internal/model"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -154,7 +156,15 @@ func (m *Model) updateFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.syncVisibleOperations()
 		m.viewState.ActiveEditorMode = model.EditorModeBrowse
 	case "backspace", "ctrl+h", "delete":
-		m.viewState.FilterText = trimLastRune(m.viewState.FilterText)
+		if m.viewState.FilterText == "" {
+			break
+		}
+		_, size := utf8.DecodeLastRuneInString(m.viewState.FilterText)
+		if size <= 0 {
+			m.viewState.FilterText = ""
+		} else {
+			m.viewState.FilterText = m.viewState.FilterText[:len(m.viewState.FilterText)-size]
+		}
 		m.filterInput.SetValue(m.viewState.FilterText)
 		m.syncVisibleOperations()
 	default:

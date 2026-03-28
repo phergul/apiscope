@@ -1,6 +1,7 @@
 package widgets
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -20,6 +21,51 @@ type SectionViewData struct {
 	Sections   []Section
 	Active     string
 	EmptyState string
+}
+
+func ResolveActiveSection(current string, available []string, empty string) string {
+	if len(available) == 0 {
+		return empty
+	}
+
+	if slices.Contains(available, current) {
+		return current
+	}
+
+	return available[0]
+}
+
+func MoveActiveSection(current string, available []string, direction int, empty string) string {
+	if len(available) == 0 {
+		return empty
+	}
+
+	current = ResolveActiveSection(current, available, empty)
+	currentIndex := 0
+	for index, section := range available {
+		if section == current {
+			currentIndex = index
+			break
+		}
+	}
+
+	targetIndex := currentIndex + direction
+	if targetIndex < 0 || targetIndex >= len(available) {
+		return current
+	}
+
+	return available[targetIndex]
+}
+
+func BoundaryActiveSection(available []string, last bool, empty string) string {
+	if len(available) == 0 {
+		return empty
+	}
+	if last {
+		return available[len(available)-1]
+	}
+
+	return available[0]
 }
 
 func RenderSectionLabels(data SectionStripData) string {

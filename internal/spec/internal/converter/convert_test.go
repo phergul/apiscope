@@ -2,6 +2,7 @@ package converter
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -444,24 +445,5 @@ func mustOpenAPI3Doc(t *testing.T, raw string) *openapi3.T {
 
 func isPipelineErrorKind(err error, kind pipeline.ErrorKind) bool {
 	var pipelineErr *pipeline.Error
-	return err != nil && kind != "" && errorAs(err, &pipelineErr) && pipelineErr.Kind == kind
-}
-
-func errorAs(err error, target any) bool {
-	switch typed := target.(type) {
-	case **pipeline.Error:
-		for err != nil {
-			if candidate, ok := err.(*pipeline.Error); ok {
-				*typed = candidate
-				return true
-			}
-			unwrapper, ok := err.(interface{ Unwrap() error })
-			if !ok {
-				return false
-			}
-			err = unwrapper.Unwrap()
-		}
-	}
-
-	return false
+	return err != nil && kind != "" && errors.As(err, &pipelineErr) && pipelineErr.Kind == kind
 }

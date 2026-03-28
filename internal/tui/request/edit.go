@@ -1,0 +1,99 @@
+package request
+
+import (
+	"github.com/phergul/apiscope/internal/app"
+	"github.com/phergul/apiscope/internal/model"
+	"github.com/phergul/apiscope/internal/tui/describe"
+)
+
+type EditStart struct {
+	Kind               model.RequestEditKind
+	Target             string
+	Buffer             string
+	FocusField         bool
+	FocusBody          bool
+	ResetScroll        bool
+	CycleBodyMediaType bool
+}
+
+func StartEdit(selected *model.Operation, draft *model.RequestDraft, rows []RowDescriptor, activeRow int) EditStart {
+	if selected == nil || len(rows) == 0 {
+		return EditStart{}
+	}
+
+	row := rows[ClampActiveRow(activeRow, len(rows))]
+	switch row.Kind {
+	case RowKindParameter:
+		if !row.Editable || row.Parameter == nil {
+			return EditStart{}
+		}
+		return EditStart{
+			Kind:       model.RequestEditKindField,
+			Target:     row.ID,
+			Buffer:     DraftParameterValue(draft, *row.Parameter),
+			FocusField: true,
+		}
+	case RowKindBodyMediaType:
+		return EditStart{CycleBodyMediaType: true}
+	case RowKindBodyText:
+		buffer := ""
+		if draft != nil {
+			buffer = draft.BodyRaw
+		}
+		return EditStart{
+			Kind:        model.RequestEditKindBody,
+			Target:      row.ID,
+			Buffer:      buffer,
+			FocusBody:   true,
+			ResetScroll: true,
+		}
+	default:
+		return EditStart{}
+	}
+}
+
+func SaveEdit(session *model.SessionState, selected *model.Operation, rows []RowDescriptor, activeRow int, kind model.RequestEditKind, buffer string) bool {
+	if session == nil || selected == nil || len(rows) == 0 {
+		return false
+	}
+
+	row := rows[ClampActiveRow(activeRow, len(rows))]
+	switch kind {
+	case model.RequestEditKindField:
+		if row.Parameter != nil {
+			app.SetDraftParameter(session, selected, *row.Parameter, buffer)
+		}
+	case model.RequestEditKindBody:
+		app.SetDraftBodyRaw(session, selected, buffer)
+	}
+
+	return true
+}
+
+func CycleBodyMediaType(session *model.SessionState, selected *model.Operation) bool {
+	if session == nil || selected == nil || selected.RequestBody == nil || len(selected.RequestBody.Content) == 0 {
+		return false
+	}
+
+	draft := app.EnsureRequestDraft(session, selected)
+	if draft == nil {
+		return false
+	}
+
+	mediaTypes := describe.MediaTypesForContent(selected.RequestBody.Content)
+	if len(mediaTypes) == 0 {
+		return false
+	}
+
+	currentIndex := 0
+	for index, mediaType := range mediaTypes {
+		if mediaType == draft.BodyMediaType {
+			currentIndex = index
+			break
+		}
+	}
+
+	nextIndex := (currentIndex + 1) % len(mediaTypes)
+	app.SetDraftBodyMediaType(session, selected, mediaTypes[nextIndex])
+	return true
+}

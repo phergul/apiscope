@@ -6,6 +6,7 @@ import (
 
 	"github.com/phergul/apiscope/internal/app"
 	"github.com/phergul/apiscope/internal/model"
+	detailsui "github.com/phergul/apiscope/internal/tui/details"
 	"github.com/phergul/apiscope/internal/tui/widgets"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -30,7 +31,7 @@ type Model struct {
 	height                int
 	source                string
 	loadErr               error
-	activeDetailsSection  detailsSection
+	activeDetailsSection  string
 	activeRequestSection  string
 	activeResponseSection string
 	filterInput           widgets.TextInput
@@ -69,7 +70,7 @@ func NewModel(service *app.Service, source string) *Model {
 	return &Model{
 		service:               service,
 		source:                source,
-		activeDetailsSection:  detailsSectionSummary,
+		activeDetailsSection:  detailsui.SectionSummary,
 		activeRequestSection:  "",
 		activeResponseSection: "",
 		filterInput:           filterInput,

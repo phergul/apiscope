@@ -10,6 +10,7 @@ func newLoadResult(apiSpec *model.APISpec, rawSource string) LoadResult {
 
 	if len(result.View.VisibleOperationKeys) > 0 {
 		result.Session.SelectedOperationKey = result.View.VisibleOperationKeys[0]
+		EnsureRequestDraft(&result.Session, &apiSpec.Operations[0])
 	}
 
 	return result

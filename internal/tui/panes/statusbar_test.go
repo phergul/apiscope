@@ -18,6 +18,7 @@ func TestRenderStatusBarIncludesOperationIdentityAndCount(t *testing.T) {
 		VisibleCount:   2,
 		WarningCount:   2,
 	})
+	content = stripANSI(content)
 
 	wantSnippets := []string{
 		"Source: demo.yaml",

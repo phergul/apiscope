@@ -267,34 +267,41 @@ func (m *Model) syncActiveRequestSection() {
 	available := m.availableRequestSections()
 	if len(available) == 0 {
 		m.activeRequestSection = ""
+		m.resetRequestCursorAndScroll()
 		return
 	}
 
 	for _, section := range available {
 		if section == m.activeRequestSection {
+			m.syncActiveRequestRow()
 			return
 		}
 	}
 
 	m.activeRequestSection = available[0]
+	m.resetRequestCursorAndScroll()
 }
 
 func (m *Model) resetActiveRequestSection() {
 	available := m.availableRequestSections()
 	if len(available) == 0 {
 		m.activeRequestSection = ""
+		m.resetRequestCursorAndScroll()
 		return
 	}
 
 	m.activeRequestSection = available[0]
+	m.resetRequestCursorAndScroll()
 }
 
 func (m *Model) moveRequestSection(direction int) {
 	m.activeRequestSection = moveStringSection(m.activeRequestSection, m.availableRequestSections(), direction)
+	m.resetRequestCursorAndScroll()
 }
 
 func (m *Model) setRequestSectionBoundary(last bool) {
 	m.activeRequestSection = boundaryStringSection(m.availableRequestSections(), last)
+	m.resetRequestCursorAndScroll()
 }
 
 func (m *Model) availableResponseSections() []string {
@@ -350,11 +357,13 @@ func (m *Model) syncActivePaneSections() {
 	m.resetActiveRequestSection()
 	m.resetActiveResponseSection()
 	m.viewState.DetailsScrollOffset = 0
+	m.ensureSelectedRequestDraft()
 }
 
 func (m *Model) onSelectionChanged(previous, current model.OperationKey) {
 	m.syncActiveDetailsSection()
 	if previous != current {
+		m.ensureSelectedRequestDraft()
 		m.resetActiveRequestSection()
 		m.resetActiveResponseSection()
 		m.viewState.DetailsScrollOffset = 0
@@ -464,9 +473,6 @@ func (m *Model) detailsSectionStrip() string {
 	parts := make([]string, 0, len(available))
 	for _, section := range available {
 		label := string(section)
-		if section == m.activeDetailsSection {
-			label = "[" + label + "]"
-		}
 		parts = append(parts, label)
 	}
 

@@ -4,8 +4,10 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/phergul/apiscope/internal/app"
 	"github.com/phergul/apiscope/internal/model"
 	"github.com/phergul/apiscope/internal/tui/panes"
+	"github.com/phergul/apiscope/internal/tui/widgets"
 )
 
 type paneView struct {
@@ -24,14 +26,28 @@ func (m *Model) detailsPaneContent() string {
 }
 
 func (m *Model) detailsPaneContentForHeight(height int) string {
+	width, _ := m.resolvedDimensions()
+	if m.viewState.RightPaneLayoutPreset == layoutPresetWide {
+		leftWidth := clampInt(int(float64(width)*0.32), 30, 40)
+		leftWidth = minInt(leftWidth, width-20)
+		width = maxInt(width-leftWidth, 20)
+	}
+
+	return m.detailsPaneContentForSize(width, height)
+}
+
+func (m *Model) detailsPaneContentForSize(width, height int) string {
 	data := m.projectDetailsPane()
 	if data.LoadInFlight || strings.TrimSpace(data.LoadErrorBody) != "" || data.Selected == nil {
 		return panes.RenderDetails(data)
 	}
 
 	visibleLines := maxInt(height-6, 1)
-	lines := splitLines(panes.RenderActiveDetailsSectionForProjection(data))
-	clipped := strings.Join(clampLines(lines, m.viewState.DetailsScrollOffset, visibleLines), "\n")
+	contentWidth := maxInt(width-4, 1)
+	viewport := widgets.NewViewport(contentWidth, visibleLines)
+	viewport.SetContent(panes.RenderActiveDetailsSectionForProjection(data))
+	viewport.SetYOffset(m.viewState.DetailsScrollOffset)
+	clipped := viewport.View()
 	sections := panes.BuildDetailsSectionsForProjection(data)
 	for index := range sections {
 		if sections[index].Label == data.ActiveSection {
@@ -86,11 +102,18 @@ func (m *Model) paneView(pane model.FocusedPane) paneView {
 }
 
 func (m *Model) operationsPaneFooter() string {
+	m.ensureWidgetDefaults()
+
 	if m.viewState.ActiveEditorMode != model.EditorModeFilter && strings.TrimSpace(m.viewState.FilterText) == "" {
 		return ""
 	}
 
-	return panes.FilterBarText(m.viewState.FilterText, m.viewState.ActiveEditorMode == model.EditorModeFilter)
+	if m.viewState.ActiveEditorMode == model.EditorModeFilter {
+		return m.filterInput.View()
+	}
+
+	return widgets.InputFrameStyle(false).
+		Render("Filter: " + m.viewState.FilterText)
 }
 
 func (m *Model) projectOperationsPane() panes.OperationsData {
@@ -172,8 +195,24 @@ func (m *Model) projectRequestPane() panes.RequestData {
 		return data
 	}
 
-	data.Sections = projectRequestSections(selected, m.effectiveSecurityRequirement(selected))
+	draft := app.EnsureRequestDraft(&m.session, selected)
+	data.Sections = m.availableRequestSections()
 	data.ActiveSection = m.activeRequestSection
+	data.ActiveRow = m.viewState.RequestActiveRow
+	data.Edit = panes.RequestEditView{
+		Kind:      string(m.viewState.RequestEditKind),
+		Buffer:    m.viewState.RequestEditBuffer,
+		MediaType: requestDraftBodyMediaType(selected, draft),
+		View:      m.currentRequestEditorView(),
+	}
+	for _, row := range m.activeRequestRows() {
+		data.Rows = append(data.Rows, panes.RequestRow{
+			Label:    row.Label,
+			Meta:     row.Meta,
+			Value:    row.Value,
+			Editable: row.Editable,
+		})
+	}
 	if len(data.Sections) == 0 {
 		data.EmptyState = "This operation does not declare request parameters, request body, or auth requirements."
 	}

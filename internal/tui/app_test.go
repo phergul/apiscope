@@ -258,6 +258,7 @@ func TestModelRendersLoadFailureWithoutCrashing(t *testing.T) {
 	})
 	updated := updatedModel.(*Model)
 	view := updated.View()
+	view = stripANSI(view)
 
 	if !strings.Contains(view, "Failed to load spec") {
 		t.Fatalf("expected view to render load failure, got %q", view)
@@ -524,16 +525,36 @@ func TestModelRequestSectionNavigationMovesAcrossParameterBodyAndAuth(t *testing
 		t.Fatalf("expected ] to move to request body, got %q", updated.activeRequestSection)
 	}
 
-	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnd})
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
 	updated = updatedModel.(*Model)
 	if updated.activeRequestSection != "Auth" {
-		t.Fatalf("expected end to jump to auth, got %q", updated.activeRequestSection)
+		t.Fatalf("expected ] to move to auth, got %q", updated.activeRequestSection)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
+	updated = updatedModel.(*Model)
+	if updated.activeRequestSection != "Body" {
+		t.Fatalf("expected [ to move back to body, got %q", updated.activeRequestSection)
+	}
+}
+
+func TestModelRequestRowNavigationMovesWithinActiveSection(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.activeRequestSection = "Body"
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnd})
+	updated := updatedModel.(*Model)
+	if updated.viewState.RequestActiveRow != 1 {
+		t.Fatalf("expected end to jump to last request row, got %d", updated.viewState.RequestActiveRow)
 	}
 
 	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyHome})
 	updated = updatedModel.(*Model)
-	if updated.activeRequestSection != "Path" {
-		t.Fatalf("expected home to jump to first request section, got %q", updated.activeRequestSection)
+	if updated.viewState.RequestActiveRow != 0 {
+		t.Fatalf("expected home to jump to first request row, got %d", updated.viewState.RequestActiveRow)
 	}
 }
 
@@ -582,6 +603,8 @@ func TestModelRequestAndResponseSectionsResetToFirstOnOperationChange(t *testing
 				model.NewOperationKey("GET", "/first"),
 				model.NewOperationKey("GET", "/second"),
 			},
+			RequestActiveRow:    1,
+			RequestScrollOffset: 1,
 		},
 		activeDetailsSection:  detailsSectionSummary,
 		activeRequestSection:  "Query",
@@ -595,6 +618,12 @@ func TestModelRequestAndResponseSectionsResetToFirstOnOperationChange(t *testing
 	}
 	if updated.activeRequestSection != "Path" {
 		t.Fatalf("expected request section to reset to first available, got %q", updated.activeRequestSection)
+	}
+	if updated.viewState.RequestActiveRow != 0 {
+		t.Fatalf("expected request row to reset on operation change, got %d", updated.viewState.RequestActiveRow)
+	}
+	if updated.viewState.RequestScrollOffset != 0 {
+		t.Fatalf("expected request scroll offset to reset on operation change, got %d", updated.viewState.RequestScrollOffset)
 	}
 	if updated.activeResponseSection != "200" {
 		t.Fatalf("expected response section to reset to first available, got %q", updated.activeResponseSection)
@@ -618,6 +647,206 @@ func TestModelResponseSectionNavigationAndFallback(t *testing.T) {
 	updated.syncActivePaneSections()
 	if updated.activeResponseSection != "" {
 		t.Fatalf("expected response section to clear when no responses remain, got %q", updated.activeResponseSection)
+	}
+}
+
+func TestModelRequestEditSavesAndCancelsParameterDrafts(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.activeRequestSection = "Path"
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated := updatedModel.(*Model)
+	if updated.viewState.ActiveEditorMode != model.EditorModeEdit {
+		t.Fatalf("expected enter to start field edit mode, got %q", updated.viewState.ActiveEditorMode)
+	}
+	if updated.viewState.RequestEditKind != model.RequestEditKindField {
+		t.Fatalf("expected field request edit kind, got %q", updated.viewState.RequestEditKind)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("pet-123")})
+	updated = updatedModel.(*Model)
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated = updatedModel.(*Model)
+
+	draft := updated.ensureSelectedRequestDraft()
+	if got := draft.PathParams["petId"]; got != "pet-123" {
+		t.Fatalf("expected saved path param value, got %q", got)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated = updatedModel.(*Model)
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	updated = updatedModel.(*Model)
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated = updatedModel.(*Model)
+
+	draft = updated.ensureSelectedRequestDraft()
+	if got := draft.PathParams["petId"]; got != "pet-123" {
+		t.Fatalf("expected esc to discard in-progress field edit, got %q", got)
+	}
+}
+
+func TestModelRequestBodyMediaTypeCyclesOnEnter(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.session.Spec.Operations[0].RequestBody.Content = []model.MediaTypeSpec{
+		{MediaType: "application/json"},
+		{MediaType: "application/xml"},
+	}
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.activeRequestSection = "Body"
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated := updatedModel.(*Model)
+	draft := updated.ensureSelectedRequestDraft()
+	if draft.BodyMediaType != "application/xml" {
+		t.Fatalf("expected enter on media type row to cycle to application/xml, got %q", draft.BodyMediaType)
+	}
+}
+
+func TestModelRequestBodyEditorSavesAndCancels(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.activeRequestSection = "Body"
+	m.viewState.RequestActiveRow = 1
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated := updatedModel.(*Model)
+	if updated.viewState.RequestEditKind != model.RequestEditKindBody {
+		t.Fatalf("expected body edit mode, got %q", updated.viewState.RequestEditKind)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("{")})
+	updated = updatedModel.(*Model)
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated = updatedModel.(*Model)
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("}")})
+	updated = updatedModel.(*Model)
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
+	updated = updatedModel.(*Model)
+
+	draft := updated.ensureSelectedRequestDraft()
+	if got := draft.BodyRaw; got != "{\n}" {
+		t.Fatalf("expected ctrl+s to save body editor contents, got %q", got)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated = updatedModel.(*Model)
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	updated = updatedModel.(*Model)
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated = updatedModel.(*Model)
+
+	draft = updated.ensureSelectedRequestDraft()
+	if got := draft.BodyRaw; got != "{\n}" {
+		t.Fatalf("expected esc to discard in-progress body edits, got %q", got)
+	}
+}
+
+func TestModelRequestEditingBlocksNavigationUntilExit(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.activeRequestSection = "Path"
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated := updatedModel.(*Model)
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'4'}})
+	updated = updatedModel.(*Model)
+	if updated.viewState.FocusedPane != model.FocusedPaneRequest {
+		t.Fatalf("expected request pane focus to remain while editing, got %q", updated.viewState.FocusedPane)
+	}
+	if updated.viewState.RequestEditBuffer != "4" {
+		t.Fatalf("expected rune input to be captured by edit buffer, got %q", updated.viewState.RequestEditBuffer)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	updated = updatedModel.(*Model)
+	if updated.activeRequestSection != "Path" {
+		t.Fatalf("expected request section navigation to be blocked during edit, got %q", updated.activeRequestSection)
+	}
+	if updated.session.SelectedOperationKey != model.NewOperationKey("GET", "/pets") {
+		t.Fatalf("expected operation selection to remain unchanged during edit, got %q", updated.session.SelectedOperationKey)
+	}
+}
+
+func TestModelRequestDraftPersistsAcrossOperationAndFilterChanges(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.activeRequestSection = "Path"
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated := updatedModel.(*Model)
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("keep-me")})
+	updated = updatedModel.(*Model)
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated = updatedModel.(*Model)
+
+	updated.viewState.FocusedPane = model.FocusedPaneOperations
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	updated = updatedModel.(*Model)
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	updated = updatedModel.(*Model)
+
+	draft := updated.ensureSelectedRequestDraft()
+	if got := draft.PathParams["petId"]; got != "keep-me" {
+		t.Fatalf("expected draft to persist across operation changes, got %q", got)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	updated = updatedModel.(*Model)
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("admin")})
+	updated = updatedModel.(*Model)
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated = updatedModel.(*Model)
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	updated = updatedModel.(*Model)
+
+	draft = updated.ensureSelectedRequestDraft()
+	if got := draft.PathParams["petId"]; got != "keep-me" {
+		t.Fatalf("expected draft to persist across filter changes, got %q", got)
+	}
+}
+
+func TestModelRequestScrollKeepsActiveRowVisible(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.session.Spec.Operations[0].Parameters = []model.Parameter{
+		{Name: "a", In: model.ParameterLocationQuery, Schema: &model.Schema{Type: "string"}},
+		{Name: "b", In: model.ParameterLocationQuery, Schema: &model.Schema{Type: "string"}},
+		{Name: "c", In: model.ParameterLocationQuery, Schema: &model.Schema{Type: "string"}},
+		{Name: "d", In: model.ParameterLocationQuery, Schema: &model.Schema{Type: "string"}},
+		{Name: "e", In: model.ParameterLocationQuery, Schema: &model.Schema{Type: "string"}},
+	}
+	m.width = 80
+	m.height = 12
+	m.viewState.RightPaneLayoutPreset = layoutPresetNarrow
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.activeRequestSection = "Query"
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	updated := updatedModel.(*Model)
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	updated = updatedModel.(*Model)
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	updated = updatedModel.(*Model)
+
+	if updated.viewState.RequestActiveRow != 3 {
+		t.Fatalf("expected request row cursor to move, got %d", updated.viewState.RequestActiveRow)
+	}
+	if updated.viewState.RequestScrollOffset == 0 {
+		t.Fatalf("expected request scroll offset to advance to keep active row visible, got %d", updated.viewState.RequestScrollOffset)
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 
 	"github.com/phergul/apiscope/internal/model"
 	"github.com/phergul/apiscope/internal/tui/panes"
+	"github.com/phergul/apiscope/internal/tui/widgets"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -90,11 +91,7 @@ func (m *Model) renderBlockingLoadError(width, height int) string {
 		"[ Quit ]",
 	}, "\n")
 
-	popup := lipgloss.NewStyle().
-		Width(maxInt(popupWidth-4, 1)).
-		Border(paneBorder).
-		Padding(1, 2).
-		Render(body)
+	popup := widgets.ModalStyle(maxInt(popupWidth-4, 1)).Render(body)
 
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, popup)
 }
@@ -109,8 +106,9 @@ func (m *Model) renderWideLayout(width, height int) string {
 
 	operationsView := m.paneView(model.FocusedPaneOperations)
 	detailsView := m.paneView(model.FocusedPaneDetails)
-	detailsView.Body = m.detailsPaneContentForHeight(heights.Details)
+	detailsView.Body = m.detailsPaneContentForSize(rightWidth, heights.Details)
 	requestView := m.paneView(model.FocusedPaneRequest)
+	requestView.Body = m.requestPaneContentForSize(rightWidth, requestHeight)
 	responseView := m.paneView(model.FocusedPaneResponse)
 
 	operationsPane := m.renderPane(operationsView.Title, operationsView.Body, operationsView.Footer, leftWidth, height, operationsView.Focused)
@@ -134,8 +132,9 @@ func (m *Model) renderNarrowLayout(width, height int) string {
 
 	operationsView := m.paneView(model.FocusedPaneOperations)
 	detailsView := m.paneView(model.FocusedPaneDetails)
-	detailsView.Body = m.detailsPaneContentForHeight(heights.Details)
+	detailsView.Body = m.detailsPaneContentForSize(width, heights.Details)
 	requestView := m.paneView(model.FocusedPaneRequest)
+	requestView.Body = m.requestPaneContentForSize(width, requestHeight)
 	responseView := m.paneView(model.FocusedPaneResponse)
 
 	parts := []string{
@@ -153,7 +152,10 @@ func (m *Model) renderNarrowLayout(width, height int) string {
 func (m *Model) renderZoomLayout(width, height int) string {
 	view := m.paneView(m.viewState.FocusedPane)
 	if m.viewState.FocusedPane == model.FocusedPaneDetails {
-		view.Body = m.detailsPaneContentForHeight(height)
+		view.Body = m.detailsPaneContentForSize(width, height)
+	}
+	if m.viewState.FocusedPane == model.FocusedPaneRequest {
+		view.Body = m.requestPaneContentForSize(width, height)
 	}
 	return m.renderPane(view.Title, view.Body, view.Footer, width, height, true)
 }
@@ -163,29 +165,21 @@ func (m *Model) renderPane(title, body, footer string, width, height int, focuse
 	height = maxInt(height, 4)
 
 	titleLine := title
-	if focused {
-		titleLine = "> " + title
-	}
+	// if focused {
+	// 	titleLine = "> " + title
+	// }
 
 	contentWidth := maxInt(width-4, 1)
 	contentHeight := maxInt(height-2, 1)
 	footerBlock := ""
 	footerHeight := 0
 	if strings.TrimSpace(footer) != "" {
-		footerBlock = lipgloss.NewStyle().
-			BorderTop(true).
-			BorderStyle(paneBorder).
-			Width(contentWidth).
-			Render(footer)
+		footerBlock = widgets.PaneFooterStyle(contentWidth).Render(footer)
 		footerHeight = lipgloss.Height(footerBlock)
 	}
 
 	bodyHeight := maxInt(contentHeight-footerHeight, 1)
-	bodyBlock := lipgloss.NewStyle().
-		Width(contentWidth).
-		Height(bodyHeight).
-		MaxWidth(contentWidth).
-		MaxHeight(bodyHeight).
+	bodyBlock := widgets.PaneBodyStyle(contentWidth, bodyHeight).
 		Render(titleLine + "\n\n" + body)
 
 	content := bodyBlock
@@ -193,24 +187,12 @@ func (m *Model) renderPane(title, body, footer string, width, height int, focuse
 		content = lipgloss.JoinVertical(lipgloss.Left, bodyBlock, footerBlock)
 	}
 
-	style := lipgloss.NewStyle().
-		Border(paneBorder).
-		Padding(0, 1)
-	if focused {
-		style = style.Bold(true)
-	}
-
-	return lipgloss.Place(width, height, lipgloss.Left, lipgloss.Top, style.Render(content))
+	return lipgloss.Place(width, height, lipgloss.Left, lipgloss.Top, widgets.PaneFrameStyle(focused).Render(content))
 }
 
 func (m *Model) renderStatusBar(width int) string {
 	line := panes.RenderStatusBar(m.projectStatusBar())
-
-	return lipgloss.NewStyle().
-		BorderTop(true).
-		BorderStyle(paneBorder).
-		Width(width).
-		Render(line)
+	return widgets.StatusBarStyle(width).Render(line)
 }
 
 func (m *Model) resolvedExpandedRightPane() model.FocusedPane {

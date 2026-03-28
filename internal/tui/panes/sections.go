@@ -1,10 +1,18 @@
 package panes
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/phergul/apiscope/internal/tui/widgets"
+)
 
 type Section struct {
 	Label string
 	Body  string
+}
+
+func RenderSectionLabels(labels []string, active string) string {
+	return widgets.RenderSectionStrip(labels, active)
 }
 
 func RenderSectionView(sections []Section, active, emptyState string) string {
@@ -20,16 +28,12 @@ func RenderSectionView(sections []Section, active, emptyState string) string {
 }
 
 func RenderSectionStrip(sections []Section, active string) string {
-	parts := make([]string, 0, len(sections))
+	labels := make([]string, 0, len(sections))
 	for _, section := range sections {
-		label := section.Label
-		if label == activeSectionLabel(sections, active) {
-			label = "[" + label + "]"
-		}
-		parts = append(parts, label)
+		labels = append(labels, section.Label)
 	}
 
-	return strings.Join(parts, "  ")
+	return widgets.RenderSectionStrip(labels, activeSectionLabel(sections, active))
 }
 
 func activeSectionBody(sections []Section, active string) string {

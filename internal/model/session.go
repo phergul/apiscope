@@ -17,6 +17,14 @@ const (
 	EditorModeFilter EditorMode = "filter"
 )
 
+type RequestEditKind string
+
+const (
+	RequestEditKindNone  RequestEditKind = ""
+	RequestEditKindField RequestEditKind = "field"
+	RequestEditKindBody  RequestEditKind = "body"
+)
+
 type SessionState struct {
 	SpecSource           string
 	SpecFingerprint      SpecFingerprint
@@ -38,9 +46,13 @@ type ViewState struct {
 	VisibleOperationKeys   []OperationKey
 	OperationsCursor       int
 	DetailsScrollOffset    int
+	RequestActiveRow       int
 	RequestScrollOffset    int
 	ResponseScrollOffset   int
 	ActiveEditorMode       EditorMode
+	RequestEditKind        RequestEditKind
+	RequestEditBuffer      string
+	RequestEditTarget      string
 	ZoomedPane             bool
 	OperationsPaneVisible  bool
 	RightPaneLayoutPreset  string

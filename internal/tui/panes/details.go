@@ -43,23 +43,7 @@ func RenderDetails(data DetailsData) string {
 		return strings.Join(lines, "\n")
 	}
 
-	sections := []Section{
-		{Label: DetailsSectionSummary, Body: renderSummaryDetailsContent(data)},
-	}
-	if data.Security != nil && len(data.Security.Alternatives) > 0 {
-		sections = append(sections, Section{
-			Label: DetailsSectionSecurity,
-			Body:  formatSecurityRequirement(data.Security),
-		})
-	}
-	if len(data.Warnings) > 0 {
-		sections = append(sections, Section{
-			Label: DetailsSectionWarnings,
-			Body:  formatWarnings(data.Warnings),
-		})
-	}
-
-	return RenderSectionView(sections, data.ActiveSection, "")
+	return RenderSectionView(buildDetailsSections(data), data.ActiveSection, "")
 }
 
 func renderSummaryDetailsContent(data DetailsData) string {
@@ -83,6 +67,10 @@ func RenderActiveDetailsSectionForProjection(data DetailsData) string {
 }
 
 func BuildDetailsSectionsForProjection(data DetailsData) []Section {
+	return buildDetailsSections(data)
+}
+
+func buildDetailsSections(data DetailsData) []Section {
 	sections := []Section{
 		{Label: DetailsSectionSummary, Body: RenderActiveDetailsSectionForProjection(DetailsData{
 			Selected:      data.Selected,

@@ -11,6 +11,7 @@ func TestRenderDetailsRendersSummarySection(t *testing.T) {
 	t.Parallel()
 
 	content := RenderDetails(newDetailsData())
+	content = stripANSI(content)
 
 	wantSnippets := []string{
 		"[Summary]  Security  Warnings",
@@ -36,6 +37,7 @@ func TestRenderDetailsShowsSecuritySectionWhenActive(t *testing.T) {
 	data.ActiveSection = DetailsSectionSecurity
 
 	content := RenderDetails(data)
+	content = stripANSI(content)
 
 	wantSnippets := []string{
 		"Summary  [Security]  Warnings",
@@ -57,6 +59,7 @@ func TestRenderDetailsShowsWarningsSectionWhenActive(t *testing.T) {
 	data.ActiveSection = DetailsSectionWarnings
 
 	content := RenderDetails(data)
+	content = stripANSI(content)
 
 	wantSnippets := []string{
 		"Summary  Security  [Warnings]",
@@ -75,6 +78,7 @@ func TestRenderDetailsDoesNotShowRequestOrResponseSections(t *testing.T) {
 	t.Parallel()
 
 	content := RenderDetails(newDetailsData())
+	content = stripANSI(content)
 
 	unwantedSnippets := []string{
 		"Parameters",
@@ -99,6 +103,7 @@ func TestRenderDetailsExplainsMissingSelection(t *testing.T) {
 	content := RenderDetails(DetailsData{
 		FilterText: "zzz",
 	})
+	content = stripANSI(content)
 
 	wantSnippets := []string{
 		"No operation selected.",
@@ -125,6 +130,7 @@ func TestRenderDetailsShowsExplicitNoneStates(t *testing.T) {
 	}
 
 	content := RenderDetails(data)
+	content = stripANSI(content)
 
 	wantSnippets := []string{
 		"[Summary]  Security  Warnings",

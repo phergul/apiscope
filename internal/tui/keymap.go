@@ -26,6 +26,9 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.viewState.ActiveEditorMode == model.EditorModeFilter {
 		return m.updateFilterKey(msg)
 	}
+	if m.requestEditActive() {
+		return m.updateRequestEditKey(msg)
+	}
 
 	switch msg.String() {
 	case "ctrl+c", "q":
@@ -45,6 +48,12 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "/":
 		m.setFocusedPane(model.FocusedPaneOperations)
 		m.viewState.ActiveEditorMode = model.EditorModeFilter
+		m.filterInput.SetValue(m.viewState.FilterText)
+		m.filterInput.Focus()
+	case "enter":
+		if m.viewState.FocusedPane == model.FocusedPaneRequest {
+			m.beginRequestEdit()
+		}
 	case "z":
 		m.viewState.ZoomedPane = !m.viewState.ZoomedPane
 	case "esc":
@@ -57,12 +66,16 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.setSelectedOperationByVisibleIndex(m.viewState.OperationsCursor + 1)
 		} else if m.viewState.FocusedPane == model.FocusedPaneDetails {
 			m.scrollDetailsBy(1)
+		} else if m.viewState.FocusedPane == model.FocusedPaneRequest {
+			m.moveRequestRow(1)
 		}
 	case "k", "up":
 		if m.viewState.FocusedPane == model.FocusedPaneOperations {
 			m.setSelectedOperationByVisibleIndex(m.viewState.OperationsCursor - 1)
 		} else if m.viewState.FocusedPane == model.FocusedPaneDetails {
 			m.scrollDetailsBy(-1)
+		} else if m.viewState.FocusedPane == model.FocusedPaneRequest {
+			m.moveRequestRow(-1)
 		}
 	case "home":
 		switch m.viewState.FocusedPane {
@@ -71,7 +84,7 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case model.FocusedPaneDetails:
 			m.scrollDetailsToBoundary(false)
 		case model.FocusedPaneRequest:
-			m.setRequestSectionBoundary(false)
+			m.setRequestRowBoundary(false)
 		case model.FocusedPaneResponse:
 			m.setResponseSectionBoundary(false)
 		}
@@ -82,7 +95,7 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case model.FocusedPaneDetails:
 			m.scrollDetailsToBoundary(true)
 		case model.FocusedPaneRequest:
-			m.setRequestSectionBoundary(true)
+			m.setRequestRowBoundary(true)
 		case model.FocusedPaneResponse:
 			m.setResponseSectionBoundary(true)
 		}
@@ -122,23 +135,33 @@ func (m *Model) setFocusedPane(pane model.FocusedPane) {
 }
 
 func (m *Model) updateFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.ensureWidgetDefaults()
+	if m.filterInput.Value() != m.viewState.FilterText {
+		m.filterInput.SetValue(m.viewState.FilterText)
+	}
+	m.filterInput.Focus()
+
 	switch msg.String() {
 	case "ctrl+c":
 		return m, tea.Quit
 	case "enter":
+		m.filterInput.Blur()
 		m.viewState.ActiveEditorMode = model.EditorModeBrowse
 	case "esc":
 		m.viewState.FilterText = ""
+		m.filterInput.SetValue("")
+		m.filterInput.Blur()
 		m.syncVisibleOperations()
 		m.viewState.ActiveEditorMode = model.EditorModeBrowse
 	case "backspace", "ctrl+h", "delete":
 		m.viewState.FilterText = trimLastRune(m.viewState.FilterText)
+		m.filterInput.SetValue(m.viewState.FilterText)
 		m.syncVisibleOperations()
 	default:
-		if msg.Type == tea.KeyRunes && len(msg.Runes) > 0 {
-			m.viewState.FilterText = appendFilterInput(m.viewState.FilterText, msg.Runes)
-			m.syncVisibleOperations()
-		}
+		cmd := m.filterInput.Update(msg)
+		m.viewState.FilterText = m.filterInput.Value()
+		m.syncVisibleOperations()
+		return m, cmd
 	}
 
 	return m, nil

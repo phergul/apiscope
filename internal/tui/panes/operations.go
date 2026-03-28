@@ -3,6 +3,8 @@ package panes
 import (
 	"fmt"
 	"strings"
+
+	"github.com/phergul/apiscope/internal/tui/widgets"
 )
 
 type OperationRow struct {
@@ -48,15 +50,16 @@ func RenderOperations(data OperationsData) string {
 	}
 
 	for _, group := range data.Groups {
-		lines = append(lines, strings.ToUpper(group.Name))
-		for _, row := range group.Rows {
-			prefix := "  "
-			if row.Selected {
-				prefix = "> "
-			}
+		lines = append(lines, widgets.RenderMutedHeading(strings.ToUpper(group.Name)))
 
-			lines = append(lines, fmt.Sprintf("%s%-6s %s", prefix, strings.ToUpper(row.Method), row.Path))
+		items := make([]widgets.ListItem, 0, len(group.Rows))
+		for _, row := range group.Rows {
+			items = append(items, widgets.ListItem{
+				Content:  fmt.Sprintf("%s %s", widgets.RenderHTTPMethod(row.Method, 6), row.Path),
+				Selected: row.Selected,
+			})
 		}
+		lines = append(lines, strings.Split(widgets.RenderList(items), "\n")...)
 		lines = append(lines, "")
 	}
 	if len(lines) > 0 && lines[len(lines)-1] == "" {
@@ -64,13 +67,4 @@ func RenderOperations(data OperationsData) string {
 	}
 
 	return strings.Join(lines, "\n")
-}
-
-func FilterBarText(filterText string, editing bool) string {
-	value := fallbackText(filterText, "None")
-	if editing {
-		value += " (editing)"
-	}
-
-	return fmt.Sprintf("Filter: %s", value)
 }

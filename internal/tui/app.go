@@ -6,6 +6,7 @@ import (
 
 	"github.com/phergul/apiscope/internal/app"
 	"github.com/phergul/apiscope/internal/model"
+	"github.com/phergul/apiscope/internal/tui/widgets"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -32,6 +33,9 @@ type Model struct {
 	activeDetailsSection  detailsSection
 	activeRequestSection  string
 	activeResponseSection string
+	filterInput           widgets.TextInput
+	requestFieldInput     widgets.TextInput
+	requestBodyInput      widgets.TextArea
 }
 
 func NewProgram(service *app.Service, source string, input io.Reader, output io.Writer) *Program {
@@ -55,12 +59,22 @@ func NewModel(service *app.Service, source string) *Model {
 		service = app.NewService(nil)
 	}
 
+	filterInput := widgets.NewTextInput()
+	filterInput.SetPlaceholder("Filter operations")
+	requestFieldInput := widgets.NewTextInput()
+	requestFieldInput.SetPlaceholder("Enter value")
+	requestBodyInput := widgets.NewTextArea()
+	requestBodyInput.SetPlaceholder("Enter raw request body")
+
 	return &Model{
 		service:               service,
 		source:                source,
 		activeDetailsSection:  detailsSectionSummary,
 		activeRequestSection:  "",
 		activeResponseSection: "",
+		filterInput:           filterInput,
+		requestFieldInput:     requestFieldInput,
+		requestBodyInput:      requestBodyInput,
 		viewState: model.ViewState{
 			FocusedPane:           model.FocusedPaneOperations,
 			ExpandedRightPane:     model.FocusedPaneRequest,
@@ -73,10 +87,13 @@ func NewModel(service *app.Service, source string) *Model {
 }
 
 func (m *Model) Init() tea.Cmd {
+	m.ensureWidgetDefaults()
 	return m.startLoadCmd()
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	m.ensureWidgetDefaults()
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -114,7 +131,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) View() string {
+	m.ensureWidgetDefaults()
 	return m.render()
+}
+
+func (m *Model) ensureWidgetDefaults() {
+	m.filterInput.SetPlaceholder("Filter operations")
+	m.requestFieldInput.SetPlaceholder("Enter value")
+	m.requestBodyInput.SetPlaceholder("Enter raw request body")
 }
 
 func (m *Model) startLoadCmd() tea.Cmd {

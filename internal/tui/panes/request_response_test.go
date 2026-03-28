@@ -9,40 +9,30 @@ func TestRenderRequestShowsGroupedInputsAndAuthSummary(t *testing.T) {
 	t.Parallel()
 
 	requestContent := RenderRequest(RequestData{
-		Sections: []Section{
+		Sections:      []string{"Path", "Query", "Body", "Auth"},
+		ActiveSection: "Path",
+		Rows: []RequestRow{
 			{
-				Label: "Path",
-				Body: strings.Join([]string{
-					"- petId (required, string)",
-					"  Description: Unique user identifier",
-				}, "\n"),
+				Label:    "petId",
+				Meta:     "required, string",
+				Value:    "<unset>",
+				Editable: true,
 			},
 			{
-				Label: "Query",
-				Body: strings.Join([]string{
-					"- limit (optional, integer/int32)",
-				}, "\n"),
-			},
-			{
-				Label: "Body",
-				Body: strings.Join([]string{
-					"Required: required",
-					"Media types: application/json, application/xml",
-					"Description: Pet filter payload",
-				}, "\n"),
-			},
-			{
-				Label: "Auth",
-				Body:  "- api_key\nOR\n- oauth (pets:read)",
+				Label:    "legacy",
+				Meta:     "optional, content",
+				Value:    "<unsupported: content-based parameter>",
+				Editable: false,
 			},
 		},
-		ActiveSection: "Path",
+		ActiveRow: 0,
 	})
+	requestContent = stripANSI(requestContent)
 
 	wantRequestSnippets := []string{
 		"[Path]  Query  Body  Auth",
-		"- petId (required, string)",
-		"Description: Unique user identifier",
+		"> petId (required, string) = <unset>",
+		"legacy (optional, content) = <unsupported: content-based parameter> [read-only]",
 	}
 	for _, snippet := range wantRequestSnippets {
 		if !strings.Contains(requestContent, snippet) {
@@ -57,9 +47,37 @@ func TestRenderRequestShowsExplicitEmptyStates(t *testing.T) {
 	requestContent := RenderRequest(RequestData{
 		EmptyState: "This operation does not declare request parameters, request body, or auth requirements.",
 	})
+	requestContent = stripANSI(requestContent)
 
 	if !strings.Contains(requestContent, "This operation does not declare request parameters, request body, or auth requirements.") {
 		t.Fatalf("expected request pane empty state, got %q", requestContent)
+	}
+}
+
+func TestRenderRequestShowsBodyEditorState(t *testing.T) {
+	t.Parallel()
+
+	requestContent := RenderRequest(RequestData{
+		Sections:      []string{"Path", "Body", "Auth"},
+		ActiveSection: "Body",
+		Edit: RequestEditView{
+			Kind:      "body",
+			MediaType: "application/json",
+			Buffer:    "{\n  \"name\": \"fido\"\n}",
+		},
+	})
+	requestContent = stripANSI(requestContent)
+
+	wantRequestSnippets := []string{
+		"Path  [Body]  Auth",
+		"Media type: application/json",
+		"Ctrl+S save | Esc cancel",
+		"  \"name\": \"fido\"",
+	}
+	for _, snippet := range wantRequestSnippets {
+		if !strings.Contains(requestContent, snippet) {
+			t.Fatalf("expected body editor state to include %q, got %q", snippet, requestContent)
+		}
 	}
 }
 
@@ -90,6 +108,7 @@ func TestRenderResponseShowsDeclaredResponses(t *testing.T) {
 		},
 		ActiveSection: "200",
 	})
+	responseContent = stripANSI(responseContent)
 
 	wantResponseSnippets := []string{
 		"[200]  default",
@@ -112,6 +131,7 @@ func TestRenderResponseShowsExplicitEmptyState(t *testing.T) {
 	responseContent := RenderResponse(ResponseData{
 		EmptyState: "This operation does not declare any responses.",
 	})
+	responseContent = stripANSI(responseContent)
 
 	if !strings.Contains(responseContent, "This operation does not declare any responses.") {
 		t.Fatalf("expected response pane empty state, got %q", responseContent)
@@ -135,6 +155,7 @@ func TestRenderResponseNormalisesEmbeddedDescriptionLineBreaks(t *testing.T) {
 		},
 		ActiveSection: "401",
 	})
+	responseContent = stripANSI(responseContent)
 
 	if strings.Contains(responseContent, "token or\nthe access token") {
 		t.Fatalf("expected response description to collapse embedded line breaks, got %q", responseContent)

@@ -28,6 +28,7 @@ func TestRenderOperationsHighlightsSelectedOperationAndPreservesOrder(t *testing
 			},
 		},
 	})
+	content = stripANSI(content)
 
 	firstGroup := strings.Index(content, "PETS")
 	secondGroup := strings.Index(content, "ADMIN")
@@ -54,6 +55,7 @@ func TestRenderOperationsShowsEmptyState(t *testing.T) {
 		HasSpec:         true,
 		TotalOperations: 0,
 	})
+	content = stripANSI(content)
 
 	if !strings.Contains(content, "does not define any operations") {
 		t.Fatalf("expected empty operations state, got %q", content)
@@ -68,6 +70,7 @@ func TestRenderOperationsShowsFilteredEmptyState(t *testing.T) {
 		FilterText:      "zzz",
 		TotalOperations: 2,
 	})
+	content = stripANSI(content)
 
 	if !strings.Contains(content, "No operations match the current filter.") {
 		t.Fatalf("expected filtered empty state, got %q", content)

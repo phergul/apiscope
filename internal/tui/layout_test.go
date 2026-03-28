@@ -15,6 +15,7 @@ func TestOperationsPaneContentFallsBackToFirstVisibleWhenSelectionMissing(t *tes
 	m.session.SelectedOperationKey = model.NewOperationKey("DELETE", "/missing")
 
 	content := m.operationsPaneContent()
+	content = stripANSI(content)
 
 	if !strings.Contains(content, "> GET    /pets") {
 		t.Fatalf("expected first visible operation to be highlighted, got %q", content)
@@ -30,6 +31,7 @@ func TestDetailsPaneContentUsesTopLevelSecurityFallback(t *testing.T) {
 	m.activeDetailsSection = detailsSectionSecurity
 
 	content := m.detailsPaneContent()
+	content = stripANSI(content)
 
 	if !strings.Contains(content, "- global_auth") {
 		t.Fatalf("expected top-level security fallback, got %q", content)
@@ -44,10 +46,12 @@ func TestRequestAndResponsePaneContentFallbackToFirstVisibleWhenSelectionMissing
 
 	requestContent := m.requestPaneContent()
 	responseContent := m.responsePaneContent()
+	requestContent = stripANSI(requestContent)
+	responseContent = stripANSI(responseContent)
 
 	requestSnippets := []string{
 		"[Path]  Query  Header  Cookie  Body  Auth",
-		"- petId (required, string)",
+		"> petId (required, string) = <unset>",
 	}
 	for _, snippet := range requestSnippets {
 		if !strings.Contains(requestContent, snippet) {
@@ -76,6 +80,7 @@ func TestRenderLoadErrorContentUsesStructuredMessage(t *testing.T) {
 	m.loadErr = errors.New("boom")
 
 	content := m.renderLoadErrorContent()
+	content = stripANSI(content)
 
 	wantSnippets := []string{
 		"Failed to load spec",
@@ -100,12 +105,14 @@ func TestDetailsPaneContentForHeightClipsLongSummaryBody(t *testing.T) {
 	m.viewState.RightPaneLayoutPreset = layoutPresetNarrow
 
 	content := m.detailsPaneContentForHeight(5)
+	content = stripANSI(content)
 	if strings.Contains(content, "line5") || strings.Contains(content, "line6") {
 		t.Fatalf("expected details pane content to clip long body for short height, got %q", content)
 	}
 
 	m.viewState.DetailsScrollOffset = 2
 	content = m.detailsPaneContentForHeight(5)
+	content = stripANSI(content)
 	if !strings.Contains(content, "line2") {
 		t.Fatalf("expected clipped details body to respect scroll offset, got %q", content)
 	}
@@ -120,11 +127,12 @@ func TestRenderShowsOperationsFilterInPaneFooterOnly(t *testing.T) {
 	m.viewState.ActiveEditorMode = model.EditorModeFilter
 
 	content := m.render()
-	if !strings.Contains(content, "Filter: None (editing)") {
+	content = stripANSI(content)
+	if !strings.Contains(content, "Filter operations") {
 		t.Fatalf("expected operations filter footer while editing, got %q", content)
 	}
 	if strings.Contains(m.operationsPaneContent(), "Filter:") {
-		t.Fatalf("expected operations body to omit inline filter text, got %q", m.operationsPaneContent())
+		t.Fatalf("expected operations body to omit inline filter text, got %q", stripANSI(m.operationsPaneContent()))
 	}
 }
 
@@ -136,6 +144,7 @@ func TestRenderHidesOperationsFilterFooterWhenIdle(t *testing.T) {
 	m.height = 30
 
 	content := m.render()
+	content = stripANSI(content)
 	if strings.Contains(content, "Filter: None") {
 		t.Fatalf("expected no filter footer when idle, got %q", content)
 	}
@@ -148,6 +157,7 @@ func TestRenderBlockingLoadErrorShowsCenteredQuitPopup(t *testing.T) {
 	m.loadErr = errors.New("boom")
 
 	content := m.render()
+	content = stripANSI(content)
 
 	wantSnippets := []string{
 		"Failed to load spec",
@@ -177,6 +187,7 @@ func TestRenderZoomLayoutShowsOnlyFocusedPaneAndStatusBar(t *testing.T) {
 	m.viewState.ZoomedPane = true
 
 	content := m.render()
+	content = stripANSI(content)
 
 	if !strings.Contains(content, "> 4 Response") {
 		t.Fatalf("expected focused response pane to render in zoom mode, got %q", content)
@@ -242,6 +253,7 @@ func TestRenderWideLayoutKeepsRequestAboveResponseWhenResponseIsExpanded(t *test
 	m.viewState.ExpandedRightPane = model.FocusedPaneResponse
 
 	content := m.render()
+	content = stripANSI(content)
 	responseIndex := strings.Index(content, "4 Response")
 	requestIndex := strings.Index(content, "3 Request")
 	if responseIndex == -1 || requestIndex == -1 {

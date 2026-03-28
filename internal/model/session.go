@@ -45,6 +45,7 @@ type ViewState struct {
 	FilterText             string
 	VisibleOperationKeys   []OperationKey
 	OperationsCursor       int
+	OperationsScrollOffset int
 	DetailsScrollOffset    int
 	RequestActiveRow       int
 	RequestScrollOffset    int

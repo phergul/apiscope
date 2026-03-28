@@ -31,8 +31,8 @@ func TestRenderOperationsHighlightsSelectedOperationAndPreservesOrder(t *testing
 
 	firstGroup := strings.Index(content, "PETS")
 	secondGroup := strings.Index(content, "ADMIN")
-	selected := strings.Index(content, "> GET    /pets")
-	second := strings.Index(content, "  POST   /pets")
+	selected := strings.Index(content, " GET    /pets")
+	second := strings.Index(content, " POST   /pets")
 	if firstGroup == -1 || secondGroup == -1 {
 		t.Fatalf("expected grouped operations list, got %q", content)
 	}

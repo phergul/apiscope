@@ -13,16 +13,15 @@ func RenderList(items []ListItem) string {
 	lines := make([]string, 0, len(items))
 	for _, item := range items {
 		style := BodyTextStyle()
-		prefix := "  "
+		padding := " "
 		if item.Muted {
 			style = MutedTextStyle()
 		}
 		if item.Selected {
 			style = SelectedTextStyle()
-			prefix = "> "
 		}
 
-		content := prefix + item.Content
+		content := padding + item.Content + padding
 		if item.Width > 0 {
 			style = style.Width(item.Width).MaxWidth(item.Width)
 		}

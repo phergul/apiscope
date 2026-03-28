@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -17,7 +18,7 @@ func TestOperationsPaneContentFallsBackToFirstVisibleWhenSelectionMissing(t *tes
 	content := m.operationsPaneContent()
 	content = stripANSI(content)
 
-	if !strings.Contains(content, "> GET    /pets") {
+	if !strings.Contains(content, " GET    /pets") {
 		t.Fatalf("expected first visible operation to be highlighted, got %q", content)
 	}
 }
@@ -51,7 +52,7 @@ func TestRequestAndResponsePaneContentFallbackToFirstVisibleWhenSelectionMissing
 
 	requestSnippets := []string{
 		"Path  Query  Header  Cookie  Body  Auth",
-		"> petId (required, string) = <unset>",
+		" petId (required, string) = <unset>",
 	}
 	for _, snippet := range requestSnippets {
 		if !strings.Contains(requestContent, snippet) {
@@ -197,6 +198,42 @@ func TestRenderZoomLayoutShowsOnlyFocusedPaneAndStatusBar(t *testing.T) {
 	}
 	if !strings.Contains(content, "z zoom") || !strings.Contains(content, "q quit") {
 		t.Fatalf("expected status bar to remain visible in zoom mode, got %q", content)
+	}
+}
+
+func TestOperationsPaneContentScrollsWithFiveRowBuffer(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForRendering()
+	m.width = 80
+	m.height = 18
+	m.viewState.ZoomedPane = true
+	m.viewState.FocusedPane = model.FocusedPaneOperations
+	m.session.Spec.Operations = nil
+	m.viewState.VisibleOperationKeys = nil
+	for index := 0; index < 20; index++ {
+		path := fmt.Sprintf("/pets/%02d", index)
+		key := model.NewOperationKey("GET", path)
+		m.session.Spec.Operations = append(m.session.Spec.Operations, model.Operation{
+			Key:    key,
+			Method: "GET",
+			Path:   path,
+			Tags:   []string{"pets"},
+		})
+		m.viewState.VisibleOperationKeys = append(m.viewState.VisibleOperationKeys, key)
+	}
+	m.viewState.OperationsCursor = 10
+	m.session.SelectedOperationKey = m.viewState.VisibleOperationKeys[10]
+	m.ensureActiveOperationVisible()
+
+	content := stripANSI(m.operationsPaneContentForSizeAndHeight(32, 18))
+	if strings.Contains(content, "/pets/04") {
+		t.Fatalf("expected rows above the five-row buffer to scroll out, got %q", content)
+	}
+	for _, snippet := range []string{"/pets/05", "/pets/10", "/pets/15"} {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected operations pane to keep buffered row %q visible, got %q", snippet, content)
+		}
 	}
 }
 

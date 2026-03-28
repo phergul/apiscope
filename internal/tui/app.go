@@ -99,6 +99,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.viewState.RightPaneLayoutPreset = chooseLayoutPreset(msg.Width)
+		m.ensureActiveOperationVisible()
 		return m, nil
 	case tea.KeyMsg:
 		return m.updateKey(msg)

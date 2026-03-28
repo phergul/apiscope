@@ -25,6 +25,8 @@ type OperationsData struct {
 	LoadFailed      bool
 	HasSpec         bool
 	ContentWidth    int
+	ScrollOffset    int
+	MaxLines        int
 	TotalOperations int
 	Groups          []OperationsGroup
 }
@@ -50,19 +52,73 @@ func RenderOperations(data OperationsData) string {
 		return strings.Join(lines, "\n")
 	}
 
+	lines, _ = collectOperationLines(data)
+	return strings.Join(lines, "\n")
+}
+
+func VisibleOperationRowCount(data OperationsData) int {
+	switch {
+	case data.LoadInFlight, data.LoadFailed, !data.HasSpec, data.TotalOperations == 0, len(data.Groups) == 0:
+		return 0
+	}
+
+	_, rowCount := collectOperationLines(data)
+	return rowCount
+}
+
+func collectOperationLines(data OperationsData) ([]string, int) {
+	lines := []string{}
+	skippedRows := 0
+	usedLines := 0
+	renderedRows := 0
+	stop := false
 	for _, group := range data.Groups {
-		lines = append(lines, widgets.RenderMutedHeading(strings.ToUpper(group.Name)))
+		groupLines := []string{}
+		groupLineCount := 0
 
 		for _, row := range group.Rows {
-			lines = append(lines, renderOperationRow(row, data.ContentWidth))
+			if skippedRows < data.ScrollOffset {
+				skippedRows++
+				continue
+			}
+
+			rendered := renderOperationRow(row, data.ContentWidth)
+			rowHeight := lipgloss.Height(rendered)
+			additionalLines := rowHeight
+			if len(groupLines) == 0 {
+				additionalLines++
+			}
+			if usedLines > 0 && len(groupLines) == 0 {
+				additionalLines++
+			}
+			if data.MaxLines > 0 && renderedRows > 0 && usedLines+groupLineCount+additionalLines > data.MaxLines {
+				stop = true
+				break
+			}
+
+			if len(groupLines) == 0 {
+				if usedLines > 0 {
+					groupLines = append(groupLines, "")
+					groupLineCount++
+				}
+				groupLines = append(groupLines, widgets.RenderMutedHeading(strings.ToUpper(group.Name)))
+				groupLineCount++
+			}
+
+			groupLines = append(groupLines, rendered)
+			groupLineCount += rowHeight
+			renderedRows++
 		}
-		lines = append(lines, "")
-	}
-	if len(lines) > 0 && lines[len(lines)-1] == "" {
-		lines = lines[:len(lines)-1]
+		if len(groupLines) > 0 {
+			lines = append(lines, groupLines...)
+			usedLines += groupLineCount
+		}
+		if stop {
+			break
+		}
 	}
 
-	return strings.Join(lines, "\n")
+	return lines, renderedRows
 }
 
 func renderOperationRow(row OperationRow, width int) string {

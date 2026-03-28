@@ -8,6 +8,8 @@ import (
 	"github.com/phergul/apiscope/internal/model"
 	"github.com/phergul/apiscope/internal/tui/panes"
 	"github.com/phergul/apiscope/internal/tui/widgets"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 type paneView struct {
@@ -31,7 +33,54 @@ func (m *Model) operationsPaneContent() string {
 func (m *Model) operationsPaneContentForSize(width int) string {
 	data := m.projectOperationsPane()
 	data.ContentWidth = maxInt(width-4, 1)
+	data.ScrollOffset = m.viewState.OperationsScrollOffset
 	return panes.RenderOperations(data)
+}
+
+func (m *Model) operationsPaneContentForHeight(height int) string {
+	width, _ := m.resolvedDimensions()
+	if m.viewState.RightPaneLayoutPreset == layoutPresetWide {
+		totalWidth := width
+		width = clampInt(int(float64(totalWidth)*0.32), 30, 40)
+		width = minInt(width, totalWidth-20)
+	}
+
+	return m.operationsPaneContentForSizeAndHeight(width, height)
+}
+
+func (m *Model) operationsPaneContentForSizeAndHeight(width, height int) string {
+	data := m.projectOperationsPane()
+	data.ContentWidth = maxInt(width-4, 1)
+	data.ScrollOffset = m.viewState.OperationsScrollOffset
+	data.MaxLines = maxInt(height-4, 1)
+	return panes.RenderOperations(data)
+}
+
+func (m *Model) operationsPaneMetrics() (int, int) {
+	width, height := m.resolvedDimensions()
+	bodyHeight := maxInt(height-lipgloss.Height(m.renderStatusBar(width)), 12)
+	paneWidth := width
+	paneHeight := bodyHeight
+
+	if !(m.viewState.ZoomedPane && m.viewState.FocusedPane == model.FocusedPaneOperations) {
+		if m.viewState.RightPaneLayoutPreset == layoutPresetWide {
+			paneWidth = clampInt(int(float64(width)*0.32), 30, 40)
+			paneWidth = minInt(paneWidth, width-20)
+		} else {
+			paneHeight = computeNarrowPaneHeights(bodyHeight).Operations
+		}
+	}
+
+	return maxInt(paneWidth-4, 1), maxInt(paneHeight-4, 1)
+}
+
+func (m *Model) visibleOperationRowCount(offset int) int {
+	contentWidth, maxLines := m.operationsPaneMetrics()
+	data := m.projectOperationsPane()
+	data.ContentWidth = contentWidth
+	data.ScrollOffset = offset
+	data.MaxLines = maxLines
+	return panes.VisibleOperationRowCount(data)
 }
 
 func (m *Model) detailsPaneContent() string {

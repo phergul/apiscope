@@ -105,7 +105,7 @@ func (m *Model) renderWideLayout(width, height int) string {
 	requestHeight, responseHeight := m.rightPaneHeights(heights)
 
 	operationsView := m.paneView(model.FocusedPaneOperations)
-	operationsView.Body = m.operationsPaneContentForSize(leftWidth)
+	operationsView.Body = m.operationsPaneContentForSizeAndHeight(leftWidth, height)
 	detailsView := m.paneView(model.FocusedPaneDetails)
 	detailsView.Body = m.detailsPaneContentForSize(rightWidth, heights.Details)
 	requestView := m.paneView(model.FocusedPaneRequest)
@@ -132,7 +132,7 @@ func (m *Model) renderNarrowLayout(width, height int) string {
 	requestHeight, responseHeight := m.rightPaneHeights(heights)
 
 	operationsView := m.paneView(model.FocusedPaneOperations)
-	operationsView.Body = m.operationsPaneContentForSize(width)
+	operationsView.Body = m.operationsPaneContentForSizeAndHeight(width, heights.Operations)
 	detailsView := m.paneView(model.FocusedPaneDetails)
 	detailsView.Body = m.detailsPaneContentForSize(width, heights.Details)
 	requestView := m.paneView(model.FocusedPaneRequest)
@@ -154,7 +154,7 @@ func (m *Model) renderNarrowLayout(width, height int) string {
 func (m *Model) renderZoomLayout(width, height int) string {
 	view := m.paneView(m.viewState.FocusedPane)
 	if m.viewState.FocusedPane == model.FocusedPaneOperations {
-		view.Body = m.operationsPaneContentForSize(width)
+		view.Body = m.operationsPaneContentForSizeAndHeight(width, height)
 	}
 	if m.viewState.FocusedPane == model.FocusedPaneDetails {
 		view.Body = m.detailsPaneContentForSize(width, height)

@@ -39,6 +39,7 @@ func (m *Model) syncVisibleOperations() {
 	if m.session.Spec == nil {
 		m.viewState.VisibleOperationKeys = nil
 		m.viewState.OperationsCursor = 0
+		m.viewState.OperationsScrollOffset = 0
 		m.session.SelectedOperationKey = ""
 		m.syncActivePaneSections()
 		return
@@ -82,6 +83,7 @@ func (m *Model) syncSelectedOperationAfterVisibilityChange() {
 	if len(m.viewState.VisibleOperationKeys) == 0 {
 		m.session.SelectedOperationKey = ""
 		m.viewState.OperationsCursor = 0
+		m.viewState.OperationsScrollOffset = 0
 		m.onSelectionChanged(previous, "")
 		return
 	}
@@ -89,6 +91,7 @@ func (m *Model) syncSelectedOperationAfterVisibilityChange() {
 	for index, key := range m.viewState.VisibleOperationKeys {
 		if key == m.session.SelectedOperationKey {
 			m.viewState.OperationsCursor = index
+			m.ensureActiveOperationVisible()
 			m.syncActiveDetailsSection()
 			return
 		}
@@ -96,6 +99,7 @@ func (m *Model) syncSelectedOperationAfterVisibilityChange() {
 
 	m.session.SelectedOperationKey = m.viewState.VisibleOperationKeys[0]
 	m.viewState.OperationsCursor = 0
+	m.ensureActiveOperationVisible()
 	m.onSelectionChanged(previous, m.session.SelectedOperationKey)
 }
 
@@ -104,6 +108,7 @@ func (m *Model) setSelectedOperationByVisibleIndex(index int) {
 	if len(m.viewState.VisibleOperationKeys) == 0 {
 		m.session.SelectedOperationKey = ""
 		m.viewState.OperationsCursor = 0
+		m.viewState.OperationsScrollOffset = 0
 		m.onSelectionChanged(previous, "")
 		return
 	}
@@ -117,6 +122,7 @@ func (m *Model) setSelectedOperationByVisibleIndex(index int) {
 
 	m.viewState.OperationsCursor = index
 	m.session.SelectedOperationKey = m.viewState.VisibleOperationKeys[index]
+	m.ensureActiveOperationVisible()
 	m.onSelectionChanged(previous, m.session.SelectedOperationKey)
 }
 
@@ -204,6 +210,82 @@ func (m *Model) jumpToAdjacentOperationGroup(direction int) {
 			return
 		}
 	}
+}
+
+func (m *Model) ensureActiveOperationVisible() {
+	if len(m.viewState.VisibleOperationKeys) == 0 {
+		m.viewState.OperationsCursor = 0
+		m.viewState.OperationsScrollOffset = 0
+		return
+	}
+	if m.viewState.OperationsCursor < 0 {
+		m.viewState.OperationsCursor = 0
+	}
+	if m.viewState.OperationsCursor >= len(m.viewState.VisibleOperationKeys) {
+		m.viewState.OperationsCursor = len(m.viewState.VisibleOperationKeys) - 1
+	}
+
+	totalRows := len(m.viewState.VisibleOperationKeys)
+	maxOffset := totalRows - 1
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	endAlignedOffset := m.maxOperationsScrollOffset()
+	if endAlignedOffset < maxOffset {
+		maxOffset = endAlignedOffset
+	}
+	m.viewState.OperationsScrollOffset = clampInt(m.viewState.OperationsScrollOffset, 0, maxOffset)
+
+	scrolloff := 5
+	for range 3 {
+		visibleRows := m.visibleOperationRowCount(m.viewState.OperationsScrollOffset)
+		if visibleRows <= 0 {
+			m.viewState.OperationsScrollOffset = 0
+			return
+		}
+
+		maxScrolloff := maxInt(visibleRows-1, 0)
+		if scrolloff > maxScrolloff {
+			scrolloff = maxScrolloff
+		}
+
+		minCursor := m.viewState.OperationsScrollOffset + scrolloff
+		maxCursor := m.viewState.OperationsScrollOffset + visibleRows - scrolloff - 1
+		if maxCursor < minCursor {
+			maxCursor = minCursor
+		}
+
+		nextOffset := m.viewState.OperationsScrollOffset
+		switch {
+		case m.viewState.OperationsCursor < minCursor:
+			nextOffset = m.viewState.OperationsCursor - scrolloff
+		case m.viewState.OperationsCursor > maxCursor:
+			nextOffset = m.viewState.OperationsCursor - visibleRows + scrolloff + 1
+		default:
+			return
+		}
+
+		nextOffset = clampInt(nextOffset, 0, maxOffset)
+		if nextOffset == m.viewState.OperationsScrollOffset {
+			return
+		}
+		m.viewState.OperationsScrollOffset = nextOffset
+	}
+}
+
+func (m *Model) maxOperationsScrollOffset() int {
+	totalRows := len(m.viewState.VisibleOperationKeys)
+	if totalRows <= 1 {
+		return 0
+	}
+
+	for offset := 0; offset < totalRows; offset++ {
+		if m.visibleOperationRowCount(offset) == totalRows-offset {
+			return offset
+		}
+	}
+
+	return totalRows - 1
 }
 
 func (m *Model) availableDetailsSections() []detailsSection {

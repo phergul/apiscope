@@ -33,7 +33,7 @@ func TestRenderRequestShowsGroupedInputsAndAuthSummary(t *testing.T) {
 
 	wantRequestSnippets := []string{
 		"Path  Query  Body  Auth",
-		"> petId (required, string) = <unset>",
+		" petId (required, string) = <unset>",
 		"legacy (optional, content) = <unsupported: content-based parameter> [read-only]",
 	}
 	for _, snippet := range wantRequestSnippets {

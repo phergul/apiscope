@@ -956,6 +956,44 @@ func TestModelFilterWithNoMatchesClearsSelection(t *testing.T) {
 	}
 }
 
+func TestModelOperationsScrollingKeepsFiveRowsBelowCursorWhenMovingDown(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.height = 18
+	m.width = 80
+	m.viewState.ZoomedPane = true
+	m.viewState.FocusedPane = model.FocusedPaneOperations
+	m.viewState.RightPaneLayoutPreset = layoutPresetWide
+	m.session.Spec.Operations = nil
+	m.viewState.VisibleOperationKeys = nil
+	for index := 0; index < 20; index++ {
+		path := "/pets/" + strconvInt(index)
+		key := model.NewOperationKey("GET", path)
+		m.session.Spec.Operations = append(m.session.Spec.Operations, model.Operation{
+			Key:    key,
+			Method: "GET",
+			Path:   path,
+			Tags:   []string{"pets"},
+		})
+		m.viewState.VisibleOperationKeys = append(m.viewState.VisibleOperationKeys, key)
+	}
+	m.session.SelectedOperationKey = m.viewState.VisibleOperationKeys[0]
+	m.viewState.OperationsCursor = 0
+
+	for step := 0; step < 10; step++ {
+		updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+		m = updatedModel.(*Model)
+	}
+
+	if m.viewState.OperationsCursor != 10 {
+		t.Fatalf("expected cursor to move to row 10, got %d", m.viewState.OperationsCursor)
+	}
+	if m.viewState.OperationsScrollOffset != 5 {
+		t.Fatalf("expected scroll offset 5 to preserve five-row scrolloff at the bottom edge, got %d", m.viewState.OperationsScrollOffset)
+	}
+}
+
 func newLoadedModelForNavigation() *Model {
 	spec := &model.APISpec{
 		Operations: []model.Operation{

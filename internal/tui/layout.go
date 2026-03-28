@@ -165,9 +165,6 @@ func (m *Model) renderPane(title, body, footer string, width, height int, focuse
 	height = maxInt(height, 4)
 
 	titleLine := title
-	// if focused {
-	// 	titleLine = "> " + title
-	// }
 
 	contentWidth := maxInt(width-4, 1)
 	contentHeight := maxInt(height-2, 1)

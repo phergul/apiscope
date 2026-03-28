@@ -14,7 +14,7 @@ func TestRenderDetailsRendersSummarySection(t *testing.T) {
 	content = stripANSI(content)
 
 	wantSnippets := []string{
-		"[Summary]  Security  Warnings",
+		"Summary  Security  Warnings",
 		"Summary: List pets",
 		"Description: Returns pets.",
 		"Tags: pets, public",
@@ -40,7 +40,7 @@ func TestRenderDetailsShowsSecuritySectionWhenActive(t *testing.T) {
 	content = stripANSI(content)
 
 	wantSnippets := []string{
-		"Summary  [Security]  Warnings",
+		"Summary  Security  Warnings",
 		"- api_key AND secondary_header",
 		"OR",
 		"- oauth (pets:read)",
@@ -62,7 +62,7 @@ func TestRenderDetailsShowsWarningsSectionWhenActive(t *testing.T) {
 	content = stripANSI(content)
 
 	wantSnippets := []string{
-		"Summary  Security  [Warnings]",
+		"Summary  Security  Warnings",
 		"- unsupported_feature: callbacks are not supported in v1",
 		"  path: #/paths/~1pets/get/callbacks",
 		"- downgraded_feature: collectionFormat was simplified during normalisation",
@@ -133,7 +133,7 @@ func TestRenderDetailsShowsExplicitNoneStates(t *testing.T) {
 	content = stripANSI(content)
 
 	wantSnippets := []string{
-		"[Summary]  Security  Warnings",
+		"Summary  Security  Warnings",
 		"Summary: Create pet",
 		"Description: None",
 		"Tags: admin",
@@ -155,7 +155,6 @@ func newDetailsData() DetailsData {
 			Description: "Returns pets.",
 			Tags:        []string{"pets", "public"},
 		},
-		Sections:      []string{DetailsSectionSummary, DetailsSectionSecurity, DetailsSectionWarnings},
 		ActiveSection: DetailsSectionSummary,
 		Security: &model.SecurityRequirement{
 			Alternatives: []model.SecurityAlternative{

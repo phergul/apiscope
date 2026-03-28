@@ -59,10 +59,6 @@ func formatSecurityRequirement(requirement *model.SecurityRequirement) string {
 	return strings.Join(lines, "\nOR\n")
 }
 
-func FormatSecurityRequirementForProjection(requirement *model.SecurityRequirement) string {
-	return formatSecurityRequirement(requirement)
-}
-
 func formatWarnings(warnings []model.SpecWarning) string {
 	if len(warnings) == 0 {
 		return "No warnings."

@@ -50,7 +50,7 @@ func TestRequestAndResponsePaneContentFallbackToFirstVisibleWhenSelectionMissing
 	responseContent = stripANSI(responseContent)
 
 	requestSnippets := []string{
-		"[Path]  Query  Header  Cookie  Body  Auth",
+		"Path  Query  Header  Cookie  Body  Auth",
 		"> petId (required, string) = <unset>",
 	}
 	for _, snippet := range requestSnippets {
@@ -60,7 +60,7 @@ func TestRequestAndResponsePaneContentFallbackToFirstVisibleWhenSelectionMissing
 	}
 
 	responseSnippets := []string{
-		"[200]  default",
+		"200  default",
 		"Description: OK",
 		"Headers:",
 		"- none",
@@ -189,7 +189,7 @@ func TestRenderZoomLayoutShowsOnlyFocusedPaneAndStatusBar(t *testing.T) {
 	content := m.render()
 	content = stripANSI(content)
 
-	if !strings.Contains(content, "> 4 Response") {
+	if !strings.Contains(content, "4 Response") {
 		t.Fatalf("expected focused response pane to render in zoom mode, got %q", content)
 	}
 	if strings.Contains(content, "1 Operations") || strings.Contains(content, "2 Details") || strings.Contains(content, "3 Request") {

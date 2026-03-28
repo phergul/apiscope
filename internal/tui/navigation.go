@@ -263,25 +263,6 @@ func (m *Model) availableRequestSections() []string {
 	return sections
 }
 
-func (m *Model) syncActiveRequestSection() {
-	available := m.availableRequestSections()
-	if len(available) == 0 {
-		m.activeRequestSection = ""
-		m.resetRequestCursorAndScroll()
-		return
-	}
-
-	for _, section := range available {
-		if section == m.activeRequestSection {
-			m.syncActiveRequestRow()
-			return
-		}
-	}
-
-	m.activeRequestSection = available[0]
-	m.resetRequestCursorAndScroll()
-}
-
 func (m *Model) resetActiveRequestSection() {
 	available := m.availableRequestSections()
 	if len(available) == 0 {
@@ -316,22 +297,6 @@ func (m *Model) availableResponseSections() []string {
 	}
 
 	return sections
-}
-
-func (m *Model) syncActiveResponseSection() {
-	available := m.availableResponseSections()
-	if len(available) == 0 {
-		m.activeResponseSection = ""
-		return
-	}
-
-	for _, section := range available {
-		if section == m.activeResponseSection {
-			return
-		}
-	}
-
-	m.activeResponseSection = available[0]
 }
 
 func (m *Model) resetActiveResponseSection() {
@@ -468,17 +433,6 @@ func (m *Model) setDetailsSectionBoundary(last bool) {
 	m.viewState.DetailsScrollOffset = 0
 }
 
-func (m *Model) detailsSectionStrip() string {
-	available := m.availableDetailsSections()
-	parts := make([]string, 0, len(available))
-	for _, section := range available {
-		label := string(section)
-		parts = append(parts, label)
-	}
-
-	return strings.Join(parts, "  ")
-}
-
 func (m *Model) scrollDetailsBy(delta int) {
 	maxOffset := m.maxDetailsScrollOffset()
 	target := m.viewState.DetailsScrollOffset + delta
@@ -523,14 +477,6 @@ func (m *Model) detailsVisibleBodyLines() int {
 	}
 
 	return maxInt(paneHeight-6, 1)
-}
-
-func appendFilterInput(existing string, runes []rune) string {
-	if len(runes) == 0 {
-		return existing
-	}
-
-	return existing + string(runes)
 }
 
 func trimLastRune(value string) string {

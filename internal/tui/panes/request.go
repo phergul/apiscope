@@ -39,7 +39,10 @@ func RenderRequest(data RequestData) string {
 	}
 
 	return strings.Join([]string{
-		RenderSectionLabels(data.Sections, data.ActiveSection),
+		widgets.RenderSectionLabels(widgets.SectionStripData{
+			Labels: data.Sections,
+			Active: data.ActiveSection,
+		}),
 		"",
 		RenderActiveRequestSection(data),
 	}, "\n")

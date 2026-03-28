@@ -33,7 +33,6 @@ type Palette struct {
 	InputBorder      lipgloss.Color
 	InputText        lipgloss.Color
 	InputPlaceholder lipgloss.Color
-	StatusBorder     lipgloss.Color
 	MethodGet        lipgloss.Color
 	MethodPost       lipgloss.Color
 	MethodPut        lipgloss.Color
@@ -59,7 +58,6 @@ var (
 			InputBorder:      lipgloss.Color("#7CC7FF"),
 			InputText:        lipgloss.Color("#F5F7FB"),
 			InputPlaceholder: lipgloss.Color("#8089A8"),
-			StatusBorder:     lipgloss.Color("#394056"),
 			MethodGet:        lipgloss.Color(HttpMethodGet),
 			MethodPost:       lipgloss.Color(HttpMethodPost),
 			MethodPut:        lipgloss.Color(HttpMethodPut),
@@ -159,11 +157,7 @@ func PaneFrameStyle(focused bool) lipgloss.Style {
 }
 
 func StatusBarStyle(width int) lipgloss.Style {
-	theme := CurrentTheme()
 	return BodyTextStyle().
-		BorderTop(true).
-		BorderStyle(paneBorder).
-		BorderForeground(theme.Palette.StatusBorder).
 		Width(width)
 }
 

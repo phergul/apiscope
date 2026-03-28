@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/phergul/apiscope/internal/model"
+	"github.com/phergul/apiscope/internal/tui/widgets"
 )
 
 const (
@@ -18,7 +19,6 @@ type DetailsData struct {
 	LoadErrorBody string
 	Selected      *model.Operation
 	FilterText    string
-	Sections      []string
 	ActiveSection string
 	Security      *model.SecurityRequirement
 	Warnings      []model.SpecWarning
@@ -43,7 +43,11 @@ func RenderDetails(data DetailsData) string {
 		return strings.Join(lines, "\n")
 	}
 
-	return RenderSectionView(buildDetailsSections(data), data.ActiveSection, "")
+	return widgets.RenderSectionView(widgets.SectionViewData{
+		Sections:   buildDetailsSections(data),
+		Active:     data.ActiveSection,
+		EmptyState: "",
+	})
 }
 
 func renderSummaryDetailsContent(data DetailsData) string {
@@ -66,19 +70,19 @@ func RenderActiveDetailsSectionForProjection(data DetailsData) string {
 	}
 }
 
-func BuildDetailsSectionsForProjection(data DetailsData) []Section {
+func BuildDetailsSectionsForProjection(data DetailsData) []widgets.Section {
 	return buildDetailsSections(data)
 }
 
-func buildDetailsSections(data DetailsData) []Section {
-	sections := []Section{
+func buildDetailsSections(data DetailsData) []widgets.Section {
+	sections := []widgets.Section{
 		{Label: DetailsSectionSummary, Body: RenderActiveDetailsSectionForProjection(DetailsData{
 			Selected:      data.Selected,
 			ActiveSection: DetailsSectionSummary,
 		})},
 	}
 	if data.Security != nil && len(data.Security.Alternatives) > 0 {
-		sections = append(sections, Section{
+		sections = append(sections, widgets.Section{
 			Label: DetailsSectionSecurity,
 			Body: RenderActiveDetailsSectionForProjection(DetailsData{
 				Security:      data.Security,
@@ -87,7 +91,7 @@ func buildDetailsSections(data DetailsData) []Section {
 		})
 	}
 	if len(data.Warnings) > 0 {
-		sections = append(sections, Section{
+		sections = append(sections, widgets.Section{
 			Label: DetailsSectionWarnings,
 			Body: RenderActiveDetailsSectionForProjection(DetailsData{
 				Warnings:      data.Warnings,

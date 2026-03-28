@@ -22,8 +22,6 @@ type OperationsData struct {
 	LoadInFlight    bool
 	LoadFailed      bool
 	HasSpec         bool
-	FilterText      string
-	FilterEditing   bool
 	TotalOperations int
 	Groups          []OperationsGroup
 }

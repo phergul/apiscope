@@ -10,7 +10,6 @@ func TestRenderOperationsHighlightsSelectedOperationAndPreservesOrder(t *testing
 
 	content := RenderOperations(OperationsData{
 		HasSpec:         true,
-		FilterText:      "",
 		TotalOperations: 2,
 		Groups: []OperationsGroup{
 			{
@@ -67,7 +66,6 @@ func TestRenderOperationsShowsFilteredEmptyState(t *testing.T) {
 
 	content := RenderOperations(OperationsData{
 		HasSpec:         true,
-		FilterText:      "zzz",
 		TotalOperations: 2,
 	})
 	content = stripANSI(content)

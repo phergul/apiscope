@@ -3,6 +3,8 @@ package panes
 import (
 	"strings"
 	"testing"
+
+	"github.com/phergul/apiscope/internal/tui/widgets"
 )
 
 func TestRenderRequestShowsGroupedInputsAndAuthSummary(t *testing.T) {
@@ -30,7 +32,7 @@ func TestRenderRequestShowsGroupedInputsAndAuthSummary(t *testing.T) {
 	requestContent = stripANSI(requestContent)
 
 	wantRequestSnippets := []string{
-		"[Path]  Query  Body  Auth",
+		"Path  Query  Body  Auth",
 		"> petId (required, string) = <unset>",
 		"legacy (optional, content) = <unsupported: content-based parameter> [read-only]",
 	}
@@ -69,7 +71,7 @@ func TestRenderRequestShowsBodyEditorState(t *testing.T) {
 	requestContent = stripANSI(requestContent)
 
 	wantRequestSnippets := []string{
-		"Path  [Body]  Auth",
+		"Path  Body  Auth",
 		"Media type: application/json",
 		"Ctrl+S save | Esc cancel",
 		"  \"name\": \"fido\"",
@@ -85,7 +87,7 @@ func TestRenderResponseShowsDeclaredResponses(t *testing.T) {
 	t.Parallel()
 
 	responseContent := RenderResponse(ResponseData{
-		Sections: []Section{
+		Sections: []widgets.Section{
 			{
 				Label: "200",
 				Body: strings.Join([]string{
@@ -111,7 +113,7 @@ func TestRenderResponseShowsDeclaredResponses(t *testing.T) {
 	responseContent = stripANSI(responseContent)
 
 	wantResponseSnippets := []string{
-		"[200]  default",
+		"200  default",
 		"Description: OK",
 		"Headers:",
 		"- X-Rate-Limit (integer)",
@@ -142,7 +144,7 @@ func TestRenderResponseNormalisesEmbeddedDescriptionLineBreaks(t *testing.T) {
 	t.Parallel()
 
 	responseContent := RenderResponse(ResponseData{
-		Sections: []Section{
+		Sections: []widgets.Section{
 			{
 				Label: "401",
 				Body: strings.Join([]string{

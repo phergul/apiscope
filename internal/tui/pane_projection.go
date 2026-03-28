@@ -52,7 +52,11 @@ func (m *Model) detailsPaneContentForSize(width, height int) string {
 	for index := range sections {
 		if sections[index].Label == data.ActiveSection {
 			sections[index].Body = clipped
-			return panes.RenderSectionView(sections, data.ActiveSection, "")
+			return widgets.RenderSectionView(widgets.SectionViewData{
+				Sections:   sections,
+				Active:     data.ActiveSection,
+				EmptyState: "",
+			})
 		}
 	}
 
@@ -60,7 +64,11 @@ func (m *Model) detailsPaneContentForSize(width, height int) string {
 		sections[0].Body = clipped
 	}
 
-	return panes.RenderSectionView(sections, data.ActiveSection, "")
+	return widgets.RenderSectionView(widgets.SectionViewData{
+		Sections:   sections,
+		Active:     data.ActiveSection,
+		EmptyState: "",
+	})
 }
 
 func (m *Model) requestPaneContent() string {
@@ -118,11 +126,9 @@ func (m *Model) operationsPaneFooter() string {
 
 func (m *Model) projectOperationsPane() panes.OperationsData {
 	data := panes.OperationsData{
-		LoadInFlight:  m.viewState.LoadInFlight,
-		LoadFailed:    m.loadErr != nil,
-		HasSpec:       m.session.Spec != nil,
-		FilterText:    m.viewState.FilterText,
-		FilterEditing: m.viewState.ActiveEditorMode == model.EditorModeFilter,
+		LoadInFlight: m.viewState.LoadInFlight,
+		LoadFailed:   m.loadErr != nil,
+		HasSpec:      m.session.Spec != nil,
 	}
 	if m.session.Spec == nil {
 		return data
@@ -157,7 +163,6 @@ func (m *Model) projectDetailsPane() panes.DetailsData {
 		LoadErrorBody: "",
 		Selected:      m.resolvedSelectedOperation(),
 		FilterText:    m.viewState.FilterText,
-		Sections:      m.availableDetailsSectionLabels(),
 		ActiveSection: string(m.activeDetailsSection),
 	}
 	if m.loadErr != nil {
@@ -172,16 +177,6 @@ func (m *Model) projectDetailsPane() panes.DetailsData {
 	}
 
 	return data
-}
-
-func (m *Model) availableDetailsSectionLabels() []string {
-	available := m.availableDetailsSections()
-	labels := make([]string, 0, len(available))
-	for _, section := range available {
-		labels = append(labels, string(section))
-	}
-
-	return labels
 }
 
 func (m *Model) projectRequestPane() panes.RequestData {
@@ -339,43 +334,10 @@ func focusedPaneLabel(pane model.FocusedPane) string {
 	}
 }
 
-func projectRequestSections(operation *model.Operation, requirement *model.SecurityRequirement) []panes.Section {
-	if operation == nil {
-		return nil
-	}
-
-	sections := make([]panes.Section, 0, len(requestParameterLocations)+2)
-	for _, location := range requestParameterLocations {
-		locationParameters := parametersInLocation(operation.Parameters, location)
-		if len(locationParameters) == 0 {
-			continue
-		}
-
-		sections = append(sections, panes.Section{
-			Label: requestLocationSectionLabel(location),
-			Body:  parameterGroupSectionBody(locationParameters),
-		})
-	}
-	if operation.RequestBody != nil {
-		sections = append(sections, panes.Section{
-			Label: requestSectionBody,
-			Body:  requestBodySectionBody(operation.RequestBody),
-		})
-	}
-	if requirement != nil && len(requirement.Alternatives) > 0 {
-		sections = append(sections, panes.Section{
-			Label: requestSectionAuth,
-			Body:  panes.FormatSecurityRequirementForProjection(requirement),
-		})
-	}
-
-	return sections
-}
-
-func projectResponseSections(responses []model.ResponseSpec) []panes.Section {
-	sections := make([]panes.Section, 0, len(responses))
+func projectResponseSections(responses []model.ResponseSpec) []widgets.Section {
+	sections := make([]widgets.Section, 0, len(responses))
 	for _, response := range responses {
-		sections = append(sections, panes.Section{
+		sections = append(sections, widgets.Section{
 			Label: response.StatusCode,
 			Body:  responseSectionBody(response),
 		})
@@ -444,46 +406,6 @@ func schemaTypeHint(schema *model.Schema) string {
 	}
 
 	return "object"
-}
-
-func parameterGroupSectionBody(parameters []model.Parameter) string {
-	lines := make([]string, 0, len(parameters)*3)
-	for index, parameter := range parameters {
-		if index > 0 {
-			lines = append(lines, "")
-		}
-
-		lines = append(lines, "- "+parameter.Name+" ("+booleanRequirementLabel(parameter.Required)+", "+parameterTypeHint(parameter)+")")
-		if description := strings.TrimSpace(parameter.Description); description != "" {
-			lines = append(lines, "  Description: "+description)
-		}
-		if len(parameter.Content) > 0 {
-			lines = append(lines, "  Content types: "+strings.Join(mediaTypesForContent(parameter.Content), ", "))
-		}
-	}
-
-	return strings.Join(lines, "\n")
-}
-
-func requestBodySectionBody(body *model.RequestBodySpec) string {
-	if body == nil {
-		return "No request body."
-	}
-
-	required := "optional"
-	if body.Required {
-		required = "required"
-	}
-
-	lines := []string{
-		"Required: " + required,
-		"Media types: " + strings.Join(defaultIfEmpty(mediaTypesForContent(body.Content), "none"), ", "),
-	}
-	if description := strings.TrimSpace(body.Description); description != "" {
-		lines = append(lines, "Description: "+description)
-	}
-
-	return strings.Join(lines, "\n")
 }
 
 func responseSectionBody(response model.ResponseSpec) string {

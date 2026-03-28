@@ -18,7 +18,20 @@ type paneView struct {
 }
 
 func (m *Model) operationsPaneContent() string {
-	return panes.RenderOperations(m.projectOperationsPane())
+	width, _ := m.resolvedDimensions()
+	if m.viewState.RightPaneLayoutPreset == layoutPresetWide {
+		totalWidth := width
+		width = clampInt(int(float64(totalWidth)*0.32), 30, 40)
+		width = minInt(width, totalWidth-20)
+	}
+
+	return m.operationsPaneContentForSize(width)
+}
+
+func (m *Model) operationsPaneContentForSize(width int) string {
+	data := m.projectOperationsPane()
+	data.ContentWidth = maxInt(width-4, 1)
+	return panes.RenderOperations(data)
 }
 
 func (m *Model) detailsPaneContent() string {

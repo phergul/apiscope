@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/phergul/apiscope/internal/tui/widgets"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 type OperationRow struct {
@@ -22,6 +24,7 @@ type OperationsData struct {
 	LoadInFlight    bool
 	LoadFailed      bool
 	HasSpec         bool
+	ContentWidth    int
 	TotalOperations int
 	Groups          []OperationsGroup
 }
@@ -50,14 +53,9 @@ func RenderOperations(data OperationsData) string {
 	for _, group := range data.Groups {
 		lines = append(lines, widgets.RenderMutedHeading(strings.ToUpper(group.Name)))
 
-		items := make([]widgets.ListItem, 0, len(group.Rows))
 		for _, row := range group.Rows {
-			items = append(items, widgets.ListItem{
-				Content:  fmt.Sprintf("%s %s", widgets.RenderHTTPMethod(row.Method, 6), row.Path),
-				Selected: row.Selected,
-			})
+			lines = append(lines, renderOperationRow(row, data.ContentWidth))
 		}
-		lines = append(lines, strings.Split(widgets.RenderList(items), "\n")...)
 		lines = append(lines, "")
 	}
 	if len(lines) > 0 && lines[len(lines)-1] == "" {
@@ -65,4 +63,24 @@ func RenderOperations(data OperationsData) string {
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+func renderOperationRow(row OperationRow, width int) string {
+	methodLabel := fmt.Sprintf(" %-6s ", strings.ToUpper(row.Method))
+	methodStyle := lipgloss.NewStyle().Foreground(widgets.MethodColor(row.Method)).Bold(true)
+	pathStyle := widgets.BodyTextStyle()
+	rowStyle := widgets.BodyTextStyle()
+
+	if row.Selected {
+		methodStyle = methodStyle.Background(widgets.CurrentTheme().Palette.Selection)
+		pathStyle = widgets.SelectedTextStyle()
+		rowStyle = widgets.SelectedTextStyle()
+	}
+
+	content := fmt.Sprintf("%s%s", methodStyle.Render(methodLabel), pathStyle.Render(row.Path))
+	if width > 0 {
+		rowStyle = rowStyle.Width(width).MaxWidth(width)
+	}
+
+	return rowStyle.Render(content)
 }

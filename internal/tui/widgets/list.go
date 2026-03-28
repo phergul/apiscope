@@ -6,6 +6,7 @@ type ListItem struct {
 	Content  string
 	Selected bool
 	Muted    bool
+	Width    int
 }
 
 func RenderList(items []ListItem) string {
@@ -21,7 +22,12 @@ func RenderList(items []ListItem) string {
 			prefix = "> "
 		}
 
-		lines = append(lines, prefix+style.Render(item.Content))
+		content := prefix + item.Content
+		if item.Width > 0 {
+			style = style.Width(item.Width).MaxWidth(item.Width)
+		}
+
+		lines = append(lines, style.Render(content))
 	}
 
 	return strings.Join(lines, "\n")

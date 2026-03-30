@@ -69,7 +69,6 @@ func TestRenderShowsBodyEditorState(t *testing.T) {
 			View:      "{\n  \"name\": \"fido\"\n}",
 			Title:     "Edit body",
 			Context:   "Media type: application/json",
-			Meta:      "Help - ?",
 		},
 	}))
 
@@ -134,7 +133,6 @@ func TestRenderShowsFieldEditorAsPopupWithoutDefaultControls(t *testing.T) {
 			View:    "42",
 			Title:   "Edit value",
 			Context: "limit (optional, integer)",
-			Meta:    "Help - ?",
 		},
 	}))
 
@@ -163,13 +161,10 @@ func TestRenderShowsPopupHelpWhenEnabled(t *testing.T) {
 			{Label: "limit", Meta: "optional, integer", Value: "<unset>", Editable: true},
 		},
 		Edit: EditView{
-			Kind:     "field",
-			View:     "42",
-			Title:    "Edit value",
-			Context:  "limit (optional, integer)",
-			Meta:     "Help - ?",
-			Help:     "Enter save\nEsc cancel\n? toggle help",
-			ShowHelp: true,
+			Kind:    "field",
+			View:    "42",
+			Title:   "Edit value",
+			Context: "limit (optional, integer)",
 		},
 	}))
 

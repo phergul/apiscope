@@ -25,10 +25,11 @@ func (m *Model) render() string {
 
 	statusBar := m.renderStatusBar(width)
 	bodyHeight := max(height-lipgloss.Height(statusBar), 12)
+	helpOverlay := m.projectHelpOverlay()
 
 	if m.viewState.ZoomedPane {
 		view := lipgloss.JoinVertical(lipgloss.Left, m.renderZoomLayout(width, bodyHeight), statusBar)
-		return m.renderRequestHelpOverlay(view, width)
+		return m.renderHelpOverlay(view, width, helpOverlay)
 	}
 
 	var body string
@@ -40,7 +41,7 @@ func (m *Model) render() string {
 	}
 
 	view := lipgloss.JoinVertical(lipgloss.Left, body, statusBar)
-	return m.renderRequestHelpOverlay(view, width)
+	return m.renderHelpOverlay(view, width, helpOverlay)
 }
 
 func (m *Model) renderBlockingLoadError(width, height int) string {
@@ -171,39 +172,6 @@ func (m *Model) renderPane(titleLeft, title, titleRight, body, footer string, wi
 func (m *Model) renderStatusBar(width int) string {
 	line := statusbarui.Render(m.projectStatusBar(), width)
 	return widgets.StatusBarStyle(width).Render(line)
-}
-
-func (m *Model) renderRequestHelpOverlay(view string, width int) string {
-	if !m.requestEditActive() || !m.requestEditHelpOpen {
-		return view
-	}
-
-	helpText := m.currentRequestHelpText()
-	if strings.TrimSpace(helpText) == "" {
-		return view
-	}
-
-	popup := widgets.RenderPopup(widgets.PopupData{
-		Title:   "Help",
-		Body:    helpText,
-		Width:   m.requestHelpPopupWidth(width, helpText),
-		Focused: false,
-	})
-
-	x := max(width-lipgloss.Width(popup), 0)
-	y := max(lipgloss.Height(view)-lipgloss.Height(m.renderStatusBar(width))-lipgloss.Height(popup), 0)
-	return widgets.Overlay(view, popup, x, y)
-}
-
-func (m *Model) requestHelpPopupWidth(totalWidth int, helpText string) int {
-	maxLineWidth := lipgloss.Width("Help")
-	for _, line := range strings.Split(strings.TrimSpace(helpText), "\n") {
-		if lineWidth := lipgloss.Width(line); lineWidth > maxLineWidth {
-			maxLineWidth = lineWidth
-		}
-	}
-
-	return util.Clamp(maxLineWidth+4, 20, max(totalWidth-2, 20))
 }
 
 func (m *Model) resolvedDimensions() (int, int) {

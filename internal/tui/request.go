@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"strings"
 
 	"github.com/phergul/apiscope/internal/app"
 	"github.com/phergul/apiscope/internal/model"
@@ -109,6 +110,42 @@ func (m *Model) currentRequestEditorView() string {
 	default:
 		return ""
 	}
+}
+
+func (m *Model) currentRequestEditorState(selected *model.Operation, draft *model.RequestDraft) requestui.EditorState {
+	state := requestui.EditorState{
+		Kind:   string(m.viewState.RequestEditKind),
+		Buffer: m.viewState.RequestEditBuffer,
+		View:   m.currentRequestEditorView(),
+	}
+
+	switch m.viewState.RequestEditKind {
+	case model.RequestEditKindBody:
+		state.BodyMediaType = requestui.DraftBodyMediaType(selected, draft)
+	case model.RequestEditKindField:
+		if row := m.currentRequestEditRow(); row != nil {
+			state.ActiveRowLabel = row.Label
+			state.ActiveRowMeta = row.Meta
+		}
+	}
+
+	return state
+}
+
+func (m *Model) currentRequestHelpOverlay() helpOverlayView {
+	if !m.requestEditActive() {
+		return helpOverlayView{}
+	}
+
+	help := requestui.BuildHelpView(m.currentRequestEditorState(m.resolvedSelectedOperation(), m.ensureSelectedRequestDraft()))
+	overlay := helpOverlayView{Hint: help.Hint}
+	if !m.requestEditHelpOpen || strings.TrimSpace(help.Body) == "" {
+		return overlay
+	}
+
+	overlay.Title = help.Title
+	overlay.Body = help.Body
+	return overlay
 }
 
 func (m *Model) requestPaneContentForSize(width, height int) string {
@@ -385,9 +422,4 @@ func (m *Model) currentRequestEditRow() *requestui.RowDescriptor {
 	}
 
 	return &rows[index]
-}
-
-func (m *Model) currentRequestHelpText() string {
-	_, _, helpText := m.requestEditPopupCopy()
-	return helpText
 }

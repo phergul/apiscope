@@ -23,9 +23,6 @@ type EditView struct {
 	View      string
 	Title     string
 	Context   string
-	Meta      string
-	Help      string
-	ShowHelp  bool
 }
 
 type Data struct {

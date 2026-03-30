@@ -83,18 +83,7 @@ func (m *Model) projectRequestPane() requestui.Data {
 	data.Sections = m.availableRequestSections()
 	data.ActiveSection = m.activeRequestSection
 	data.ActiveRow = m.viewState.RequestActiveRow
-	contextText, titleText, helpText := m.requestEditPopupCopy()
-	data.Edit = requestui.EditView{
-		Kind:      string(m.viewState.RequestEditKind),
-		Buffer:    m.viewState.RequestEditBuffer,
-		MediaType: requestui.DraftBodyMediaType(selected, draft),
-		View:      m.currentRequestEditorView(),
-		Title:     titleText,
-		Context:   contextText,
-		Meta:      "Help - ?",
-		Help:      helpText,
-		ShowHelp:  m.requestEditHelpOpen,
-	}
+	data.Edit = requestui.BuildEditView(m.currentRequestEditorState(selected, draft))
 	for _, row := range m.activeRequestRows() {
 		issue, hasIssue := m.requestValidation.IssueForTarget(row.ID)
 		errorText := ""
@@ -116,26 +105,6 @@ func (m *Model) projectRequestPane() requestui.Data {
 
 	return data
 }
-
-func (m *Model) requestEditPopupCopy() (contextText, titleText, helpText string) {
-	row := m.currentRequestEditRow()
-	switch m.viewState.RequestEditKind {
-	case model.RequestEditKindBody:
-		return "Media type: " + requestui.DraftBodyMediaType(m.resolvedSelectedOperation(), m.ensureSelectedRequestDraft()), "Edit body", "Ctrl+S save\nEsc cancel\nEnter newline\n? toggle help"
-	case model.RequestEditKindField:
-		if row == nil {
-			return "", "Edit value", "Enter save\nEsc cancel\n? toggle help"
-		}
-		context := row.Label
-		if strings.TrimSpace(row.Meta) != "" {
-			context += " (" + row.Meta + ")"
-		}
-		return context, "Edit value", "Enter save\nEsc cancel\n? toggle help"
-	default:
-		return "", "", ""
-	}
-}
-
 func (m *Model) projectResponsePane() responseui.Data {
 	data := responseui.Data{
 		LoadInFlight: m.viewState.LoadInFlight,
@@ -158,14 +127,12 @@ func (m *Model) projectResponsePane() responseui.Data {
 
 func (m *Model) projectStatusBar() statusbarui.Data {
 	data := statusbarui.Data{
-		Source:  m.source,
-		State:   m.loadStateLabel(),
-		Focus:   focusedPaneLabel(m.viewState.FocusedPane),
-		HasSpec: m.session.Spec != nil,
-		Notice:  m.viewState.Notice,
-	}
-	if m.requestEditActive() {
-		data.HelpHint = "Help - ?"
+		Source:   m.source,
+		State:    m.loadStateLabel(),
+		Focus:    focusedPaneLabel(m.viewState.FocusedPane),
+		HasSpec:  m.session.Spec != nil,
+		Notice:   m.viewState.Notice,
+		HelpHint: m.projectHelpOverlay().Hint,
 	}
 
 	if selected := m.resolvedSelectedOperation(); selected != nil {

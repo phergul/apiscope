@@ -888,6 +888,32 @@ func TestModelRequestEditingBlocksNavigationUntilExit(t *testing.T) {
 	}
 }
 
+func TestModelQuestionMarkTogglesRequestPopupHelp(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.activeRequestSection = "Path"
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated := updatedModel.(*Model)
+	if updated.requestEditHelpOpen {
+		t.Fatal("expected popup help to start hidden")
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	updated = updatedModel.(*Model)
+	if !updated.requestEditHelpOpen {
+		t.Fatal("expected question mark to open popup help")
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	updated = updatedModel.(*Model)
+	if updated.requestEditHelpOpen {
+		t.Fatal("expected next keypress to close popup help")
+	}
+}
+
 func TestModelRequestDraftPersistsAcrossOperationAndFilterChanges(t *testing.T) {
 	t.Parallel()
 

@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"github.com/phergul/apiscope/internal/tui/widgets"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 type Row struct {
@@ -19,6 +21,11 @@ type EditView struct {
 	Buffer    string
 	MediaType string
 	View      string
+	Title     string
+	Context   string
+	Meta      string
+	Help      string
+	ShowHelp  bool
 }
 
 type Data struct {
@@ -30,6 +37,8 @@ type Data struct {
 	Edit             EditView
 	EmptyState       string
 	ValidationNotice []string
+	ContentWidth     int
+	ContentHeight    int
 }
 
 func Render(data Data) string {
@@ -52,20 +61,16 @@ func Render(data Data) string {
 
 func RenderActiveSection(data Data) string {
 	parts := make([]string, 0, 3)
-	if data.Edit.Kind == "body" {
-		if summary := renderValidationSummary(data.ValidationNotice); summary != "" {
-			parts = append(parts, summary)
-		}
-		parts = append(parts, renderBodyEditor(data.Edit))
-		return strings.Join(parts, "\n\n")
-	}
 
 	if len(data.Rows) == 0 {
 		if summary := renderValidationSummary(data.ValidationNotice); summary != "" {
 			parts = append(parts, summary)
 		}
-		parts = append(parts, "No inputs available.")
-		return strings.Join(parts, "\n\n")
+		base := strings.Join(append(parts, "No inputs available."), "\n\n")
+		if data.Edit.Kind == "" {
+			return base
+		}
+		return renderEditorOverlay(base, data)
 	}
 
 	activeIndex := requestActiveRowIndex(data.Rows, data.ActiveRow)
@@ -77,13 +82,6 @@ func RenderActiveSection(data Data) string {
 		}
 
 		value := row.Value
-		if index == activeIndex && data.Edit.Kind == "field" {
-			editorView := data.Edit.View
-			if strings.TrimSpace(editorView) == "" {
-				editorView = data.Edit.Buffer
-			}
-			value = editorView + " [Enter save, Esc cancel]"
-		}
 		if !row.Editable && value != "" {
 			value += " [read-only]"
 		}
@@ -105,27 +103,23 @@ func RenderActiveSection(data Data) string {
 	if summary := renderValidationSummary(data.ValidationNotice); summary != "" {
 		parts = append(parts, summary)
 	}
-	parts = append(parts, strings.Join(lines, "\n"))
-	return strings.Join(parts, "\n\n")
+	base := strings.Join(append(parts, strings.Join(lines, "\n")), "\n\n")
+	if data.Edit.Kind == "" {
+		return base
+	}
+
+	return renderEditorOverlay(base, data)
 }
 
-func renderBodyEditor(edit EditView) string {
-	lines := []string{
-		"Media type: " + fallbackText(edit.MediaType, "none"),
-		"Ctrl+S save | Esc cancel",
-		"",
-	}
+func renderEditorOverlay(base string, data Data) string {
+	editorPopup := widgets.RenderPopup(widgets.PopupData{
+		Title:   data.Edit.Title,
+		Body:    editorPopupBody(data),
+		Width:   popupWidth(data),
+		Focused: true,
+	})
 
-	body := edit.View
-	if strings.TrimSpace(body) == "" {
-		body = edit.Buffer
-	}
-	if body == "" {
-		body = "<empty>"
-	}
-
-	lines = append(lines, strings.Split(body, "\n")...)
-	return strings.Join(lines, "\n")
+	return widgets.Overlay(base, editorPopup, popupX(data, editorPopup), popupY(data, editorPopup))
 }
 
 func requestActiveRowIndex(rows []Row, activeRow int) int {
@@ -162,4 +156,53 @@ func renderValidationSummary(messages []string) string {
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+func editorPopupBody(data Data) string {
+	lines := make([]string, 0, 5)
+	if strings.TrimSpace(data.Edit.Context) != "" {
+		lines = append(lines, data.Edit.Context, "")
+	}
+
+	editor := strings.TrimSpace(data.Edit.View)
+	if editor == "" {
+		editor = data.Edit.Buffer
+	}
+	if strings.TrimSpace(editor) == "" {
+		editor = "<empty>"
+	}
+
+	lines = append(lines, editor)
+	return strings.Join(lines, "\n")
+}
+
+func popupWidth(data Data) int {
+	if data.Edit.Kind == "body" {
+		return min(max(data.ContentWidth-8, 28), 84)
+	}
+
+	return min(max(data.ContentWidth-10, 24), 64)
+}
+
+func popupX(data Data, popup string) int {
+	popupWidth := lipgloss.Width(popup)
+	return max((max(data.ContentWidth, popupWidth)-popupWidth)/2, 0)
+}
+
+func popupY(data Data, popup string) int {
+	popupHeight := lipgloss.Height(popup)
+	if data.Edit.Kind == "body" {
+		return max((max(data.ContentHeight, popupHeight)-popupHeight)/2, 0)
+	}
+
+	summaryHeight := 0
+	if len(data.ValidationNotice) > 0 {
+		summaryHeight = lipgloss.Height(renderValidationSummary(data.ValidationNotice)) + 2
+	}
+	target := summaryHeight + data.ActiveRow + 1
+	maxY := max(data.ContentHeight-popupHeight, 0)
+	if target > maxY {
+		target = maxY
+	}
+	return max(target, 0)
 }

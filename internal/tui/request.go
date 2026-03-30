@@ -103,9 +103,9 @@ func (m *Model) currentRequestEditorView() string {
 
 	switch m.viewState.RequestEditKind {
 	case model.RequestEditKindField:
-		return m.requestFieldInput.View()
+		return m.requestFieldInput.BareView()
 	case model.RequestEditKindBody:
-		return m.requestBodyInput.View()
+		return m.requestBodyInput.BareView()
 	default:
 		return ""
 	}
@@ -113,10 +113,14 @@ func (m *Model) currentRequestEditorView() string {
 
 func (m *Model) requestPaneContentForSize(width, height int) string {
 	contentWidth := max(width-4, 1)
-	m.requestFieldInput.SetWidth(max(contentWidth-18, 12))
-	m.requestBodyInput.SetSize(contentWidth, max(height-9, 3))
+	fieldPopupWidth := min(max(contentWidth-10, 24), 64)
+	bodyPopupWidth := min(max(contentWidth-8, 28), 84)
+	m.requestFieldInput.SetWidth(max(fieldPopupWidth-4, 12))
+	m.requestBodyInput.SetSize(max(bodyPopupWidth-4, 20), max(min(height-10, 12), 4))
 
 	data := m.projectRequestPane()
+	data.ContentWidth = contentWidth
+	data.ContentHeight = max(height-6, 1)
 	if data.LoadInFlight || len(data.Sections) == 0 {
 		return requestui.Render(data)
 	}
@@ -151,6 +155,7 @@ func (m *Model) beginRequestEdit() {
 	m.viewState.RequestEditKind = start.Kind
 	m.viewState.RequestEditTarget = start.Target
 	m.viewState.RequestEditBuffer = start.Buffer
+	m.requestEditHelpOpen = false
 	if start.ResetScroll {
 		m.viewState.RequestScrollOffset = 0
 	}
@@ -191,6 +196,7 @@ func (m *Model) finishRequestEdit() {
 	m.viewState.RequestEditKind = model.RequestEditKindNone
 	m.viewState.RequestEditTarget = ""
 	m.viewState.RequestEditBuffer = ""
+	m.requestEditHelpOpen = false
 	m.clearRequestValidation()
 	m.syncActiveRequestRow()
 }
@@ -237,11 +243,27 @@ func (m *Model) maxRequestEditScrollOffset() int {
 }
 
 func (m *Model) updateRequestEditKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.requestEditHelpOpen {
+		switch msg.String() {
+		case "ctrl+c", "q":
+			return m, tea.Quit
+		case "?":
+			m.requestEditHelpOpen = false
+			return m, nil
+		default:
+			m.requestEditHelpOpen = false
+			return m, nil
+		}
+	}
+
 	switch msg.String() {
 	case "ctrl+c", "q":
 		return m, tea.Quit
 	case "esc":
 		m.cancelRequestEdit()
+	case "?":
+		m.requestEditHelpOpen = !m.requestEditHelpOpen
+		return m, nil
 	case "ctrl+s":
 		if m.viewState.RequestEditKind == model.RequestEditKindBody {
 			m.saveRequestEdit()
@@ -346,4 +368,26 @@ func (m *Model) responsePaneContentForSize(width, height int) string {
 		ActiveSection: active,
 		EmptyState:    data.EmptyState,
 	})
+}
+
+func (m *Model) currentRequestEditRow() *requestui.RowDescriptor {
+	rows := m.activeRequestRows()
+	if len(rows) == 0 {
+		return nil
+	}
+
+	index := m.viewState.RequestActiveRow
+	if index < 0 {
+		index = 0
+	}
+	if index >= len(rows) {
+		index = len(rows) - 1
+	}
+
+	return &rows[index]
+}
+
+func (m *Model) currentRequestHelpText() string {
+	_, _, helpText := m.requestEditPopupCopy()
+	return helpText
 }

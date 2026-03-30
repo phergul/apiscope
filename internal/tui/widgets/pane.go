@@ -6,7 +6,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-func RenderPaneFrame(title, content string, width int, focused bool) string {
+func RenderPaneFrame(titleLeft, title, titleRight, content string, width int, focused bool) string {
 	theme := CurrentTheme()
 	borderColor := theme.Palette.Border
 	if focused {
@@ -21,19 +21,43 @@ func RenderPaneFrame(title, content string, width int, focused bool) string {
 
 	width = max(width, 3)
 	innerBorderWidth := max(width-2, 1)
+	leftText := ""
+	leftTextWidth := 0
+	if strings.TrimSpace(titleLeft) != "" {
+		leftText = " " + titleLeft + " "
+		leftTextWidth = lipgloss.Width(leftText)
+	}
 	titleText := " " + title + " "
 	titleWidth := lipgloss.Width(titleText)
 	if titleWidth > innerBorderWidth {
 		titleText = lipgloss.NewStyle().MaxWidth(innerBorderWidth).Render(titleText)
 		titleWidth = lipgloss.Width(titleText)
 	}
+	rightText := ""
+	rightWidth := 0
+	if strings.TrimSpace(titleRight) != "" {
+		rightText = " " + titleRight + " "
+		rightWidth = lipgloss.Width(rightText)
+		if rightWidth > max(innerBorderWidth-titleWidth-leftTextWidth, 0) {
+			available := max(innerBorderWidth-titleWidth-leftTextWidth-1, 0)
+			rightText = lipgloss.NewStyle().MaxWidth(available).Render(rightText)
+			rightWidth = lipgloss.Width(rightText)
+		}
+	}
+	if leftTextWidth > max(innerBorderWidth-titleWidth-rightWidth, 0) {
+		available := max(innerBorderWidth-titleWidth-rightWidth-1, 0)
+		leftText = lipgloss.NewStyle().MaxWidth(available).Render(leftText)
+		leftTextWidth = lipgloss.Width(leftText)
+	}
 
-	leftWidth := max((innerBorderWidth-titleWidth)/2, 0)
-	rightWidth := max(innerBorderWidth-titleWidth-leftWidth, 0)
+	leftGapWidth := max((innerBorderWidth-titleWidth-rightWidth-leftTextWidth)/2, 0)
+	middleWidth := max(innerBorderWidth-titleWidth-rightWidth-leftTextWidth-leftGapWidth, 0)
 	topLine := borderStyle.Render(paneBorder.TopLeft) +
-		borderStyle.Render(strings.Repeat(paneBorder.Top, leftWidth)) +
+		MutedTextStyle().Render(leftText) +
+		borderStyle.Render(strings.Repeat(paneBorder.Top, leftGapWidth)) +
 		titleStyle.Render(titleText) +
-		borderStyle.Render(strings.Repeat(paneBorder.Top, rightWidth)) +
+		borderStyle.Render(strings.Repeat(paneBorder.Top, middleWidth)) +
+		MutedTextStyle().Render(rightText) +
 		borderStyle.Render(paneBorder.TopRight)
 
 	bodyWidth := max(width-4, 1)

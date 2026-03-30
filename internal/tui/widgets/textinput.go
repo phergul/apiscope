@@ -76,3 +76,10 @@ func (i TextInput) View() string {
 	}
 	return InputFrameStyle(i.model.Focused()).Render(i.model.View())
 }
+
+func (i TextInput) BareView() string {
+	if !i.initialized {
+		i = NewTextInput()
+	}
+	return i.model.View()
+}

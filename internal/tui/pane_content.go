@@ -14,10 +14,12 @@ import (
 )
 
 type paneView struct {
-	Title   string
-	Body    string
-	Footer  string
-	Focused bool
+	TitleLeft  string
+	Title      string
+	TitleRight string
+	Body       string
+	Footer     string
+	Focused    bool
 }
 
 func (m *Model) operationsPaneContent() string {
@@ -159,9 +161,10 @@ func (m *Model) paneView(pane model.FocusedPane) paneView {
 		}
 	case model.FocusedPaneRequest:
 		return paneView{
-			Title:   "3 Request",
-			Body:    m.requestPaneContent(),
-			Focused: m.viewState.FocusedPane == pane,
+			Title:      "3 Request",
+			TitleRight: m.requestPaneTitleRight(),
+			Body:       m.requestPaneContent(),
+			Focused:    m.viewState.FocusedPane == pane && !m.requestEditActive(),
 		}
 	case model.FocusedPaneResponse:
 		return paneView{
@@ -192,4 +195,12 @@ func (m *Model) operationsPaneFooter() string {
 
 	return widgets.InputFrameStyle(false).
 		Render("Filter: " + m.viewState.FilterText)
+}
+
+func (m *Model) requestPaneTitleRight() string {
+	if m.viewState.FocusedPane != model.FocusedPaneRequest {
+		return ""
+	}
+
+	return "Send request Ctrl+R"
 }

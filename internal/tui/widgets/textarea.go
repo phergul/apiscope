@@ -29,17 +29,15 @@ func (t *TextArea) ensure() {
 }
 
 func applyTextAreaTheme(model *bubbletextarea.Model) {
-	theme := CurrentTheme()
-
 	focused := model.FocusedStyle
-	focused.Base = InputFrameStyle(true)
-	focused.CursorLine = lipgloss.NewStyle().Background(theme.Palette.InputBackground)
+	focused.Base = lipgloss.NewStyle()
+	focused.CursorLine = lipgloss.NewStyle()
 	focused.Placeholder = InputPlaceholderStyle()
 	focused.Text = InputTextStyle()
 	model.FocusedStyle = focused
 
 	blurred := model.BlurredStyle
-	blurred.Base = InputFrameStyle(false)
+	blurred.Base = lipgloss.NewStyle()
 	blurred.Placeholder = InputPlaceholderStyle()
 	blurred.Text = InputTextStyle()
 	model.BlurredStyle = blurred
@@ -86,6 +84,13 @@ func (t *TextArea) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (t TextArea) View() string {
+	if !t.initialized {
+		t = NewTextArea()
+	}
+	return InputFrameStyle(t.model.Focused()).Render(t.model.View())
+}
+
+func (t TextArea) BareView() string {
 	if !t.initialized {
 		t = NewTextArea()
 	}

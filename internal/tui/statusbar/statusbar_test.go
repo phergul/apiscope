@@ -19,7 +19,7 @@ func TestRenderIncludesOperationIdentityAndCount(t *testing.T) {
 		OperationCount: 2,
 		VisibleCount:   2,
 		WarningCount:   2,
-	}))
+	}, 160))
 
 	wantSnippets := []string{
 		"Source: demo.yaml",
@@ -35,5 +35,23 @@ func TestRenderIncludesOperationIdentityAndCount(t *testing.T) {
 		if !strings.Contains(content, snippet) {
 			t.Fatalf("expected status bar to include %q, got %q", snippet, content)
 		}
+	}
+}
+
+func TestRenderAlignsHelpHintToRightSide(t *testing.T) {
+	t.Parallel()
+
+	content := ansi.Strip(Render(Data{
+		Source:   "demo.yaml",
+		State:    "loaded",
+		Focus:    "request",
+		HelpHint: "Help - ?",
+	}, 80))
+
+	if !strings.HasSuffix(content, "Help - ?") {
+		t.Fatalf("expected help hint to align to the far right, got %q", content)
+	}
+	if !strings.Contains(content, "Source: demo.yaml") {
+		t.Fatalf("expected normal status content to remain, got %q", content)
 	}
 }

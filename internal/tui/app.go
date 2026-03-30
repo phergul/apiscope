@@ -39,6 +39,7 @@ type Model struct {
 	requestFieldInput     widgets.TextInput
 	requestBodyInput      widgets.TextArea
 	requestValidation     app.RequestValidationResult
+	requestEditHelpOpen   bool
 }
 
 func NewProgram(service *app.Service, source string, input io.Reader, output io.Writer) *Program {

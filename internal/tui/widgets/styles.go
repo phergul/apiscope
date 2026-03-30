@@ -40,22 +40,21 @@ func RenderValidationMessage(content string) string {
 func InputTextStyle() lipgloss.Style {
 	theme := CurrentTheme()
 	return lipgloss.NewStyle().
-		Foreground(theme.Palette.InputText).
-		Background(theme.Palette.InputBackground)
+		Foreground(theme.Palette.InputText)
 }
 
 func InputPlaceholderStyle() lipgloss.Style {
 	theme := CurrentTheme()
 	return lipgloss.NewStyle().
-		Foreground(theme.Palette.InputPlaceholder).
-		Background(theme.Palette.InputBackground)
+		Foreground(theme.Palette.InputPlaceholder)
 }
 
 func InputCursorStyle() lipgloss.Style {
 	theme := CurrentTheme()
 	return lipgloss.NewStyle().
-		Foreground(theme.Palette.TextInverse).
-		Background(theme.Palette.Selection)
+		Foreground(theme.Palette.InputBorder).
+		Underline(true).
+		Bold(true)
 }
 
 func InputFrameStyle(focused bool) lipgloss.Style {
@@ -64,7 +63,8 @@ func InputFrameStyle(focused bool) lipgloss.Style {
 	if focused {
 		borderColor = theme.Palette.InputBorder
 	}
-	return InputTextStyle().
+	return lipgloss.NewStyle().
+		Foreground(theme.Palette.InputText).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(borderColor).
 		Padding(0, 1)
@@ -103,4 +103,19 @@ func ModalStyle(width int) lipgloss.Style {
 
 func ViewportStyle() lipgloss.Style {
 	return BodyTextStyle()
+}
+
+func PopupFrameStyle(width int, focused bool) lipgloss.Style {
+	theme := CurrentTheme()
+	borderColor := theme.Palette.Border
+	if focused {
+		borderColor = theme.Palette.BorderFocused
+	}
+
+	return lipgloss.NewStyle().
+		Width(width).
+		MaxWidth(width).
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(borderColor).
+		Padding(0, 1)
 }

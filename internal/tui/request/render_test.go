@@ -60,17 +60,23 @@ func TestRenderShowsBodyEditorState(t *testing.T) {
 	content := ansi.Strip(Render(Data{
 		Sections:      []string{"Path", "Body", "Auth"},
 		ActiveSection: "Body",
+		ContentWidth:  80,
+		ContentHeight: 12,
 		Edit: EditView{
 			Kind:      "body",
 			MediaType: "application/json",
 			Buffer:    "{\n  \"name\": \"fido\"\n}",
+			View:      "{\n  \"name\": \"fido\"\n}",
+			Title:     "Edit body",
+			Context:   "Media type: application/json",
+			Meta:      "Help - ?",
 		},
 	}))
 
 	wantSnippets := []string{
 		"Path  Body  Auth",
+		"Edit body",
 		"Media type: application/json",
-		"Ctrl+S save | Esc cancel",
 		"  \"name\": \"fido\"",
 	}
 	for _, snippet := range wantSnippets {
@@ -108,5 +114,71 @@ func TestRenderShowsInlineValidationState(t *testing.T) {
 		if !strings.Contains(content, snippet) {
 			t.Fatalf("expected request validation content to include %q, got %q", snippet, content)
 		}
+	}
+}
+
+func TestRenderShowsFieldEditorAsPopupWithoutDefaultControls(t *testing.T) {
+	t.Parallel()
+
+	content := ansi.Strip(Render(Data{
+		Sections:      []string{"Query", "Auth"},
+		ActiveSection: "Query",
+		ContentWidth:  80,
+		ContentHeight: 12,
+		Rows: []Row{
+			{Label: "limit", Meta: "optional, integer", Value: "<unset>", Editable: true},
+			{Label: "offset", Meta: "optional, integer", Value: "<unset>", Editable: true},
+		},
+		Edit: EditView{
+			Kind:    "field",
+			View:    "42",
+			Title:   "Edit value",
+			Context: "limit (optional, integer)",
+			Meta:    "Help - ?",
+		},
+	}))
+
+	for _, snippet := range []string{"Edit value", "limit (optional, integer)", "42"} {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected request popup to include %q, got %q", snippet, content)
+		}
+	}
+	if strings.Contains(content, "Help - ?") {
+		t.Fatalf("expected help hint to stay out of the editor popup, got %q", content)
+	}
+	if strings.Contains(content, "Enter save") {
+		t.Fatalf("expected controls to stay hidden by default, got %q", content)
+	}
+}
+
+func TestRenderShowsPopupHelpWhenEnabled(t *testing.T) {
+	t.Parallel()
+
+	content := ansi.Strip(Render(Data{
+		Sections:      []string{"Query"},
+		ActiveSection: "Query",
+		ContentWidth:  80,
+		ContentHeight: 12,
+		Rows: []Row{
+			{Label: "limit", Meta: "optional, integer", Value: "<unset>", Editable: true},
+		},
+		Edit: EditView{
+			Kind:     "field",
+			View:     "42",
+			Title:    "Edit value",
+			Context:  "limit (optional, integer)",
+			Meta:     "Help - ?",
+			Help:     "Enter save\nEsc cancel\n? toggle help",
+			ShowHelp: true,
+		},
+	}))
+
+	for _, snippet := range []string{"Enter save", "Esc cancel", "? toggle help"} {
+		if strings.Contains(content, snippet) {
+			t.Fatalf("expected help popup content to stay out of request pane rendering, got %q", content)
+		}
+	}
+	if !strings.Contains(content, "Edit value") {
+		t.Fatalf("expected main editor popup to remain visible, got %q", content)
 	}
 }

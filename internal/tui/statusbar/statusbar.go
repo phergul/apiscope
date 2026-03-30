@@ -3,12 +3,15 @@ package statusbar
 import (
 	"fmt"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 type Data struct {
 	Source         string
 	State          string
 	Notice         string
+	HelpHint       string
 	Focus          string
 	OperationLabel string
 	HasSpec        bool
@@ -18,7 +21,7 @@ type Data struct {
 	FilterText     string
 }
 
-func Render(data Data) string {
+func Render(data Data, width int) string {
 	parts := []string{
 		fmt.Sprintf("Source: %s", data.Source),
 		fmt.Sprintf("State: %s", data.State),
@@ -42,5 +45,17 @@ func Render(data Data) string {
 	}
 	parts = append(parts, "Keys: 1-4 switch Tab cycle z zoom q quit")
 
-	return strings.Join(parts, " | ")
+	left := strings.Join(parts, " | ")
+	right := strings.TrimSpace(data.HelpHint)
+	if right == "" || width <= 0 {
+		return left
+	}
+
+	leftWidth := lipgloss.Width(left)
+	rightWidth := lipgloss.Width(right)
+	if leftWidth+rightWidth+1 > width {
+		return left + " " + right
+	}
+
+	return left + strings.Repeat(" ", width-leftWidth-rightWidth) + right
 }

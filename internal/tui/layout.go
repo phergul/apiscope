@@ -27,7 +27,8 @@ func (m *Model) render() string {
 	bodyHeight := max(height-lipgloss.Height(statusBar), 12)
 
 	if m.viewState.ZoomedPane {
-		return lipgloss.JoinVertical(lipgloss.Left, m.renderZoomLayout(width, bodyHeight), statusBar)
+		view := lipgloss.JoinVertical(lipgloss.Left, m.renderZoomLayout(width, bodyHeight), statusBar)
+		return m.renderRequestHelpOverlay(view, width)
 	}
 
 	var body string
@@ -38,7 +39,8 @@ func (m *Model) render() string {
 		body = m.renderNarrowLayout(width, bodyHeight)
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, body, statusBar)
+	view := lipgloss.JoinVertical(lipgloss.Left, body, statusBar)
+	return m.renderRequestHelpOverlay(view, width)
 }
 
 func (m *Model) renderBlockingLoadError(width, height int) string {
@@ -80,14 +82,14 @@ func (m *Model) renderWideLayout(width, height int) string {
 	responseView := m.paneView(model.FocusedPaneResponse)
 	responseView.Body = m.responsePaneContentForSize(rightWidth, responseHeight)
 
-	operationsPane := m.renderPane(operationsView.Title, operationsView.Body, operationsView.Footer, leftWidth, height, operationsView.Focused)
+	operationsPane := m.renderPane(operationsView.TitleLeft, operationsView.Title, operationsView.TitleRight, operationsView.Body, operationsView.Footer, leftWidth, height, operationsView.Focused)
 
 	rightParts := []string{
-		m.renderPane(detailsView.Title, detailsView.Body, detailsView.Footer, rightWidth, heights.Details, detailsView.Focused),
-		m.renderPane(requestView.Title, requestView.Body, requestView.Footer, rightWidth, requestHeight, requestView.Focused),
+		m.renderPane(detailsView.TitleLeft, detailsView.Title, detailsView.TitleRight, detailsView.Body, detailsView.Footer, rightWidth, heights.Details, detailsView.Focused),
+		m.renderPane(requestView.TitleLeft, requestView.Title, requestView.TitleRight, requestView.Body, requestView.Footer, rightWidth, requestHeight, requestView.Focused),
 	}
 	if responseHeight > 0 {
-		rightParts = append(rightParts, m.renderPane(responseView.Title, responseView.Body, responseView.Footer, rightWidth, responseHeight, responseView.Focused))
+		rightParts = append(rightParts, m.renderPane(responseView.TitleLeft, responseView.Title, responseView.TitleRight, responseView.Body, responseView.Footer, rightWidth, responseHeight, responseView.Focused))
 	}
 
 	rightColumn := lipgloss.JoinVertical(lipgloss.Left, rightParts...)
@@ -109,12 +111,12 @@ func (m *Model) renderNarrowLayout(width, height int) string {
 	responseView.Body = m.responsePaneContentForSize(width, responseHeight)
 
 	parts := []string{
-		m.renderPane(operationsView.Title, operationsView.Body, operationsView.Footer, width, heights.Operations, operationsView.Focused),
-		m.renderPane(detailsView.Title, detailsView.Body, detailsView.Footer, width, heights.Details, detailsView.Focused),
-		m.renderPane(requestView.Title, requestView.Body, requestView.Footer, width, requestHeight, requestView.Focused),
+		m.renderPane(operationsView.TitleLeft, operationsView.Title, operationsView.TitleRight, operationsView.Body, operationsView.Footer, width, heights.Operations, operationsView.Focused),
+		m.renderPane(detailsView.TitleLeft, detailsView.Title, detailsView.TitleRight, detailsView.Body, detailsView.Footer, width, heights.Details, detailsView.Focused),
+		m.renderPane(requestView.TitleLeft, requestView.Title, requestView.TitleRight, requestView.Body, requestView.Footer, width, requestHeight, requestView.Focused),
 	}
 	if responseHeight > 0 {
-		parts = append(parts, m.renderPane(responseView.Title, responseView.Body, responseView.Footer, width, responseHeight, responseView.Focused))
+		parts = append(parts, m.renderPane(responseView.TitleLeft, responseView.Title, responseView.TitleRight, responseView.Body, responseView.Footer, width, responseHeight, responseView.Focused))
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
@@ -134,10 +136,14 @@ func (m *Model) renderZoomLayout(width, height int) string {
 	if m.viewState.FocusedPane == model.FocusedPaneResponse {
 		view.Body = m.responsePaneContentForSize(width, height)
 	}
-	return m.renderPane(view.Title, view.Body, view.Footer, width, height, true)
+	focused := true
+	if m.viewState.FocusedPane == model.FocusedPaneRequest && m.requestEditActive() {
+		focused = false
+	}
+	return m.renderPane(view.TitleLeft, view.Title, view.TitleRight, view.Body, view.Footer, width, height, focused)
 }
 
-func (m *Model) renderPane(title, body, footer string, width, height int, focused bool) string {
+func (m *Model) renderPane(titleLeft, title, titleRight, body, footer string, width, height int, focused bool) string {
 	width = max(width, 12)
 	height = max(height, 4)
 
@@ -159,12 +165,45 @@ func (m *Model) renderPane(title, body, footer string, width, height int, focuse
 		content = lipgloss.JoinVertical(lipgloss.Left, bodyBlock, footerBlock)
 	}
 
-	return lipgloss.Place(width, height, lipgloss.Left, lipgloss.Top, widgets.RenderPaneFrame(title, content, width, focused))
+	return lipgloss.Place(width, height, lipgloss.Left, lipgloss.Top, widgets.RenderPaneFrame(titleLeft, title, titleRight, content, width, focused))
 }
 
 func (m *Model) renderStatusBar(width int) string {
-	line := statusbarui.Render(m.projectStatusBar())
+	line := statusbarui.Render(m.projectStatusBar(), width)
 	return widgets.StatusBarStyle(width).Render(line)
+}
+
+func (m *Model) renderRequestHelpOverlay(view string, width int) string {
+	if !m.requestEditActive() || !m.requestEditHelpOpen {
+		return view
+	}
+
+	helpText := m.currentRequestHelpText()
+	if strings.TrimSpace(helpText) == "" {
+		return view
+	}
+
+	popup := widgets.RenderPopup(widgets.PopupData{
+		Title:   "Help",
+		Body:    helpText,
+		Width:   m.requestHelpPopupWidth(width, helpText),
+		Focused: false,
+	})
+
+	x := max(width-lipgloss.Width(popup), 0)
+	y := max(lipgloss.Height(view)-lipgloss.Height(m.renderStatusBar(width))-lipgloss.Height(popup), 0)
+	return widgets.Overlay(view, popup, x, y)
+}
+
+func (m *Model) requestHelpPopupWidth(totalWidth int, helpText string) int {
+	maxLineWidth := lipgloss.Width("Help")
+	for _, line := range strings.Split(strings.TrimSpace(helpText), "\n") {
+		if lineWidth := lipgloss.Width(line); lineWidth > maxLineWidth {
+			maxLineWidth = lineWidth
+		}
+	}
+
+	return util.Clamp(maxLineWidth+4, 20, max(totalWidth-2, 20))
 }
 
 func (m *Model) resolvedDimensions() (int, int) {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/phergul/apiscope/internal/model"
 	detailsui "github.com/phergul/apiscope/internal/tui/details"
+	"github.com/phergul/apiscope/internal/tui/widgets"
 )
 
 func TestOperationsPaneContentFallsBackToFirstVisibleWhenSelectionMissing(t *testing.T) {
@@ -299,6 +300,84 @@ func TestRenderWideLayoutKeepsRequestAboveResponseWhenResponseIsExpanded(t *test
 	}
 	if requestIndex > responseIndex {
 		t.Fatalf("expected request pane to remain above response pane, got %q", content)
+	}
+}
+
+func TestRequestPaneShowsSendHintOnlyWhenFocused(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForRendering()
+	m.width = 120
+	m.height = 30
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+
+	content := stripANSI(m.render())
+	if !strings.Contains(content, "Send request Ctrl+R") {
+		t.Fatalf("expected request pane hint while focused, got %q", content)
+	}
+
+	m.viewState.FocusedPane = model.FocusedPaneDetails
+	content = stripANSI(m.render())
+	if strings.Contains(content, "Send request Ctrl+R") {
+		t.Fatalf("expected request pane hint to hide when unfocused, got %q", content)
+	}
+}
+
+func TestRequestPaneLosesOuterFocusWhileEditing(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForRendering()
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.viewState.ActiveEditorMode = model.EditorModeEdit
+	m.viewState.RequestEditKind = model.RequestEditKindField
+
+	view := m.paneView(model.FocusedPaneRequest)
+	if view.Focused {
+		t.Fatal("expected request pane outer focus to be suppressed while popup editing is active")
+	}
+	if view.TitleRight != "Send request Ctrl+R" {
+		t.Fatalf("expected request hint to remain visible while editing, got %q", view.TitleRight)
+	}
+}
+
+func TestRenderAnchorsRequestHelpPopupAboveStatusBarHint(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForRendering()
+	m.width = 100
+	m.height = 20
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.viewState.ActiveEditorMode = model.EditorModeEdit
+	m.viewState.RequestEditKind = model.RequestEditKindField
+	m.requestEditHelpOpen = true
+
+	content := stripANSI(m.render())
+	lines := strings.Split(content, "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected multi-line render output, got %q", content)
+	}
+
+	lastLine := lines[len(lines)-1]
+	if !strings.HasSuffix(strings.TrimRight(lastLine, " "), "Help - ?") {
+		t.Fatalf("expected status bar help hint on the far right, got %q", lastLine)
+	}
+
+	window := strings.Join(lines[max(len(lines)-10, 0):len(lines)-1], "\n")
+	for _, snippet := range []string{"Help", "Enter save", "Esc cancel"} {
+		if !strings.Contains(window, snippet) {
+			t.Fatalf("expected help popup above status bar to include %q, got %q", snippet, window)
+		}
+	}
+}
+
+func TestRenderPaneFrameShowsLeftCenterAndRightTitles(t *testing.T) {
+	t.Parallel()
+
+	content := stripANSI(widgets.RenderPaneFrame("left", "center", "right", "body", 48, false))
+	for _, snippet := range []string{"left", "center", "right", "body"} {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected pane frame to include %q, got %q", snippet, content)
+		}
 	}
 }
 

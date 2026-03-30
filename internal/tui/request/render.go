@@ -11,6 +11,7 @@ type Row struct {
 	Meta     string
 	Value    string
 	Editable bool
+	Error    string
 }
 
 type EditView struct {
@@ -21,13 +22,14 @@ type EditView struct {
 }
 
 type Data struct {
-	LoadInFlight  bool
-	Sections      []string
-	ActiveSection string
-	Rows          []Row
-	ActiveRow     int
-	Edit          EditView
-	EmptyState    string
+	LoadInFlight     bool
+	Sections         []string
+	ActiveSection    string
+	Rows             []Row
+	ActiveRow        int
+	Edit             EditView
+	EmptyState       string
+	ValidationNotice []string
 }
 
 func Render(data Data) string {
@@ -49,16 +51,25 @@ func Render(data Data) string {
 }
 
 func RenderActiveSection(data Data) string {
+	parts := make([]string, 0, 3)
 	if data.Edit.Kind == "body" {
-		return renderBodyEditor(data.Edit)
+		if summary := renderValidationSummary(data.ValidationNotice); summary != "" {
+			parts = append(parts, summary)
+		}
+		parts = append(parts, renderBodyEditor(data.Edit))
+		return strings.Join(parts, "\n\n")
 	}
 
 	if len(data.Rows) == 0 {
-		return "No inputs available."
+		if summary := renderValidationSummary(data.ValidationNotice); summary != "" {
+			parts = append(parts, summary)
+		}
+		parts = append(parts, "No inputs available.")
+		return strings.Join(parts, "\n\n")
 	}
 
 	activeIndex := requestActiveRowIndex(data.Rows, data.ActiveRow)
-	items := make([]widgets.ListItem, 0, len(data.Rows))
+	lines := make([]string, 0, len(data.Rows)*2)
 	for index, row := range data.Rows {
 		label := row.Label
 		if row.Meta != "" {
@@ -81,14 +92,21 @@ func RenderActiveSection(data Data) string {
 		if value != "" {
 			line += " = " + value
 		}
-		items = append(items, widgets.ListItem{
+		lines = append(lines, widgets.RenderList([]widgets.ListItem{{
 			Content:  line,
 			Selected: index == activeIndex,
 			Muted:    !row.Editable,
-		})
+		}}))
+		if strings.TrimSpace(row.Error) != "" {
+			lines = append(lines, "  "+widgets.RenderValidationMessage(row.Error))
+		}
 	}
 
-	return widgets.RenderList(items)
+	if summary := renderValidationSummary(data.ValidationNotice); summary != "" {
+		parts = append(parts, summary)
+	}
+	parts = append(parts, strings.Join(lines, "\n"))
+	return strings.Join(parts, "\n\n")
 }
 
 func renderBodyEditor(edit EditView) string {
@@ -131,4 +149,17 @@ func fallbackText(value, fallback string) string {
 	}
 
 	return value
+}
+
+func renderValidationSummary(messages []string) string {
+	if len(messages) == 0 {
+		return ""
+	}
+
+	lines := []string{widgets.RenderValidationMessage("Validation:")}
+	for _, message := range messages {
+		lines = append(lines, widgets.RenderValidationMessage("- "+message))
+	}
+
+	return strings.Join(lines, "\n")
 }

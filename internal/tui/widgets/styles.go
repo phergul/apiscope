@@ -17,8 +17,24 @@ func SelectedTextStyle() lipgloss.Style {
 		Background(theme.Palette.Selection)
 }
 
+func SuccessTextStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(CurrentTheme().Palette.TextSuccess)
+}
+
+func ErrorTextStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(CurrentTheme().Palette.TextError)
+}
+
+func WarningTextStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(CurrentTheme().Palette.TextWarning)
+}
+
 func RenderMutedHeading(content string) string {
 	return MutedTextStyle().Bold(true).Render(content)
+}
+
+func RenderValidationMessage(content string) string {
+	return WarningTextStyle().Bold(true).Render(content)
 }
 
 func InputTextStyle() lipgloss.Style {

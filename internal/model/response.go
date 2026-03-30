@@ -3,6 +3,7 @@ package model
 import "time"
 
 type HTTPResponse struct {
+	OperationKey   OperationKey
 	RequestID      uint64
 	StatusCode     int
 	Status         string

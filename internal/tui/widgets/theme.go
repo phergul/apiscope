@@ -26,6 +26,9 @@ type Palette struct {
 	BorderFocused    lipgloss.Color
 	Text             lipgloss.Color
 	TextMuted        lipgloss.Color
+	TextSuccess      lipgloss.Color
+	TextError        lipgloss.Color
+	TextWarning      lipgloss.Color
 	TextInverse      lipgloss.Color
 	Selection        lipgloss.Color
 	SelectionText    lipgloss.Color
@@ -51,6 +54,9 @@ var (
 			BorderFocused:    lipgloss.Color("#fcb86a"),
 			Text:             lipgloss.Color("#E8ECF5"),
 			TextMuted:        lipgloss.Color("#98A3C2"),
+			TextSuccess:      lipgloss.Color("#63f542"),
+			TextError:        lipgloss.Color("#ff7a7a"),
+			TextWarning:      lipgloss.Color("#f5bc42"),
 			TextInverse:      lipgloss.Color("#0F1322"),
 			Selection:        lipgloss.Color("#a9c8d4"),
 			SelectionText:    lipgloss.Color("#0F1322"),

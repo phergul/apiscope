@@ -7,3 +7,8 @@ type specLoadedMsg struct {
 	result    app.LoadResult
 	err       error
 }
+
+type executeFinishedMsg struct {
+	requestID uint64
+	result    app.ExecuteResult
+}

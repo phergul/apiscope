@@ -79,3 +79,34 @@ func TestRenderShowsBodyEditorState(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderShowsInlineValidationState(t *testing.T) {
+	t.Parallel()
+
+	content := ansi.Strip(Render(Data{
+		Sections:         []string{"Path", "Body"},
+		ActiveSection:    "Path",
+		ValidationNotice: []string{"Required value missing."},
+		Rows: []Row{
+			{
+				Label:    "petId",
+				Meta:     "required, string",
+				Value:    "<unset>",
+				Editable: true,
+				Error:    "Required value missing.",
+			},
+		},
+		ActiveRow: 0,
+	}))
+
+	wantSnippets := []string{
+		"Validation:",
+		"- Required value missing.",
+		"petId (required, string) = <unset>",
+	}
+	for _, snippet := range wantSnippets {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected request validation content to include %q, got %q", snippet, content)
+		}
+	}
+}

@@ -3,10 +3,13 @@ package app
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/phergul/apiscope/internal/model"
 	"github.com/phergul/apiscope/internal/spec"
+	"github.com/phergul/apiscope/internal/transport"
 )
 
 type stubLoader struct {
@@ -119,5 +122,100 @@ func TestServiceLoadSourceReturnsLoaderErrors(t *testing.T) {
 	_, err := NewService(loader).LoadSource(context.Background(), "broken.yaml")
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("expected error %v, got %v", wantErr, err)
+	}
+}
+
+func TestServiceExecuteCurrentReturnsValidationIssuesBeforeTransport(t *testing.T) {
+	t.Parallel()
+
+	session := model.SessionState{
+		SelectedServerURL:    "https://api.example.com",
+		SelectedOperationKey: model.NewOperationKey("POST", "/pets/{petId}"),
+		Spec: &model.APISpec{
+			Operations: []model.Operation{
+				{
+					Key:    model.NewOperationKey("POST", "/pets/{petId}"),
+					Method: "POST",
+					Path:   "/pets/{petId}",
+					Parameters: []model.Parameter{
+						{Name: "petId", In: model.ParameterLocationPath, Required: true},
+					},
+					RequestBody: &model.RequestBodySpec{
+						Required: true,
+						Content:  []model.MediaTypeSpec{{MediaType: "application/json"}},
+					},
+				},
+			},
+		},
+		RequestDrafts: map[model.DraftKey]*model.RequestDraft{},
+	}
+
+	result := NewService(nil).ExecuteCurrent(context.Background(), session)
+	if !result.Validation.HasIssues() {
+		t.Fatal("expected validation errors before execution")
+	}
+	if result.Response != nil {
+		t.Fatalf("expected no response when validation fails, got %#v", result.Response)
+	}
+}
+
+func TestServiceExecuteCurrentBuildsAndExecutesRequest(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Path; got != "/pets/abc" {
+			t.Fatalf("expected path /pets/abc, got %q", got)
+		}
+		if got := r.URL.Query().Get("limit"); got != "10" {
+			t.Fatalf("expected query limit=10, got %q", got)
+		}
+		if got := r.Header.Get("X-Trace-ID"); got != "trace-1" {
+			t.Fatalf("expected X-Trace-ID header, got %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	operation := model.Operation{
+		Key:    model.NewOperationKey("POST", "/pets/{petId}"),
+		Method: "POST",
+		Path:   "/pets/{petId}",
+		Parameters: []model.Parameter{
+			{Name: "petId", In: model.ParameterLocationPath, Required: true},
+		},
+		RequestBody: &model.RequestBodySpec{
+			Required: true,
+			Content:  []model.MediaTypeSpec{{MediaType: "application/json"}},
+		},
+	}
+	session := model.SessionState{
+		SelectedServerURL:    server.URL,
+		SelectedOperationKey: operation.Key,
+		Spec: &model.APISpec{
+			Operations: []model.Operation{operation},
+		},
+		RequestDrafts: map[model.DraftKey]*model.RequestDraft{},
+	}
+	draft := EnsureRequestDraft(&session, &operation)
+	draft.PathParams["petId"] = "abc"
+	draft.QueryParams["limit"] = "10"
+	draft.HeaderParams["X-Trace-ID"] = "trace-1"
+	draft.BodyMediaType = "application/json"
+	draft.BodyRaw = `{"name":"fido"}`
+
+	service := NewServiceWithExecutor(nil, transport.NewExecutor(server.Client()))
+	result := service.ExecuteCurrent(context.Background(), session)
+	if result.Validation.HasIssues() {
+		t.Fatalf("expected execution without validation issues, got %#v", result.Validation.Issues)
+	}
+	if result.Response == nil {
+		t.Fatal("expected execution response")
+	}
+	if result.Response.StatusCode != http.StatusOK {
+		t.Fatalf("expected HTTP 200, got %d", result.Response.StatusCode)
+	}
+	if result.Response.OperationKey != operation.Key {
+		t.Fatalf("expected response to track operation key, got %q", result.Response.OperationKey)
 	}
 }

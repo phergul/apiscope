@@ -7,6 +7,7 @@ import (
 	"github.com/phergul/apiscope/internal/app"
 	"github.com/phergul/apiscope/internal/model"
 	detailsui "github.com/phergul/apiscope/internal/tui/details"
+	responseui "github.com/phergul/apiscope/internal/tui/response"
 	"github.com/phergul/apiscope/internal/tui/widgets"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -37,6 +38,7 @@ type Model struct {
 	filterInput           widgets.TextInput
 	requestFieldInput     widgets.TextInput
 	requestBodyInput      widgets.TextArea
+	requestValidation     app.RequestValidationResult
 }
 
 func NewProgram(service *app.Service, source string, input io.Reader, output io.Writer) *Program {
@@ -120,12 +122,39 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.session = msg.result.Session
 		m.viewState = msg.result.View
+		m.requestValidation = app.RequestValidationResult{}
 		m.session.ActiveLoadRequestID = msg.requestID
 		m.viewState.ActiveLoadRequestID = msg.requestID
 		m.viewState.LoadInFlight = false
 		m.viewState.RightPaneLayoutPreset = chooseLayoutPreset(m.width)
 		m.syncVisibleOperations()
 		m.syncActivePaneSections()
+		return m, nil
+	case executeFinishedMsg:
+		if msg.requestID != m.viewState.ActiveExecuteRequestID {
+			return m, nil
+		}
+
+		m.viewState.ExecuteInFlight = false
+		if msg.result.Response != nil {
+			msg.result.Response.RequestID = msg.requestID
+			m.session.LastResponse = msg.result.Response
+			m.session.RequestHistory = append(m.session.RequestHistory, model.HistoryEntry{
+				RequestID:     msg.requestID,
+				OperationKey:  msg.result.OperationKey,
+				ServerURL:     msg.result.ServerURL,
+				Response:      msg.result.Response,
+				TransportNote: msg.result.Response.TransportError,
+			})
+		}
+		m.viewState.Notice = "request completed"
+		if msg.result.Response != nil && msg.result.Response.TransportError != "" {
+			m.viewState.Notice = "request failed"
+		}
+		m.viewState.FocusedPane = model.FocusedPaneResponse
+		m.viewState.ExpandedRightPane = model.FocusedPaneResponse
+		m.activeResponseSection = responseui.SectionLive
+		m.viewState.ResponseScrollOffset = 0
 		return m, nil
 	default:
 		return m, nil

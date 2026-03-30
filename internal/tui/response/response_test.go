@@ -14,6 +14,10 @@ func TestRenderShowsDeclaredResponses(t *testing.T) {
 	content := ansi.Strip(Render(Data{
 		Sections: []widgets.Section{
 			{
+				Label: "Live",
+				Body:  "No request has been sent for this operation yet.",
+			},
+			{
 				Label: "200",
 				Body: strings.Join([]string{
 					"Description: OK",
@@ -37,7 +41,7 @@ func TestRenderShowsDeclaredResponses(t *testing.T) {
 	}))
 
 	wantSnippets := []string{
-		"200  default",
+		"Live  200  default",
 		"Description: OK",
 		"Headers:",
 		"- X-Rate-Limit (integer)",
@@ -48,6 +52,28 @@ func TestRenderShowsDeclaredResponses(t *testing.T) {
 		if !strings.Contains(content, snippet) {
 			t.Fatalf("expected response pane to include %q, got %q", snippet, content)
 		}
+	}
+}
+
+func TestRenderShowsLiveSectionEmptyState(t *testing.T) {
+	t.Parallel()
+
+	content := ansi.Strip(Render(Data{
+		Sections: []widgets.Section{
+			{
+				Label: "Live",
+				Body:  "No request has been sent for this operation yet.",
+			},
+			{
+				Label: "200",
+				Body:  "Description: OK",
+			},
+		},
+		ActiveSection: "Live",
+	}))
+
+	if !strings.Contains(content, "No request has been sent for this operation yet.") {
+		t.Fatalf("expected live section placeholder, got %q", content)
 	}
 }
 

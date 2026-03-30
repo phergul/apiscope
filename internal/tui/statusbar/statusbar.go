@@ -8,6 +8,7 @@ import (
 type Data struct {
 	Source         string
 	State          string
+	Notice         string
 	Focus          string
 	OperationLabel string
 	HasSpec        bool
@@ -22,6 +23,9 @@ func Render(data Data) string {
 		fmt.Sprintf("Source: %s", data.Source),
 		fmt.Sprintf("State: %s", data.State),
 		fmt.Sprintf("Focus: %s", data.Focus),
+	}
+	if strings.TrimSpace(data.Notice) != "" {
+		parts = append(parts, fmt.Sprintf("Notice: %s", data.Notice))
 	}
 	if strings.TrimSpace(data.OperationLabel) != "" {
 		parts = append(parts, fmt.Sprintf("Operation: %s", data.OperationLabel))

@@ -35,6 +35,11 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c", "q":
 		return m, tea.Quit
+	case "ctrl+r":
+		if cmd := m.executeCurrentRequest(); cmd != nil {
+			return m, cmd
+		}
+		return m, nil
 	case "1":
 		m.setFocusedPane(model.FocusedPaneOperations)
 	case "2":
@@ -70,6 +75,8 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.scrollDetailsBy(1)
 		} else if m.viewState.FocusedPane == model.FocusedPaneRequest {
 			m.moveRequestRow(1)
+		} else if m.viewState.FocusedPane == model.FocusedPaneResponse {
+			m.scrollResponseBy(1)
 		}
 	case "k", "up":
 		if m.viewState.FocusedPane == model.FocusedPaneOperations {
@@ -78,6 +85,8 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.scrollDetailsBy(-1)
 		} else if m.viewState.FocusedPane == model.FocusedPaneRequest {
 			m.moveRequestRow(-1)
+		} else if m.viewState.FocusedPane == model.FocusedPaneResponse {
+			m.scrollResponseBy(-1)
 		}
 	case "home":
 		switch m.viewState.FocusedPane {
@@ -88,7 +97,7 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case model.FocusedPaneRequest:
 			m.setRequestRowBoundary(false)
 		case model.FocusedPaneResponse:
-			m.setResponseSectionBoundary(false)
+			m.scrollResponseToBoundary(false)
 		}
 	case "end":
 		switch m.viewState.FocusedPane {
@@ -99,7 +108,7 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case model.FocusedPaneRequest:
 			m.setRequestRowBoundary(true)
 		case model.FocusedPaneResponse:
-			m.setResponseSectionBoundary(true)
+			m.scrollResponseToBoundary(true)
 		}
 	case "]", "l":
 		switch m.viewState.FocusedPane {

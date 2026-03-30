@@ -1,9 +1,13 @@
 package tui
 
 import (
+	"context"
+
 	"github.com/phergul/apiscope/internal/app"
 	"github.com/phergul/apiscope/internal/model"
 	requestui "github.com/phergul/apiscope/internal/tui/request"
+	responseui "github.com/phergul/apiscope/internal/tui/response"
+	"github.com/phergul/apiscope/internal/tui/widgets"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -127,6 +131,7 @@ func (m *Model) requestEditActive() bool {
 }
 
 func (m *Model) beginRequestEdit() {
+	m.clearRequestValidation()
 	selected := m.resolvedSelectedOperation()
 	start := requestui.StartEdit(
 		selected,
@@ -186,6 +191,7 @@ func (m *Model) finishRequestEdit() {
 	m.viewState.RequestEditKind = model.RequestEditKindNone
 	m.viewState.RequestEditTarget = ""
 	m.viewState.RequestEditBuffer = ""
+	m.clearRequestValidation()
 	m.syncActiveRequestRow()
 }
 
@@ -259,4 +265,85 @@ func (m *Model) updateRequestEditKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+func (m *Model) clearRequestValidation() {
+	m.requestValidation = app.RequestValidationResult{}
+}
+
+func (m *Model) executeCurrentRequest() tea.Cmd {
+	selected := m.resolvedSelectedOperation()
+	if selected == nil || m.viewState.LoadInFlight || m.viewState.ExecuteInFlight {
+		return nil
+	}
+
+	validation := app.ValidateRequest(selected, app.EnsureRequestDraft(&m.session, selected))
+	if validation.HasIssues() {
+		m.requestValidation = validation
+		if issue, ok := validation.FirstIssue(); ok {
+			m.activeRequestSection = issue.Section
+			rows := m.activeRequestRows()
+			for index, row := range rows {
+				if row.ID == issue.Target {
+					m.viewState.RequestActiveRow = index
+					break
+				}
+			}
+			m.ensureActiveRequestRowVisible()
+		}
+		m.viewState.FocusedPane = model.FocusedPaneRequest
+		m.viewState.ExpandedRightPane = model.FocusedPaneRequest
+		m.viewState.Notice = "request validation failed"
+		return nil
+	}
+
+	m.clearRequestValidation()
+	requestID := m.viewState.ActiveExecuteRequestID + 1
+	m.session.ActiveExecRequestID = requestID
+	m.viewState.ActiveExecuteRequestID = requestID
+	m.viewState.ExecuteInFlight = true
+	m.viewState.Notice = "executing request"
+
+	service := m.service
+	session := m.session
+
+	return func() tea.Msg {
+		return executeFinishedMsg{
+			requestID: requestID,
+			result:    service.ExecuteCurrent(context.Background(), session),
+		}
+	}
+}
+
+func (m *Model) responsePaneContentForSize(width, height int) string {
+	data := m.projectResponsePane()
+	if data.LoadInFlight || len(data.Sections) == 0 {
+		return responseui.Render(data)
+	}
+
+	visibleLines := max(height-6, 1)
+	contentWidth := max(width-4, 1)
+	viewport := widgets.NewViewport(contentWidth, visibleLines)
+	viewport.SetContent(responseui.ActiveSectionBody(data.Sections, data.ActiveSection))
+	viewport.SetYOffset(m.viewState.ResponseScrollOffset)
+	clipped := viewport.View()
+
+	sections := append([]widgets.Section(nil), data.Sections...)
+	active := data.ActiveSection
+	if active == "" && len(sections) > 0 {
+		active = sections[0].Label
+	}
+	for index := range sections {
+		if sections[index].Label == active {
+			sections[index].Body = clipped
+			break
+		}
+	}
+
+	return responseui.Render(responseui.Data{
+		LoadInFlight:  data.LoadInFlight,
+		Sections:      sections,
+		ActiveSection: active,
+		EmptyState:    data.EmptyState,
+	})
 }

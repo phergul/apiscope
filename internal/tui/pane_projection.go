@@ -10,6 +10,7 @@ import (
 	requestui "github.com/phergul/apiscope/internal/tui/request"
 	responseui "github.com/phergul/apiscope/internal/tui/response"
 	statusbarui "github.com/phergul/apiscope/internal/tui/statusbar"
+	"github.com/phergul/apiscope/internal/tui/widgets"
 )
 
 func (m *Model) projectOperationsPane() operationsui.Data {
@@ -89,13 +90,20 @@ func (m *Model) projectRequestPane() requestui.Data {
 		View:      m.currentRequestEditorView(),
 	}
 	for _, row := range m.activeRequestRows() {
+		issue, hasIssue := m.requestValidation.IssueForTarget(row.ID)
+		errorText := ""
+		if hasIssue {
+			errorText = issue.Message
+		}
 		data.Rows = append(data.Rows, requestui.Row{
 			Label:    row.Label,
 			Meta:     row.Meta,
 			Value:    row.Value,
 			Editable: row.Editable,
+			Error:    errorText,
 		})
 	}
+	data.ValidationNotice = m.requestValidation.MessagesForSection(data.ActiveSection)
 	if len(data.Sections) == 0 {
 		data.EmptyState = "This operation does not declare request parameters, request body, or auth requirements."
 	}
@@ -114,7 +122,7 @@ func (m *Model) projectResponsePane() responseui.Data {
 		return data
 	}
 
-	data.Sections = responseui.Sections(selected.Responses)
+	data.Sections = append([]widgets.Section{responseui.LiveSection(m.session.LastResponse, selected)}, responseui.Sections(selected.Responses)...)
 	data.ActiveSection = m.activeResponseSection
 	if len(data.Sections) == 0 {
 		data.EmptyState = "This operation does not declare any responses."
@@ -129,6 +137,7 @@ func (m *Model) projectStatusBar() statusbarui.Data {
 		State:   m.loadStateLabel(),
 		Focus:   focusedPaneLabel(m.viewState.FocusedPane),
 		HasSpec: m.session.Spec != nil,
+		Notice:  m.viewState.Notice,
 	}
 
 	if selected := m.resolvedSelectedOperation(); selected != nil {
@@ -145,6 +154,8 @@ func (m *Model) projectStatusBar() statusbarui.Data {
 
 func (m *Model) loadStateLabel() string {
 	switch {
+	case m.viewState.ExecuteInFlight:
+		return "executing"
 	case m.viewState.LoadInFlight:
 		return "loading"
 	case m.loadErr != nil:

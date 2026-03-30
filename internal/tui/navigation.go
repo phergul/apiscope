@@ -231,18 +231,21 @@ func (m *Model) resetActiveRequestSection() {
 	available := m.availableRequestSections()
 	m.activeRequestSection = widgets.ResolveActiveSection("", available, "")
 	m.resetRequestCursorAndScroll()
+	m.clearRequestValidation()
 }
 
 func (m *Model) moveRequestSection(direction int) {
 	available := m.availableRequestSections()
 	m.activeRequestSection = widgets.MoveActiveSection(m.activeRequestSection, available, direction, "")
 	m.resetRequestCursorAndScroll()
+	m.clearRequestValidation()
 }
 
 func (m *Model) setRequestSectionBoundary(last bool) {
 	available := m.availableRequestSections()
 	m.activeRequestSection = widgets.BoundaryActiveSection(available, last, "")
 	m.resetRequestCursorAndScroll()
+	m.clearRequestValidation()
 }
 
 func (m *Model) availableResponseSections() []string {
@@ -257,16 +260,19 @@ func (m *Model) availableResponseSections() []string {
 func (m *Model) resetActiveResponseSection() {
 	available := m.availableResponseSections()
 	m.activeResponseSection = widgets.ResolveActiveSection("", available, "")
+	m.viewState.ResponseScrollOffset = 0
 }
 
 func (m *Model) moveResponseSection(direction int) {
 	available := m.availableResponseSections()
 	m.activeResponseSection = widgets.MoveActiveSection(m.activeResponseSection, available, direction, "")
+	m.viewState.ResponseScrollOffset = 0
 }
 
 func (m *Model) setResponseSectionBoundary(last bool) {
 	available := m.availableResponseSections()
 	m.activeResponseSection = widgets.BoundaryActiveSection(available, last, "")
+	m.viewState.ResponseScrollOffset = 0
 }
 
 func (m *Model) syncActivePaneSections() {
@@ -275,6 +281,7 @@ func (m *Model) syncActivePaneSections() {
 	m.resetActiveResponseSection()
 	m.viewState.DetailsScrollOffset = 0
 	m.ensureSelectedRequestDraft()
+	m.clearRequestValidation()
 }
 
 func (m *Model) onSelectionChanged(previous, current model.OperationKey) {
@@ -284,6 +291,7 @@ func (m *Model) onSelectionChanged(previous, current model.OperationKey) {
 		m.resetActiveRequestSection()
 		m.resetActiveResponseSection()
 		m.viewState.DetailsScrollOffset = 0
+		m.clearRequestValidation()
 	}
 }
 
@@ -319,6 +327,54 @@ func (m *Model) scrollDetailsToBoundary(last bool) {
 	}
 
 	m.viewState.DetailsScrollOffset = 0
+}
+
+func (m *Model) scrollResponseBy(delta int) {
+	maxOffset := m.maxResponseScrollOffset()
+	target := m.viewState.ResponseScrollOffset + delta
+	if target < 0 {
+		target = 0
+	}
+	if target > maxOffset {
+		target = maxOffset
+	}
+
+	m.viewState.ResponseScrollOffset = target
+}
+
+func (m *Model) scrollResponseToBoundary(last bool) {
+	if last {
+		m.viewState.ResponseScrollOffset = m.maxResponseScrollOffset()
+		return
+	}
+
+	m.viewState.ResponseScrollOffset = 0
+}
+
+func (m *Model) maxResponseScrollOffset() int {
+	lines := len(splitLines(responseui.ActiveSectionBody(m.projectResponsePane().Sections, m.activeResponseSection)))
+	visible := m.responseVisibleBodyLines()
+	if lines <= visible {
+		return 0
+	}
+
+	return lines - visible
+}
+
+func (m *Model) responseVisibleBodyLines() int {
+	width, height := m.resolvedDimensions()
+	bodyHeight := max(height-lipgloss.Height(m.renderStatusBar(width)), 12)
+
+	var paneHeight int
+	if m.viewState.RightPaneLayoutPreset == layoutPresetWide {
+		_, responseHeight := m.rightPaneHeights(computeWidePaneHeights(bodyHeight))
+		paneHeight = responseHeight
+	} else {
+		_, responseHeight := m.rightPaneHeights(computeNarrowPaneHeights(bodyHeight))
+		paneHeight = responseHeight
+	}
+
+	return max(paneHeight-6, 1)
 }
 
 func (m *Model) maxDetailsScrollOffset() int {

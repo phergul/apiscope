@@ -7,7 +7,6 @@ import (
 	detailsui "github.com/phergul/apiscope/internal/tui/details"
 	operationsui "github.com/phergul/apiscope/internal/tui/operations"
 	requestui "github.com/phergul/apiscope/internal/tui/request"
-	responseui "github.com/phergul/apiscope/internal/tui/response"
 	"github.com/phergul/apiscope/internal/tui/widgets"
 	"github.com/phergul/apiscope/internal/util"
 
@@ -140,7 +139,14 @@ func (m *Model) requestPaneContent() string {
 }
 
 func (m *Model) responsePaneContent() string {
-	return responseui.Render(m.projectResponsePane())
+	width, height := m.resolvedDimensions()
+	if m.viewState.RightPaneLayoutPreset == layoutPresetWide {
+		leftWidth := util.Clamp(int(float64(width)*0.32), 30, 40)
+		leftWidth = min(leftWidth, width-20)
+		width = max(width-leftWidth, 20)
+	}
+
+	return m.responsePaneContentForSize(width, height)
 }
 
 func (m *Model) paneView(pane model.FocusedPane) paneView {

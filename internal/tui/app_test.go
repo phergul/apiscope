@@ -3,6 +3,8 @@ package tui
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 	"testing"
@@ -627,8 +629,8 @@ func TestModelRequestAndResponseSectionsResetToFirstOnOperationChange(t *testing
 	if updated.viewState.RequestScrollOffset != 0 {
 		t.Fatalf("expected request scroll offset to reset on operation change, got %d", updated.viewState.RequestScrollOffset)
 	}
-	if updated.activeResponseSection != "200" {
-		t.Fatalf("expected response section to reset to first available, got %q", updated.activeResponseSection)
+	if updated.activeResponseSection != "Live" {
+		t.Fatalf("expected response section to reset to live, got %q", updated.activeResponseSection)
 	}
 }
 
@@ -647,8 +649,114 @@ func TestModelResponseSectionNavigationAndFallback(t *testing.T) {
 
 	updated.session.SelectedOperationKey = model.NewOperationKey("POST", "/pets")
 	updated.syncActivePaneSections()
-	if updated.activeResponseSection != "" {
-		t.Fatalf("expected response section to clear when no responses remain, got %q", updated.activeResponseSection)
+	if updated.activeResponseSection != "Live" {
+		t.Fatalf("expected response section to fall back to live, got %q", updated.activeResponseSection)
+	}
+}
+
+func TestModelCtrlRShowsInlineValidationWithoutExecuting(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+
+	updatedModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlR})
+	updated := updatedModel.(*Model)
+	if cmd != nil {
+		t.Fatal("expected ctrl+r to skip execution when validation fails")
+	}
+	if updated.viewState.FocusedPane != model.FocusedPaneRequest {
+		t.Fatalf("expected focus to stay in request pane, got %q", updated.viewState.FocusedPane)
+	}
+	if !updated.requestValidation.HasIssues() {
+		t.Fatal("expected validation issues to be stored")
+	}
+
+	data := updated.projectRequestPane()
+	if len(data.ValidationNotice) == 0 {
+		t.Fatal("expected validation summary to be projected into the request pane")
+	}
+	if data.Rows[0].Error == "" {
+		t.Fatal("expected first request row to show an inline validation error")
+	}
+}
+
+func TestModelCtrlRExecutesAndSelectsLiveResponse(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Path; got != "/pets" {
+			t.Fatalf("expected request path /pets, got %q", got)
+		}
+		if got := r.Header.Get("Content-Type"); got != "application/json" {
+			t.Fatalf("expected content type application/json, got %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	m := newLoadedModelForNavigation()
+	m.service = app.NewService(nil)
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.session.SelectedServerURL = server.URL
+	draft := m.ensureSelectedRequestDraft()
+	draft.PathParams["petId"] = "abc"
+	draft.BodyRaw = `{"name":"fido"}`
+	draft.BodyMediaType = "application/json"
+
+	updatedModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlR})
+	updated := updatedModel.(*Model)
+	if cmd == nil {
+		t.Fatal("expected ctrl+r to start execution")
+	}
+	if !updated.viewState.ExecuteInFlight {
+		t.Fatal("expected execute-in-flight to be set")
+	}
+
+	msg := cmd()
+	updatedModel, _ = updated.Update(msg)
+	updated = updatedModel.(*Model)
+	if updated.viewState.ExecuteInFlight {
+		t.Fatal("expected execute-in-flight to clear after the result arrives")
+	}
+	if updated.viewState.FocusedPane != model.FocusedPaneResponse {
+		t.Fatalf("expected focus to move to response, got %q", updated.viewState.FocusedPane)
+	}
+	if updated.activeResponseSection != "Live" {
+		t.Fatalf("expected live response section to be selected, got %q", updated.activeResponseSection)
+	}
+	if updated.session.LastResponse == nil {
+		t.Fatal("expected last response to be stored")
+	}
+	if updated.session.LastResponse.StatusCode != http.StatusOK {
+		t.Fatalf("expected HTTP 200 response, got %d", updated.session.LastResponse.StatusCode)
+	}
+}
+
+func TestModelIgnoresStaleExecuteResults(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.ExecuteInFlight = true
+	m.viewState.ActiveExecuteRequestID = 2
+
+	updatedModel, _ := m.Update(executeFinishedMsg{
+		requestID: 1,
+		result: app.ExecuteResult{
+			OperationKey: model.NewOperationKey("GET", "/pets"),
+			Response: &model.HTTPResponse{
+				OperationKey: model.NewOperationKey("GET", "/pets"),
+				Status:       "200 OK",
+			},
+		},
+	})
+	updated := updatedModel.(*Model)
+	if updated.session.LastResponse != nil {
+		t.Fatal("expected stale execute result to be ignored")
+	}
+	if !updated.viewState.ExecuteInFlight {
+		t.Fatal("expected execute state to remain unchanged for stale result")
 	}
 }
 

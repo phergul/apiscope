@@ -1,9 +1,8 @@
 package tui
 
 import (
-	"unicode/utf8"
-
 	"github.com/phergul/apiscope/internal/model"
+	operationsui "github.com/phergul/apiscope/internal/tui/operations"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -15,6 +14,7 @@ var paneFocusOrder = []model.FocusedPane{
 	model.FocusedPaneResponse,
 }
 
+// updateKey routes top-level key handling across global shortcuts and focused panes.
 func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.hasBlockingLoadError() {
 		switch msg.String() {
@@ -26,20 +26,29 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if m.viewState.ActiveEditorMode == model.EditorModeFilter {
-		return m.updateFilterKey(msg)
+		return m.updateOperationsFilterKey(msg)
 	}
 	if m.requestEditActive() {
 		return m.updateRequestEditKey(msg)
 	}
 
+	if handledModel, handledCmd, handled := m.updateGlobalKey(msg); handled {
+		return handledModel, handledCmd
+	}
+
+	return m.updateBrowseKey(msg)
+}
+
+// updateGlobalKey handles application-wide shortcuts before pane-specific routing.
+func (m *Model) updateGlobalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	switch msg.String() {
 	case "ctrl+c", "q":
-		return m, tea.Quit
+		return m, tea.Quit, true
 	case "ctrl+r":
 		if cmd := m.executeCurrentRequest(); cmd != nil {
-			return m, cmd
+			return m, cmd, true
 		}
-		return m, nil
+		return m, nil, true
 	case "1":
 		m.setFocusedPane(model.FocusedPaneOperations)
 	case "2":
@@ -53,10 +62,7 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "shift+tab":
 		m.setFocusedPane(previousFocusedPane(m.viewState.FocusedPane))
 	case "/":
-		m.setFocusedPane(model.FocusedPaneOperations)
-		m.viewState.ActiveEditorMode = model.EditorModeFilter
-		m.filterInput.SetValue(m.viewState.FilterText)
-		m.filterInput.Focus()
+		m.beginOperationsFilterEdit()
 	case "enter":
 		if m.viewState.FocusedPane == model.FocusedPaneRequest {
 			m.beginRequestEdit()
@@ -65,78 +71,36 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.viewState.ZoomedPane = !m.viewState.ZoomedPane
 	case "esc":
 		if m.viewState.FilterText != "" {
-			m.viewState.FilterText = ""
-			m.syncVisibleOperations()
+			m.clearOperationsFilter()
 		}
+	default:
+		return m, nil, false
+	}
+
+	return m, nil, true
+}
+
+// updateBrowseKey routes pane-local browse keys for the focused pane.
+func (m *Model) updateBrowseKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
 	case "j", "down":
-		if m.viewState.FocusedPane == model.FocusedPaneOperations {
-			m.setSelectedOperationByVisibleIndex(m.viewState.OperationsCursor + 1)
-		} else if m.viewState.FocusedPane == model.FocusedPaneDetails {
-			m.scrollDetailsBy(1)
-		} else if m.viewState.FocusedPane == model.FocusedPaneRequest {
-			m.moveRequestRow(1)
-		} else if m.viewState.FocusedPane == model.FocusedPaneResponse {
-			m.scrollResponseBy(1)
-		}
+		m.moveFocusedPaneDown()
 	case "k", "up":
-		if m.viewState.FocusedPane == model.FocusedPaneOperations {
-			m.setSelectedOperationByVisibleIndex(m.viewState.OperationsCursor - 1)
-		} else if m.viewState.FocusedPane == model.FocusedPaneDetails {
-			m.scrollDetailsBy(-1)
-		} else if m.viewState.FocusedPane == model.FocusedPaneRequest {
-			m.moveRequestRow(-1)
-		} else if m.viewState.FocusedPane == model.FocusedPaneResponse {
-			m.scrollResponseBy(-1)
-		}
+		m.moveFocusedPaneUp()
 	case "home":
-		switch m.viewState.FocusedPane {
-		case model.FocusedPaneOperations:
-			m.setSelectedOperationByVisibleIndex(0)
-		case model.FocusedPaneDetails:
-			m.scrollDetailsToBoundary(false)
-		case model.FocusedPaneRequest:
-			m.setRequestRowBoundary(false)
-		case model.FocusedPaneResponse:
-			m.scrollResponseToBoundary(false)
-		}
+		m.moveFocusedPaneToBoundary(false)
 	case "end":
-		switch m.viewState.FocusedPane {
-		case model.FocusedPaneOperations:
-			m.setSelectedOperationByVisibleIndex(len(m.viewState.VisibleOperationKeys) - 1)
-		case model.FocusedPaneDetails:
-			m.scrollDetailsToBoundary(true)
-		case model.FocusedPaneRequest:
-			m.setRequestRowBoundary(true)
-		case model.FocusedPaneResponse:
-			m.scrollResponseToBoundary(true)
-		}
+		m.moveFocusedPaneToBoundary(true)
 	case "]", "l":
-		switch m.viewState.FocusedPane {
-		case model.FocusedPaneOperations:
-			m.jumpToAdjacentOperationGroup(1)
-		case model.FocusedPaneDetails:
-			m.moveDetailsSection(1)
-		case model.FocusedPaneRequest:
-			m.moveRequestSection(1)
-		case model.FocusedPaneResponse:
-			m.moveResponseSection(1)
-		}
+		m.moveFocusedPaneSection(1)
 	case "[", "h":
-		switch m.viewState.FocusedPane {
-		case model.FocusedPaneOperations:
-			m.jumpToAdjacentOperationGroup(-1)
-		case model.FocusedPaneDetails:
-			m.moveDetailsSection(-1)
-		case model.FocusedPaneRequest:
-			m.moveRequestSection(-1)
-		case model.FocusedPaneResponse:
-			m.moveResponseSection(-1)
-		}
+		m.moveFocusedPaneSection(-1)
 	}
 
 	return m, nil
 }
 
+// setFocusedPane updates the focused pane and right-pane emphasis when needed.
 func (m *Model) setFocusedPane(pane model.FocusedPane) {
 	m.viewState.FocusedPane = pane
 	switch pane {
@@ -145,47 +109,116 @@ func (m *Model) setFocusedPane(pane model.FocusedPane) {
 	}
 }
 
-func (m *Model) updateFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+// beginOperationsFilterEdit enters operations filter editing mode.
+func (m *Model) beginOperationsFilterEdit() {
+	m.setFocusedPane(model.FocusedPaneOperations)
 	m.ensureWidgetDefaults()
-	if m.filterInput.Value() != m.viewState.FilterText {
-		m.filterInput.SetValue(m.viewState.FilterText)
+	if m.widgets.filterInput.Value() != m.viewState.FilterText {
+		m.widgets.filterInput.SetValue(m.viewState.FilterText)
 	}
-	m.filterInput.Focus()
+	m.viewState.ActiveEditorMode = model.EditorModeFilter
+	m.widgets.filterInput.Focus()
+}
 
-	switch msg.String() {
-	case "ctrl+c":
+// clearOperationsFilter clears the current filter and refreshes the visible operations list.
+func (m *Model) clearOperationsFilter() {
+	m.viewState.FilterText = ""
+	m.widgets.filterInput.SetValue("")
+	m.syncVisibleOperations()
+}
+
+// updateOperationsFilterKey handles key input while the operations filter editor is active.
+func (m *Model) updateOperationsFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.beginOperationsFilterEdit()
+
+	update := operationsui.UpdateFilterEditor(msg, m.viewState.FilterText)
+	if update.Quit {
 		return m, tea.Quit
-	case "enter":
-		m.filterInput.Blur()
-		m.viewState.ActiveEditorMode = model.EditorModeBrowse
-	case "esc":
-		m.viewState.FilterText = ""
-		m.filterInput.SetValue("")
-		m.filterInput.Blur()
-		m.syncVisibleOperations()
-		m.viewState.ActiveEditorMode = model.EditorModeBrowse
-	case "backspace", "ctrl+h", "delete":
-		if m.viewState.FilterText == "" {
-			break
+	}
+
+	if update.UseWidgetUpdate {
+		cmd := m.widgets.filterInput.Update(msg)
+		m.viewState.FilterText = m.widgets.filterInput.Value()
+		if update.RefreshVisible {
+			m.syncVisibleOperations()
 		}
-		_, size := utf8.DecodeLastRuneInString(m.viewState.FilterText)
-		if size <= 0 {
-			m.viewState.FilterText = ""
-		} else {
-			m.viewState.FilterText = m.viewState.FilterText[:len(m.viewState.FilterText)-size]
-		}
-		m.filterInput.SetValue(m.viewState.FilterText)
-		m.syncVisibleOperations()
-	default:
-		cmd := m.filterInput.Update(msg)
-		m.viewState.FilterText = m.filterInput.Value()
-		m.syncVisibleOperations()
 		return m, cmd
+	}
+
+	m.viewState.FilterText = update.FilterText
+	m.widgets.filterInput.SetValue(update.FilterText)
+	if update.RefreshVisible {
+		m.syncVisibleOperations()
+	}
+	if !update.Editing {
+		m.widgets.filterInput.Blur()
+		m.viewState.ActiveEditorMode = model.EditorModeBrowse
 	}
 
 	return m, nil
 }
 
+// moveFocusedPaneDown routes downward movement within the focused pane.
+func (m *Model) moveFocusedPaneDown() {
+	switch m.viewState.FocusedPane {
+	case model.FocusedPaneOperations:
+		m.setSelectedOperationByVisibleIndex(m.viewState.OperationsCursor + 1)
+	case model.FocusedPaneDetails:
+		m.scrollDetailsBy(1)
+	case model.FocusedPaneRequest:
+		m.moveRequestRow(1)
+	case model.FocusedPaneResponse:
+		m.scrollResponseBy(1)
+	}
+}
+
+// moveFocusedPaneUp routes upward movement within the focused pane.
+func (m *Model) moveFocusedPaneUp() {
+	switch m.viewState.FocusedPane {
+	case model.FocusedPaneOperations:
+		m.setSelectedOperationByVisibleIndex(m.viewState.OperationsCursor - 1)
+	case model.FocusedPaneDetails:
+		m.scrollDetailsBy(-1)
+	case model.FocusedPaneRequest:
+		m.moveRequestRow(-1)
+	case model.FocusedPaneResponse:
+		m.scrollResponseBy(-1)
+	}
+}
+
+// moveFocusedPaneToBoundary routes home/end behavior within the focused pane.
+func (m *Model) moveFocusedPaneToBoundary(last bool) {
+	switch m.viewState.FocusedPane {
+	case model.FocusedPaneOperations:
+		if last {
+			m.setSelectedOperationByVisibleIndex(len(m.viewState.VisibleOperationKeys) - 1)
+		} else {
+			m.setSelectedOperationByVisibleIndex(0)
+		}
+	case model.FocusedPaneDetails:
+		m.scrollDetailsToBoundary(last)
+	case model.FocusedPaneRequest:
+		m.setRequestRowBoundary(last)
+	case model.FocusedPaneResponse:
+		m.scrollResponseToBoundary(last)
+	}
+}
+
+// moveFocusedPaneSection routes section or group movement within the focused pane.
+func (m *Model) moveFocusedPaneSection(direction int) {
+	switch m.viewState.FocusedPane {
+	case model.FocusedPaneOperations:
+		m.jumpToAdjacentOperationGroup(direction)
+	case model.FocusedPaneDetails:
+		m.moveDetailsSection(direction)
+	case model.FocusedPaneRequest:
+		m.moveRequestSection(direction)
+	case model.FocusedPaneResponse:
+		m.moveResponseSection(direction)
+	}
+}
+
+// nextFocusedPane returns the next pane in the focus cycle.
 func nextFocusedPane(current model.FocusedPane) model.FocusedPane {
 	for index, pane := range paneFocusOrder {
 		if pane == current {
@@ -196,6 +229,7 @@ func nextFocusedPane(current model.FocusedPane) model.FocusedPane {
 	return paneFocusOrder[0]
 }
 
+// previousFocusedPane returns the previous pane in the focus cycle.
 func previousFocusedPane(current model.FocusedPane) model.FocusedPane {
 	for index, pane := range paneFocusOrder {
 		if pane == current {

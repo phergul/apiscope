@@ -2,6 +2,7 @@ package app
 
 import "github.com/phergul/apiscope/internal/model"
 
+// newLoadResult builds the initial app result after a successful spec load.
 func newLoadResult(apiSpec *model.APISpec, rawSource string) LoadResult {
 	result := LoadResult{
 		Session: initialSessionState(apiSpec, rawSource),
@@ -16,6 +17,7 @@ func newLoadResult(apiSpec *model.APISpec, rawSource string) LoadResult {
 	return result
 }
 
+// initialSessionState builds the initial session state for a loaded spec.
 func initialSessionState(apiSpec *model.APISpec, rawSource string) model.SessionState {
 	session := model.SessionState{
 		SpecSource:      rawSource,
@@ -31,6 +33,7 @@ func initialSessionState(apiSpec *model.APISpec, rawSource string) model.Session
 	return session
 }
 
+// initialViewState builds the initial view state for a loaded spec.
 func initialViewState(apiSpec *model.APISpec) model.ViewState {
 	view := model.ViewState{
 		FocusedPane:           model.FocusedPaneOperations,

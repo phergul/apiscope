@@ -28,6 +28,7 @@ type Loader struct {
 	client *http.Client
 }
 
+// NewLoader builds a spec loader with the provided HTTP client.
 func NewLoader(client *http.Client) *Loader {
 	if client == nil {
 		client = http.DefaultClient
@@ -36,6 +37,7 @@ func NewLoader(client *http.Client) *Loader {
 	return &Loader{client: client}
 }
 
+// Load reads, parses, resolves, and normalises one spec source.
 func (l *Loader) Load(ctx context.Context, source Source) (*model.APISpec, error) {
 	document, err := l.loadDocument(ctx, source)
 	if err != nil {
@@ -60,6 +62,7 @@ func (l *Loader) Load(ctx context.Context, source Source) (*model.APISpec, error
 	return normalise.Document(resolved)
 }
 
+// loadDocument loads a raw source document from a file path or URL.
 func (l *Loader) loadDocument(ctx context.Context, source Source) (*pipeline.LoadedDocument, error) {
 	classified, err := classifySource(source)
 	if err != nil {
@@ -81,6 +84,7 @@ func (l *Loader) loadDocument(ctx context.Context, source Source) (*pipeline.Loa
 	}
 }
 
+// loadFile loads and classifies a spec document from a local file path.
 func (l *Loader) loadFile(source Source) (*pipeline.LoadedDocument, error) {
 	absolutePath, err := filepath.Abs(source.Value)
 	if err != nil {
@@ -113,6 +117,7 @@ func (l *Loader) loadFile(source Source) (*pipeline.LoadedDocument, error) {
 	}, nil
 }
 
+// loadURL loads and classifies a spec document from a remote URL.
 func (l *Loader) loadURL(ctx context.Context, source Source) (*pipeline.LoadedDocument, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, source.Value, nil)
 	if err != nil {
@@ -176,6 +181,7 @@ func (l *Loader) loadURL(ctx context.Context, source Source) (*pipeline.LoadedDo
 	}, nil
 }
 
+// detectDocumentFormat determines whether a loaded document is JSON or YAML.
 func detectDocumentFormat(location, contentType string, raw []byte) (DocumentFormat, error) {
 	trimmed := strings.TrimSpace(string(raw))
 	if trimmed == "" {
@@ -205,6 +211,7 @@ func detectDocumentFormat(location, contentType string, raw []byte) (DocumentFor
 	}
 }
 
+// wrapDocumentError fills in missing source and operation metadata on spec errors.
 func wrapDocumentError(err error, source, op string) error {
 	var specErr *Error
 	if !errors.As(err, &specErr) {

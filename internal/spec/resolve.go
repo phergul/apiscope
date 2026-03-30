@@ -13,6 +13,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
+// resolveDocument resolves internal and external references in the converted OpenAPI document.
 func (l *Loader) resolveDocument(ctx context.Context, converted *pipeline.ConvertedDocument) (*pipeline.ResolvedDocument, error) {
 	baseURI, err := resolveBaseURI(converted.Document)
 	if err != nil {
@@ -52,6 +53,7 @@ func (l *Loader) resolveDocument(ctx context.Context, converted *pipeline.Conver
 	}, nil
 }
 
+// resolveBaseURI returns the base URI used for relative reference resolution.
 func resolveBaseURI(document *pipeline.LoadedDocument) (*url.URL, error) {
 	if document == nil {
 		return nil, errors.New("document is required")
@@ -84,6 +86,7 @@ func resolveBaseURI(document *pipeline.LoadedDocument) (*url.URL, error) {
 	}, nil
 }
 
+// newRefReadFromURIFunc builds the external reference reader used by kin-openapi.
 func newRefReadFromURIFunc(client *http.Client) openapi3.ReadFromURIFunc {
 	reader := openapi3.ReadFromURIs(
 		openapi3.ReadFromHTTP(client),

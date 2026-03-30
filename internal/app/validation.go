@@ -21,10 +21,12 @@ type RequestValidationResult struct {
 	Issues []RequestValidationIssue
 }
 
+// HasIssues reports whether the validation result contains any issues.
 func (r RequestValidationResult) HasIssues() bool {
 	return len(r.Issues) > 0
 }
 
+// FirstIssue returns the first validation issue when one exists.
 func (r RequestValidationResult) FirstIssue() (RequestValidationIssue, bool) {
 	if len(r.Issues) == 0 {
 		return RequestValidationIssue{}, false
@@ -33,6 +35,7 @@ func (r RequestValidationResult) FirstIssue() (RequestValidationIssue, bool) {
 	return r.Issues[0], true
 }
 
+// IssueForTarget returns the validation issue for the requested target when present.
 func (r RequestValidationResult) IssueForTarget(target string) (RequestValidationIssue, bool) {
 	for _, issue := range r.Issues {
 		if issue.Target == target {
@@ -43,6 +46,7 @@ func (r RequestValidationResult) IssueForTarget(target string) (RequestValidatio
 	return RequestValidationIssue{}, false
 }
 
+// MessagesForSection returns validation messages that belong to the requested request section.
 func (r RequestValidationResult) MessagesForSection(section string) []string {
 	messages := make([]string, 0, len(r.Issues))
 	for _, issue := range r.Issues {
@@ -54,6 +58,7 @@ func (r RequestValidationResult) MessagesForSection(section string) []string {
 	return messages
 }
 
+// ValidateRequest checks the current draft against the required operation inputs.
 func ValidateRequest(operation *model.Operation, draft *model.RequestDraft) RequestValidationResult {
 	if operation == nil {
 		return RequestValidationResult{}
@@ -97,6 +102,7 @@ func ValidateRequest(operation *model.Operation, draft *model.RequestDraft) Requ
 	return result
 }
 
+// draftParameterValue returns the current draft value for the requested parameter.
 func draftParameterValue(draft *model.RequestDraft, parameter model.Parameter) string {
 	if draft == nil {
 		return ""
@@ -116,6 +122,7 @@ func draftParameterValue(draft *model.RequestDraft, parameter model.Parameter) s
 	}
 }
 
+// requestSectionForLocation maps a parameter location to its request-pane section label.
 func requestSectionForLocation(location model.ParameterLocation) string {
 	switch location {
 	case model.ParameterLocationPath:

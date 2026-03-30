@@ -77,8 +77,8 @@ func TestModelInitLoadsSpecAsynchronously(t *testing.T) {
 	if updated.viewState.ZoomedPane {
 		t.Fatal("expected zoom mode to start disabled")
 	}
-	if updated.activeDetailsSection != detailsui.SectionSummary {
-		t.Fatalf("expected summary details section after load, got %q", updated.activeDetailsSection)
+	if updated.panes.activeDetailsSection != detailsui.SectionSummary {
+		t.Fatalf("expected summary details section after load, got %q", updated.panes.activeDetailsSection)
 	}
 }
 
@@ -251,8 +251,8 @@ func TestModelRendersLoadFailureWithoutCrashing(t *testing.T) {
 	t.Parallel()
 
 	m := NewModel(app.NewService(&stubLoader{}), "broken.yaml")
-	m.width = 120
-	m.height = 30
+	m.shell.width = 120
+	m.shell.height = 30
 	m.viewState.LoadInFlight = true
 	m.viewState.ActiveLoadRequestID = 1
 
@@ -282,7 +282,7 @@ func TestModelBlockingLoadErrorOnlyAllowsQuitKeys(t *testing.T) {
 	t.Parallel()
 
 	m := NewModel(app.NewService(&stubLoader{}), "broken.yaml")
-	m.loadErr = errors.New("boom")
+	m.shell.loadErr = errors.New("boom")
 
 	updatedModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	updated := updatedModel.(*Model)
@@ -447,7 +447,9 @@ func TestModelOperationsMovementFollowsRenderedGroupedOrder(t *testing.T) {
 		viewState: model.ViewState{
 			FocusedPane: model.FocusedPaneOperations,
 		},
-		activeDetailsSection: detailsui.SectionSummary,
+		panes: paneState{
+			activeDetailsSection: detailsui.SectionSummary,
+		},
 	}
 	m.syncVisibleOperations()
 
@@ -492,27 +494,27 @@ func TestModelDetailsSectionNavigationSkipsUnavailableSections(t *testing.T) {
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
 	updated := updatedModel.(*Model)
-	if updated.activeDetailsSection != detailsui.SectionSecurity {
-		t.Fatalf("expected ] to move to security, got %q", updated.activeDetailsSection)
+	if updated.panes.activeDetailsSection != detailsui.SectionSecurity {
+		t.Fatalf("expected ] to move to security, got %q", updated.panes.activeDetailsSection)
 	}
 
 	updated.session.SelectedOperationKey = model.NewOperationKey("POST", "/pets")
 	updated.syncActiveDetailsSection()
-	if updated.activeDetailsSection != detailsui.SectionSecurity {
-		t.Fatalf("expected active section to stay on security when still available, got %q", updated.activeDetailsSection)
+	if updated.panes.activeDetailsSection != detailsui.SectionSecurity {
+		t.Fatalf("expected active section to stay on security when still available, got %q", updated.panes.activeDetailsSection)
 	}
 
 	updated.session.Spec.Security = nil
 	updated.session.SelectedOperationKey = model.NewOperationKey("GET", "/health")
 	updated.syncActiveDetailsSection()
-	if updated.activeDetailsSection != detailsui.SectionSummary {
-		t.Fatalf("expected active section to fall back to summary when security is unavailable, got %q", updated.activeDetailsSection)
+	if updated.panes.activeDetailsSection != detailsui.SectionSummary {
+		t.Fatalf("expected active section to fall back to summary when security is unavailable, got %q", updated.panes.activeDetailsSection)
 	}
 
 	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnd})
 	updated = updatedModel.(*Model)
-	if updated.activeDetailsSection != detailsui.SectionSummary {
-		t.Fatalf("expected end to jump to last available details section, got %q", updated.activeDetailsSection)
+	if updated.panes.activeDetailsSection != detailsui.SectionSummary {
+		t.Fatalf("expected end to jump to last available details section, got %q", updated.panes.activeDetailsSection)
 	}
 }
 
@@ -521,24 +523,24 @@ func TestModelRequestSectionNavigationMovesAcrossParameterBodyAndAuth(t *testing
 
 	m := newLoadedModelForNavigation()
 	m.viewState.FocusedPane = model.FocusedPaneRequest
-	m.activeRequestSection = "Path"
+	m.panes.activeRequestSection = "Path"
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
 	updated := updatedModel.(*Model)
-	if updated.activeRequestSection != "Body" {
-		t.Fatalf("expected ] to move to request body, got %q", updated.activeRequestSection)
+	if updated.panes.activeRequestSection != "Body" {
+		t.Fatalf("expected ] to move to request body, got %q", updated.panes.activeRequestSection)
 	}
 
 	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
 	updated = updatedModel.(*Model)
-	if updated.activeRequestSection != "Auth" {
-		t.Fatalf("expected ] to move to auth, got %q", updated.activeRequestSection)
+	if updated.panes.activeRequestSection != "Auth" {
+		t.Fatalf("expected ] to move to auth, got %q", updated.panes.activeRequestSection)
 	}
 
 	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
 	updated = updatedModel.(*Model)
-	if updated.activeRequestSection != "Body" {
-		t.Fatalf("expected [ to move back to body, got %q", updated.activeRequestSection)
+	if updated.panes.activeRequestSection != "Body" {
+		t.Fatalf("expected [ to move back to body, got %q", updated.panes.activeRequestSection)
 	}
 }
 
@@ -547,7 +549,7 @@ func TestModelRequestRowNavigationMovesWithinActiveSection(t *testing.T) {
 
 	m := newLoadedModelForNavigation()
 	m.viewState.FocusedPane = model.FocusedPaneRequest
-	m.activeRequestSection = "Body"
+	m.panes.activeRequestSection = "Body"
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnd})
 	updated := updatedModel.(*Model)
@@ -610,9 +612,11 @@ func TestModelRequestAndResponseSectionsResetToFirstOnOperationChange(t *testing
 			RequestActiveRow:    1,
 			RequestScrollOffset: 1,
 		},
-		activeDetailsSection:  detailsui.SectionSummary,
-		activeRequestSection:  "Query",
-		activeResponseSection: "default",
+		panes: paneState{
+			activeDetailsSection:  detailsui.SectionSummary,
+			activeRequestSection:  "Query",
+			activeResponseSection: "default",
+		},
 	}
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
@@ -620,8 +624,8 @@ func TestModelRequestAndResponseSectionsResetToFirstOnOperationChange(t *testing
 	if updated.session.SelectedOperationKey != model.NewOperationKey("GET", "/second") {
 		t.Fatalf("expected second operation to be selected, got %q", updated.session.SelectedOperationKey)
 	}
-	if updated.activeRequestSection != "Path" {
-		t.Fatalf("expected request section to reset to first available, got %q", updated.activeRequestSection)
+	if updated.panes.activeRequestSection != "Path" {
+		t.Fatalf("expected request section to reset to first available, got %q", updated.panes.activeRequestSection)
 	}
 	if updated.viewState.RequestActiveRow != 0 {
 		t.Fatalf("expected request row to reset on operation change, got %d", updated.viewState.RequestActiveRow)
@@ -629,8 +633,8 @@ func TestModelRequestAndResponseSectionsResetToFirstOnOperationChange(t *testing
 	if updated.viewState.RequestScrollOffset != 0 {
 		t.Fatalf("expected request scroll offset to reset on operation change, got %d", updated.viewState.RequestScrollOffset)
 	}
-	if updated.activeResponseSection != "Live" {
-		t.Fatalf("expected response section to reset to live, got %q", updated.activeResponseSection)
+	if updated.panes.activeResponseSection != "Live" {
+		t.Fatalf("expected response section to reset to live, got %q", updated.panes.activeResponseSection)
 	}
 }
 
@@ -639,18 +643,18 @@ func TestModelResponseSectionNavigationAndFallback(t *testing.T) {
 
 	m := newLoadedModelForNavigation()
 	m.viewState.FocusedPane = model.FocusedPaneResponse
-	m.activeResponseSection = "200"
+	m.panes.activeResponseSection = "200"
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
 	updated := updatedModel.(*Model)
-	if updated.activeResponseSection != "default" {
-		t.Fatalf("expected ] to move to default response, got %q", updated.activeResponseSection)
+	if updated.panes.activeResponseSection != "default" {
+		t.Fatalf("expected ] to move to default response, got %q", updated.panes.activeResponseSection)
 	}
 
 	updated.session.SelectedOperationKey = model.NewOperationKey("POST", "/pets")
 	updated.syncActivePaneSections()
-	if updated.activeResponseSection != "Live" {
-		t.Fatalf("expected response section to fall back to live, got %q", updated.activeResponseSection)
+	if updated.panes.activeResponseSection != "Live" {
+		t.Fatalf("expected response section to fall back to live, got %q", updated.panes.activeResponseSection)
 	}
 }
 
@@ -668,7 +672,7 @@ func TestModelCtrlRShowsInlineValidationWithoutExecuting(t *testing.T) {
 	if updated.viewState.FocusedPane != model.FocusedPaneRequest {
 		t.Fatalf("expected focus to stay in request pane, got %q", updated.viewState.FocusedPane)
 	}
-	if !updated.requestValidation.HasIssues() {
+	if !updated.requestUI.validation.HasIssues() {
 		t.Fatal("expected validation issues to be stored")
 	}
 
@@ -723,8 +727,8 @@ func TestModelCtrlRExecutesAndSelectsLiveResponse(t *testing.T) {
 	if updated.viewState.FocusedPane != model.FocusedPaneResponse {
 		t.Fatalf("expected focus to move to response, got %q", updated.viewState.FocusedPane)
 	}
-	if updated.activeResponseSection != "Live" {
-		t.Fatalf("expected live response section to be selected, got %q", updated.activeResponseSection)
+	if updated.panes.activeResponseSection != "Live" {
+		t.Fatalf("expected live response section to be selected, got %q", updated.panes.activeResponseSection)
 	}
 	if updated.session.LastResponse == nil {
 		t.Fatal("expected last response to be stored")
@@ -765,7 +769,7 @@ func TestModelRequestEditSavesAndCancelsParameterDrafts(t *testing.T) {
 
 	m := newLoadedModelForNavigation()
 	m.viewState.FocusedPane = model.FocusedPaneRequest
-	m.activeRequestSection = "Path"
+	m.panes.activeRequestSection = "Path"
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	updated := updatedModel.(*Model)
@@ -808,7 +812,7 @@ func TestModelRequestBodyMediaTypeCyclesOnEnter(t *testing.T) {
 		{MediaType: "application/xml"},
 	}
 	m.viewState.FocusedPane = model.FocusedPaneRequest
-	m.activeRequestSection = "Body"
+	m.panes.activeRequestSection = "Body"
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	updated := updatedModel.(*Model)
@@ -823,7 +827,7 @@ func TestModelRequestBodyEditorSavesAndCancels(t *testing.T) {
 
 	m := newLoadedModelForNavigation()
 	m.viewState.FocusedPane = model.FocusedPaneRequest
-	m.activeRequestSection = "Body"
+	m.panes.activeRequestSection = "Body"
 	m.viewState.RequestActiveRow = 1
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -864,7 +868,7 @@ func TestModelRequestEditingBlocksNavigationUntilExit(t *testing.T) {
 
 	m := newLoadedModelForNavigation()
 	m.viewState.FocusedPane = model.FocusedPaneRequest
-	m.activeRequestSection = "Path"
+	m.panes.activeRequestSection = "Path"
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	updated := updatedModel.(*Model)
@@ -880,8 +884,8 @@ func TestModelRequestEditingBlocksNavigationUntilExit(t *testing.T) {
 
 	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
 	updated = updatedModel.(*Model)
-	if updated.activeRequestSection != "Path" {
-		t.Fatalf("expected request section navigation to be blocked during edit, got %q", updated.activeRequestSection)
+	if updated.panes.activeRequestSection != "Path" {
+		t.Fatalf("expected request section navigation to be blocked during edit, got %q", updated.panes.activeRequestSection)
 	}
 	if updated.session.SelectedOperationKey != model.NewOperationKey("GET", "/pets") {
 		t.Fatalf("expected operation selection to remain unchanged during edit, got %q", updated.session.SelectedOperationKey)
@@ -893,23 +897,23 @@ func TestModelQuestionMarkTogglesRequestPopupHelp(t *testing.T) {
 
 	m := newLoadedModelForNavigation()
 	m.viewState.FocusedPane = model.FocusedPaneRequest
-	m.activeRequestSection = "Path"
+	m.panes.activeRequestSection = "Path"
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	updated := updatedModel.(*Model)
-	if updated.requestEditHelpOpen {
+	if updated.requestUI.editHelpOpen {
 		t.Fatal("expected popup help to start hidden")
 	}
 
 	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
 	updated = updatedModel.(*Model)
-	if !updated.requestEditHelpOpen {
+	if !updated.requestUI.editHelpOpen {
 		t.Fatal("expected question mark to open popup help")
 	}
 
 	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
 	updated = updatedModel.(*Model)
-	if updated.requestEditHelpOpen {
+	if updated.requestUI.editHelpOpen {
 		t.Fatal("expected next keypress to close popup help")
 	}
 }
@@ -919,7 +923,7 @@ func TestModelRequestDraftPersistsAcrossOperationAndFilterChanges(t *testing.T) 
 
 	m := newLoadedModelForNavigation()
 	m.viewState.FocusedPane = model.FocusedPaneRequest
-	m.activeRequestSection = "Path"
+	m.panes.activeRequestSection = "Path"
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	updated := updatedModel.(*Model)
@@ -965,11 +969,11 @@ func TestModelRequestScrollKeepsActiveRowVisible(t *testing.T) {
 		{Name: "d", In: model.ParameterLocationQuery, Schema: &model.Schema{Type: "string"}},
 		{Name: "e", In: model.ParameterLocationQuery, Schema: &model.Schema{Type: "string"}},
 	}
-	m.width = 80
-	m.height = 12
+	m.shell.width = 80
+	m.shell.height = 12
 	m.viewState.RightPaneLayoutPreset = layoutPresetNarrow
 	m.viewState.FocusedPane = model.FocusedPaneRequest
-	m.activeRequestSection = "Query"
+	m.panes.activeRequestSection = "Query"
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	updated := updatedModel.(*Model)
@@ -1013,11 +1017,15 @@ func TestModelDetailsScrollingUsesJKAndResetsOnSectionChange(t *testing.T) {
 		viewState: model.ViewState{
 			FocusedPane: model.FocusedPaneDetails,
 		},
-		width:                80,
-		height:               12,
-		activeDetailsSection: detailsui.SectionSummary,
+		shell: shellState{
+			width:  80,
+			height: 12,
+		},
+		panes: paneState{
+			activeDetailsSection: detailsui.SectionSummary,
+		},
 	}
-	m.viewState.RightPaneLayoutPreset = chooseLayoutPreset(m.width)
+	m.viewState.RightPaneLayoutPreset = chooseLayoutPreset(m.shell.width)
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	updated := updatedModel.(*Model)
@@ -1027,8 +1035,8 @@ func TestModelDetailsScrollingUsesJKAndResetsOnSectionChange(t *testing.T) {
 
 	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
 	updated = updatedModel.(*Model)
-	if updated.activeDetailsSection != detailsui.SectionSecurity {
-		t.Fatalf("expected ] to switch to security, got %q", updated.activeDetailsSection)
+	if updated.panes.activeDetailsSection != detailsui.SectionSecurity {
+		t.Fatalf("expected ] to switch to security, got %q", updated.panes.activeDetailsSection)
 	}
 	if updated.viewState.DetailsScrollOffset != 0 {
 		t.Fatalf("expected details scroll offset to reset on section change, got %d", updated.viewState.DetailsScrollOffset)
@@ -1058,9 +1066,13 @@ func TestModelDetailsHomeAndEndControlScroll(t *testing.T) {
 			DetailsScrollOffset:   2,
 			RightPaneLayoutPreset: layoutPresetNarrow,
 		},
-		width:                80,
-		height:               12,
-		activeDetailsSection: detailsui.SectionSummary,
+		shell: shellState{
+			width:  80,
+			height: 12,
+		},
+		panes: paneState{
+			activeDetailsSection: detailsui.SectionSummary,
+		},
 	}
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnd})
@@ -1073,6 +1085,55 @@ func TestModelDetailsHomeAndEndControlScroll(t *testing.T) {
 	updated = updatedModel.(*Model)
 	if updated.viewState.DetailsScrollOffset != 0 {
 		t.Fatalf("expected home to jump to top of details content, got %d", updated.viewState.DetailsScrollOffset)
+	}
+}
+
+func TestModelResponseHomeAndEndControlScroll(t *testing.T) {
+	t.Parallel()
+
+	m := &Model{
+		session: model.SessionState{
+			Spec: &model.APISpec{
+				Operations: []model.Operation{
+					{
+						Key:       model.NewOperationKey("GET", "/pets"),
+						Method:    "GET",
+						Path:      "/pets",
+						Responses: []model.ResponseSpec{{StatusCode: "200", Description: "OK"}},
+					},
+				},
+			},
+			SelectedOperationKey: model.NewOperationKey("GET", "/pets"),
+			LastResponse: &model.HTTPResponse{
+				OperationKey: model.NewOperationKey("GET", "/pets"),
+				Status:       "200 OK",
+				PrettyBody:   "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8",
+			},
+		},
+		viewState: model.ViewState{
+			FocusedPane:           model.FocusedPaneResponse,
+			ResponseScrollOffset:  2,
+			RightPaneLayoutPreset: layoutPresetNarrow,
+		},
+		shell: shellState{
+			width:  80,
+			height: 12,
+		},
+		panes: paneState{
+			activeResponseSection: "Live",
+		},
+	}
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnd})
+	updated := updatedModel.(*Model)
+	if updated.viewState.ResponseScrollOffset == 0 {
+		t.Fatal("expected end to jump to the bottom of response content")
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyHome})
+	updated = updatedModel.(*Model)
+	if updated.viewState.ResponseScrollOffset != 0 {
+		t.Fatalf("expected home to jump to top of response content, got %d", updated.viewState.ResponseScrollOffset)
 	}
 }
 
@@ -1096,8 +1157,8 @@ func TestModelOperationsScrollingKeepsFiveRowsBelowCursorWhenMovingDown(t *testi
 	t.Parallel()
 
 	m := newLoadedModelForNavigation()
-	m.height = 18
-	m.width = 80
+	m.shell.height = 18
+	m.shell.width = 80
 	m.viewState.ZoomedPane = true
 	m.viewState.FocusedPane = model.FocusedPaneOperations
 	m.viewState.RightPaneLayoutPreset = layoutPresetWide
@@ -1180,9 +1241,11 @@ func newLoadedModelForNavigation() *Model {
 	}
 
 	return &Model{
-		activeDetailsSection:  detailsui.SectionSummary,
-		activeRequestSection:  "Path",
-		activeResponseSection: "200",
+		panes: paneState{
+			activeDetailsSection:  detailsui.SectionSummary,
+			activeRequestSection:  "Path",
+			activeResponseSection: "200",
+		},
 		session: model.SessionState{
 			Spec:                 spec,
 			SelectedOperationKey: model.NewOperationKey("GET", "/pets"),

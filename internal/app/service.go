@@ -22,10 +22,12 @@ type LoadResult struct {
 	View    model.ViewState
 }
 
+// NewService builds an app service with the default transport executor.
 func NewService(loader specLoader) *Service {
 	return NewServiceWithExecutor(loader, nil)
 }
 
+// NewServiceWithExecutor builds an app service with the provided loader and executor.
 func NewServiceWithExecutor(loader specLoader, executor *transport.Executor) *Service {
 	if loader == nil {
 		loader = spec.NewLoader(nil)
@@ -40,6 +42,7 @@ func NewServiceWithExecutor(loader specLoader, executor *transport.Executor) *Se
 	}
 }
 
+// LoadSource loads a spec source and returns initialized session and view state.
 func (s *Service) LoadSource(ctx context.Context, rawSource string) (LoadResult, error) {
 	apiSpec, err := s.loader.Load(ctx, spec.Source{Value: rawSource})
 	if err != nil {
@@ -56,6 +59,7 @@ type ExecuteResult struct {
 	Validation   RequestValidationResult
 }
 
+// ExecuteCurrent prepares and executes the currently selected operation request.
 func (s *Service) ExecuteCurrent(ctx context.Context, session model.SessionState) ExecuteResult {
 	operation := selectedOperation(session)
 	if operation == nil {
@@ -96,6 +100,7 @@ func (s *Service) ExecuteCurrent(ctx context.Context, session model.SessionState
 	}
 }
 
+// selectedOperation returns the currently selected operation from session state.
 func selectedOperation(session model.SessionState) *model.Operation {
 	if session.Spec == nil {
 		return nil

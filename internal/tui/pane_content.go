@@ -1,16 +1,11 @@
 package tui
 
 import (
-	"strings"
-
 	"github.com/phergul/apiscope/internal/model"
 	detailsui "github.com/phergul/apiscope/internal/tui/details"
 	operationsui "github.com/phergul/apiscope/internal/tui/operations"
 	requestui "github.com/phergul/apiscope/internal/tui/request"
-	"github.com/phergul/apiscope/internal/tui/widgets"
-	"github.com/phergul/apiscope/internal/util"
-
-	"github.com/charmbracelet/lipgloss"
+	responseui "github.com/phergul/apiscope/internal/tui/response"
 )
 
 type paneView struct {
@@ -22,135 +17,108 @@ type paneView struct {
 	Focused    bool
 }
 
+// operationsPaneContent renders the operations pane using the current window-derived width.
 func (m *Model) operationsPaneContent() string {
 	width, _ := m.resolvedDimensions()
 	if m.viewState.RightPaneLayoutPreset == layoutPresetWide {
-		totalWidth := width
-		width = util.Clamp(int(float64(totalWidth)*0.32), 30, 40)
-		width = min(width, totalWidth-20)
+		width, _ = m.wideColumnWidths(width)
 	}
 
 	return m.operationsPaneContentForSize(width)
 }
 
+// operationsPaneContentForSize renders the operations pane for the provided pane width.
 func (m *Model) operationsPaneContentForSize(width int) string {
-	data := m.projectOperationsPane()
-	data.ContentWidth = max(width-4, 1)
-	data.ScrollOffset = m.viewState.OperationsScrollOffset
-	return operationsui.Render(data)
+	// subtract the pane frame padding and borders before passing width to the renderer.
+	return operationsui.Render(m.projectOperationsPaneForState(max(width-4, 1), 0, m.viewState.OperationsScrollOffset).Data)
 }
 
+// operationsPaneContentForHeight renders the operations pane using the current width and a fixed height.
 func (m *Model) operationsPaneContentForHeight(height int) string {
 	width, _ := m.resolvedDimensions()
 	if m.viewState.RightPaneLayoutPreset == layoutPresetWide {
-		totalWidth := width
-		width = util.Clamp(int(float64(totalWidth)*0.32), 30, 40)
-		width = min(width, totalWidth-20)
+		width, _ = m.wideColumnWidths(width)
 	}
 
 	return m.operationsPaneContentForSizeAndHeight(width, height)
 }
 
+// operationsPaneContentForSizeAndHeight renders the operations pane for the provided size.
 func (m *Model) operationsPaneContentForSizeAndHeight(width, height int) string {
-	data := m.projectOperationsPane()
-	data.ContentWidth = max(width-4, 1)
-	data.ScrollOffset = m.viewState.OperationsScrollOffset
-	data.MaxLines = max(height-4, 1)
-	return operationsui.Render(data)
+	// subtract the pane frame padding and borders before passing width to the renderer.
+	contentWidth := max(width-4, 1)
+	// the operations pane only needs to reserve the frame chrome because it has no section strip.
+	maxLines := max(height-4, 1)
+	return operationsui.Render(m.projectOperationsPaneForState(contentWidth, maxLines, m.viewState.OperationsScrollOffset).Data)
 }
 
+// operationsPaneMetrics returns the effective operations pane content width and height.
 func (m *Model) operationsPaneMetrics() (int, int) {
 	width, height := m.resolvedDimensions()
-	bodyHeight := max(height-lipgloss.Height(m.renderStatusBar(width)), 12)
+	// reserve the rendered status bar before splitting the remaining shell height across panes.
+	bodyHeight := max(height-m.statusBarHeight(width), 12)
 	paneWidth := width
 	paneHeight := bodyHeight
 
 	if !(m.viewState.ZoomedPane && m.viewState.FocusedPane == model.FocusedPaneOperations) {
 		if m.viewState.RightPaneLayoutPreset == layoutPresetWide {
-			paneWidth = util.Clamp(int(float64(width)*0.32), 30, 40)
-			paneWidth = min(paneWidth, width-20)
+			paneWidth, _ = m.wideColumnWidths(width)
 		} else {
 			paneHeight = computeNarrowPaneHeights(bodyHeight).Operations
 		}
 	}
 
+	// subtract the pane frame padding and borders before returning inner content dimensions.
 	return max(paneWidth-4, 1), max(paneHeight-4, 1)
 }
 
+// visibleOperationRowCount returns the number of rendered operation rows visible at the given offset.
 func (m *Model) visibleOperationRowCount(offset int) int {
 	contentWidth, maxLines := m.operationsPaneMetrics()
-	data := m.projectOperationsPane()
-	data.ContentWidth = contentWidth
-	data.ScrollOffset = offset
-	data.MaxLines = maxLines
-	return operationsui.VisibleRowCount(data)
+	return m.projectOperationsPaneForState(contentWidth, maxLines, offset).VisibleRows
 }
 
+// detailsPaneContent renders the unwindowed details pane for default rendering paths and tests.
 func (m *Model) detailsPaneContent() string {
 	return detailsui.Render(m.projectDetailsPane())
 }
 
+// detailsPaneContentForHeight renders the details pane using the current width and a fixed height.
 func (m *Model) detailsPaneContentForHeight(height int) string {
 	width, _ := m.resolvedDimensions()
 	if m.viewState.RightPaneLayoutPreset == layoutPresetWide {
-		leftWidth := util.Clamp(int(float64(width)*0.32), 30, 40)
-		leftWidth = min(leftWidth, width-20)
-		width = max(width-leftWidth, 20)
+		_, width = m.wideColumnWidths(width)
 	}
 
 	return m.detailsPaneContentForSize(width, height)
 }
 
+// detailsPaneContentForSize renders the details pane for the provided size.
 func (m *Model) detailsPaneContentForSize(width, height int) string {
-	data := m.projectDetailsPane()
-	if data.LoadInFlight || strings.TrimSpace(data.LoadErrorBody) != "" || data.Selected == nil {
-		return detailsui.Render(data)
-	}
-
-	visibleLines := max(height-6, 1)
-	contentWidth := max(width-4, 1)
-	viewport := widgets.NewViewport(contentWidth, visibleLines)
-	viewport.SetContent(detailsui.RenderActiveSection(data))
-	viewport.SetYOffset(m.viewState.DetailsScrollOffset)
-	clipped := viewport.View()
-	sections := detailsui.Sections(data)
-	for index := range sections {
-		if sections[index].Label == data.ActiveSection {
-			sections[index].Body = clipped
-			return widgets.RenderSectionView(widgets.SectionViewData{
-				Sections:   sections,
-				Active:     data.ActiveSection,
-				EmptyState: "",
-			})
-		}
-	}
-
-	if len(sections) > 0 {
-		sections[0].Body = clipped
-	}
-
-	return widgets.RenderSectionView(widgets.SectionViewData{
-		Sections:   sections,
-		Active:     data.ActiveSection,
-		EmptyState: "",
-	})
+	return detailsui.Render(m.projectDetailsPaneForSize(width, height).Data)
 }
 
+// requestPaneContent renders the request pane with its current projected state.
 func (m *Model) requestPaneContent() string {
 	return requestui.Render(m.projectRequestPane())
 }
 
+// responsePaneContent renders the response pane using the current window-derived size.
 func (m *Model) responsePaneContent() string {
 	width, height := m.resolvedDimensions()
 	if m.viewState.RightPaneLayoutPreset == layoutPresetWide {
-		leftWidth := util.Clamp(int(float64(width)*0.32), 30, 40)
-		leftWidth = min(leftWidth, width-20)
-		width = max(width-leftWidth, 20)
+		_, width = m.wideColumnWidths(width)
 	}
 
 	return m.responsePaneContentForSize(width, height)
 }
 
+// responsePaneContentForSize renders the response pane for the provided size.
+func (m *Model) responsePaneContentForSize(width, height int) string {
+	return responseui.Render(m.projectResponsePaneForSize(width, height).Data)
+}
+
+// paneView returns the frame data for the requested pane.
 func (m *Model) paneView(pane model.FocusedPane) paneView {
 	switch pane {
 	case model.FocusedPaneDetails:
@@ -182,21 +150,17 @@ func (m *Model) paneView(pane model.FocusedPane) paneView {
 	}
 }
 
+// operationsPaneFooter renders the filter footer shown below the operations pane when needed.
 func (m *Model) operationsPaneFooter() string {
 	m.ensureWidgetDefaults()
-
-	if m.viewState.ActiveEditorMode != model.EditorModeFilter && strings.TrimSpace(m.viewState.FilterText) == "" {
-		return ""
-	}
-
-	if m.viewState.ActiveEditorMode == model.EditorModeFilter {
-		return m.filterInput.View()
-	}
-
-	return widgets.InputFrameStyle(false).
-		Render("Filter: " + m.viewState.FilterText)
+	return operationsui.RenderFooter(operationsui.FilterFooterInput{
+		Editing:    m.viewState.ActiveEditorMode == model.EditorModeFilter,
+		FilterText: m.viewState.FilterText,
+		EditorView: m.widgets.filterInput.View(),
+	})
 }
 
+// requestPaneTitleRight returns the contextual title-right hint for the request pane.
 func (m *Model) requestPaneTitleRight() string {
 	if m.viewState.FocusedPane != model.FocusedPaneRequest {
 		return ""

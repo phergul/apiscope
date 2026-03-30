@@ -2,6 +2,7 @@ package app
 
 import "github.com/phergul/apiscope/internal/model"
 
+// EnsureRequestDraft returns the request draft for the selected operation, creating one when needed.
 func EnsureRequestDraft(session *model.SessionState, operation *model.Operation) *model.RequestDraft {
 	if session == nil || operation == nil {
 		return nil
@@ -34,6 +35,7 @@ func EnsureRequestDraft(session *model.SessionState, operation *model.Operation)
 	return draft
 }
 
+// SetDraftParameter stores or clears a parameter value in the current request draft.
 func SetDraftParameter(session *model.SessionState, operation *model.Operation, parameter model.Parameter, value string) *model.RequestDraft {
 	draft := EnsureRequestDraft(session, operation)
 	if draft == nil {
@@ -53,6 +55,7 @@ func SetDraftParameter(session *model.SessionState, operation *model.Operation, 
 	return draft
 }
 
+// SetDraftBodyMediaType stores the selected request-body media type in the current draft.
 func SetDraftBodyMediaType(session *model.SessionState, operation *model.Operation, mediaType string) *model.RequestDraft {
 	draft := EnsureRequestDraft(session, operation)
 	if draft == nil {
@@ -63,6 +66,7 @@ func SetDraftBodyMediaType(session *model.SessionState, operation *model.Operati
 	return draft
 }
 
+// SetDraftBodyRaw stores the raw request-body text in the current draft.
 func SetDraftBodyRaw(session *model.SessionState, operation *model.Operation, value string) *model.RequestDraft {
 	draft := EnsureRequestDraft(session, operation)
 	if draft == nil {
@@ -73,6 +77,7 @@ func SetDraftBodyRaw(session *model.SessionState, operation *model.Operation, va
 	return draft
 }
 
+// parameterValueMap returns the parameter map for the requested parameter location.
 func parameterValueMap(draft *model.RequestDraft, location model.ParameterLocation) map[string]string {
 	if draft == nil {
 		return nil

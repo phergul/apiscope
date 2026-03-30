@@ -2,10 +2,10 @@ package request
 
 import "testing"
 
-func TestVisibleDataSlicesRowsAndRebasesActiveRow(t *testing.T) {
+func TestWindowVisibleRowsSlicesRowsAndRebasesActiveRow(t *testing.T) {
 	t.Parallel()
 
-	data := VisibleData(Data{
+	data := WindowVisibleRows(Data{
 		Rows: []Row{
 			{Label: "one"},
 			{Label: "two"},

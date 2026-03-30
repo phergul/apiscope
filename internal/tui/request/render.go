@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/phergul/apiscope/internal/tui/widgets"
+	"github.com/phergul/apiscope/internal/util"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -38,6 +39,7 @@ type Data struct {
 	ContentHeight    int
 }
 
+// Render renders the full request pane body from the projected request data.
 func Render(data Data) string {
 	if data.LoadInFlight {
 		return "Loading spec..."
@@ -56,6 +58,7 @@ func Render(data Data) string {
 	}, "\n")
 }
 
+// RenderActiveSection renders the active request section content, including any active editor overlay.
 func RenderActiveSection(data Data) string {
 	parts := make([]string, 0, 3)
 
@@ -108,6 +111,7 @@ func RenderActiveSection(data Data) string {
 	return renderEditorOverlay(base, data)
 }
 
+// renderEditorOverlay renders the active request editor popup over the base pane content.
 func renderEditorOverlay(base string, data Data) string {
 	editorPopup := widgets.RenderPopup(widgets.PopupData{
 		Title:   data.Edit.Title,
@@ -119,6 +123,7 @@ func renderEditorOverlay(base string, data Data) string {
 	return widgets.Overlay(base, editorPopup, popupX(data, editorPopup), popupY(data, editorPopup))
 }
 
+// requestActiveRowIndex clamps the rendered request row selection into the visible row list.
 func requestActiveRowIndex(rows []Row, activeRow int) int {
 	if len(rows) == 0 {
 		return 0
@@ -133,6 +138,7 @@ func requestActiveRowIndex(rows []Row, activeRow int) int {
 	return activeRow
 }
 
+// fallbackText returns the trimmed value or the provided fallback when the value is blank.
 func fallbackText(value, fallback string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -142,6 +148,7 @@ func fallbackText(value, fallback string) string {
 	return value
 }
 
+// renderValidationSummary renders any request validation messages above the active section body.
 func renderValidationSummary(messages []string) string {
 	if len(messages) == 0 {
 		return ""
@@ -155,6 +162,7 @@ func renderValidationSummary(messages []string) string {
 	return strings.Join(lines, "\n")
 }
 
+// editorPopupBody renders the request editor popup body and optional context line.
 func editorPopupBody(data Data) string {
 	lines := make([]string, 0, 5)
 	if strings.TrimSpace(data.Edit.Context) != "" {
@@ -173,19 +181,25 @@ func editorPopupBody(data Data) string {
 	return strings.Join(lines, "\n")
 }
 
+// popupWidth returns the request editor popup width for the active editor kind.
 func popupWidth(data Data) int {
 	if data.Edit.Kind == "body" {
-		return min(max(data.ContentWidth-8, 28), 84)
+		// leave extra side padding for the larger body editor so the popup does not hug the pane frame.
+		// return min(max(data.ContentWidth-8, 28), 84)
+		return util.Clamp(data.ContentWidth-8, 28, 84)
 	}
 
-	return min(max(data.ContentWidth-10, 24), 64)
+	// use slightly tighter padding for field editors so the popup stays close to the selected row.
+	return util.Clamp(data.ContentWidth-10, 24, 64)
 }
 
+// popupX centers the request editor popup within the current pane width.
 func popupX(data Data, popup string) int {
 	popupWidth := lipgloss.Width(popup)
 	return max((max(data.ContentWidth, popupWidth)-popupWidth)/2, 0)
 }
 
+// popupY returns the request editor popup anchor inside the pane body.
 func popupY(data Data, popup string) int {
 	popupHeight := lipgloss.Height(popup)
 	if data.Edit.Kind == "body" {

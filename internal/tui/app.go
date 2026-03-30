@@ -20,28 +20,51 @@ const (
 	layoutPresetNarrow = "narrow"
 )
 
+// Program wraps the Bubble Tea program used by the CLI entrypoint.
 type Program struct {
 	program *tea.Program
 }
 
-type Model struct {
-	service               *app.Service
-	session               model.SessionState
-	viewState             model.ViewState
-	width                 int
-	height                int
-	source                string
-	loadErr               error
+// shellState groups root-owned runtime shell state.
+type shellState struct {
+	width   int
+	height  int
+	source  string
+	loadErr error
+}
+
+// paneState groups the root-owned active pane section state.
+type paneState struct {
 	activeDetailsSection  string
 	activeRequestSection  string
 	activeResponseSection string
-	filterInput           widgets.TextInput
-	requestFieldInput     widgets.TextInput
-	requestBodyInput      widgets.TextArea
-	requestValidation     app.RequestValidationResult
-	requestEditHelpOpen   bool
 }
 
+// widgetState groups the Bubble widget models owned by the root shell.
+type widgetState struct {
+	filterInput       widgets.TextInput
+	requestFieldInput widgets.TextInput
+	requestBodyInput  widgets.TextArea
+}
+
+// requestUIState groups request-editor state that still belongs to the root adapters.
+type requestUIState struct {
+	validation   app.RequestValidationResult
+	editHelpOpen bool
+}
+
+// Model is the root Bubble Tea model for the TUI shell.
+type Model struct {
+	service   *app.Service
+	session   model.SessionState
+	viewState model.ViewState
+	shell     shellState
+	panes     paneState
+	widgets   widgetState
+	requestUI requestUIState
+}
+
+// NewProgram builds the CLI-facing Bubble Tea program wrapper.
 func NewProgram(service *app.Service, source string, input io.Reader, output io.Writer) *Program {
 	options := []tea.ProgramOption{
 		tea.WithInput(input),
@@ -53,11 +76,13 @@ func NewProgram(service *app.Service, source string, input io.Reader, output io.
 	}
 }
 
+// Run starts the Bubble Tea program and waits for it to exit.
 func (p *Program) Run() error {
 	_, err := p.program.Run()
 	return err
 }
 
+// NewModel builds the root TUI model with default shell and pane state.
 func NewModel(service *app.Service, source string) *Model {
 	if service == nil {
 		service = app.NewService(nil)
@@ -71,14 +96,18 @@ func NewModel(service *app.Service, source string) *Model {
 	requestBodyInput.SetPlaceholder("Enter raw request body")
 
 	return &Model{
-		service:               service,
-		source:                source,
-		activeDetailsSection:  detailsui.SectionSummary,
-		activeRequestSection:  "",
-		activeResponseSection: "",
-		filterInput:           filterInput,
-		requestFieldInput:     requestFieldInput,
-		requestBodyInput:      requestBodyInput,
+		service: service,
+		shell: shellState{
+			source: source,
+		},
+		panes: paneState{
+			activeDetailsSection: detailsui.SectionSummary,
+		},
+		widgets: widgetState{
+			filterInput:       filterInput,
+			requestFieldInput: requestFieldInput,
+			requestBodyInput:  requestBodyInput,
+		},
 		viewState: model.ViewState{
 			FocusedPane:           model.FocusedPaneOperations,
 			ExpandedRightPane:     model.FocusedPaneRequest,
@@ -90,18 +119,20 @@ func NewModel(service *app.Service, source string) *Model {
 	}
 }
 
+// Init starts the initial spec load for the TUI model.
 func (m *Model) Init() tea.Cmd {
 	m.ensureWidgetDefaults()
 	return m.startLoadCmd()
 }
 
+// Update applies one Bubble Tea message to the root shell model.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.ensureWidgetDefaults()
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
+		m.shell.width = msg.Width
+		m.shell.height = msg.Height
 		m.viewState.RightPaneLayoutPreset = chooseLayoutPreset(msg.Width)
 		m.ensureActiveOperationVisible()
 		return m, nil
@@ -112,7 +143,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		m.loadErr = msg.err
+		m.shell.loadErr = msg.err
 		if msg.err != nil {
 			m.session.ActiveLoadRequestID = msg.requestID
 			m.viewState.ActiveLoadRequestID = msg.requestID
@@ -123,11 +154,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.session = msg.result.Session
 		m.viewState = msg.result.View
-		m.requestValidation = app.RequestValidationResult{}
+		m.requestUI.validation = app.RequestValidationResult{}
 		m.session.ActiveLoadRequestID = msg.requestID
 		m.viewState.ActiveLoadRequestID = msg.requestID
 		m.viewState.LoadInFlight = false
-		m.viewState.RightPaneLayoutPreset = chooseLayoutPreset(m.width)
+		m.viewState.RightPaneLayoutPreset = chooseLayoutPreset(m.shell.width)
 		m.syncVisibleOperations()
 		m.syncActivePaneSections()
 		return m, nil
@@ -154,7 +185,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.viewState.FocusedPane = model.FocusedPaneResponse
 		m.viewState.ExpandedRightPane = model.FocusedPaneResponse
-		m.activeResponseSection = responseui.SectionLive
+		m.panes.activeResponseSection = responseui.SectionLive
 		m.viewState.ResponseScrollOffset = 0
 		return m, nil
 	default:
@@ -162,27 +193,30 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 
+// View renders the current TUI shell.
 func (m *Model) View() string {
 	m.ensureWidgetDefaults()
 	return m.render()
 }
 
+// ensureWidgetDefaults keeps root-owned widgets aligned with the current shell defaults.
 func (m *Model) ensureWidgetDefaults() {
-	m.filterInput.SetPlaceholder("Filter operations")
-	m.requestFieldInput.SetPlaceholder("Enter value")
-	m.requestBodyInput.SetPlaceholder("Enter raw request body")
+	m.widgets.filterInput.SetPlaceholder("Filter operations")
+	m.widgets.requestFieldInput.SetPlaceholder("Enter value")
+	m.widgets.requestBodyInput.SetPlaceholder("Enter raw request body")
 }
 
+// startLoadCmd starts a new asynchronous spec load request.
 func (m *Model) startLoadCmd() tea.Cmd {
 	requestID := m.viewState.ActiveLoadRequestID + 1
 	m.session.ActiveLoadRequestID = requestID
 	m.viewState.ActiveLoadRequestID = requestID
 	m.viewState.LoadInFlight = true
 	m.viewState.Notice = "loading spec"
-	m.loadErr = nil
+	m.shell.loadErr = nil
 
 	service := m.service
-	source := m.source
+	source := m.shell.source
 
 	return func() tea.Msg {
 		result, err := service.LoadSource(context.Background(), source)

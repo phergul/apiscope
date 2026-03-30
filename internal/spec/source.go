@@ -15,6 +15,7 @@ const (
 	SourceKindURL  = pipeline.SourceKindURL
 )
 
+// classifySource validates and canonicalizes a raw source input.
 func classifySource(source Source) (Source, error) {
 	value := strings.TrimSpace(source.Value)
 	if value == "" {
@@ -43,6 +44,7 @@ func classifySource(source Source) (Source, error) {
 	}
 }
 
+// inferSourceKind infers whether a raw source value is a file path or URL.
 func inferSourceKind(value string) (Source, error) {
 	parsed, err := url.Parse(value)
 	if err != nil {
@@ -66,6 +68,7 @@ func inferSourceKind(value string) (Source, error) {
 	}
 }
 
+// validateURLSource validates that a raw source value is a supported URL source.
 func validateURLSource(value string) (Source, error) {
 	parsed, err := url.Parse(value)
 	if err != nil {

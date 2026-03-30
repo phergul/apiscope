@@ -1,47 +1,37 @@
 package tui
 
 import (
-	"strings"
-
 	"github.com/phergul/apiscope/internal/model"
 	detailsui "github.com/phergul/apiscope/internal/tui/details"
 	operationsui "github.com/phergul/apiscope/internal/tui/operations"
 	requestui "github.com/phergul/apiscope/internal/tui/request"
 	responseui "github.com/phergul/apiscope/internal/tui/response"
-	"github.com/phergul/apiscope/internal/tui/widgets"
-	"github.com/phergul/apiscope/internal/util"
-
-	"github.com/charmbracelet/lipgloss"
 )
 
+// syncVisibleOperations refreshes the visible operations list from the current filter text.
 func (m *Model) syncVisibleOperations() {
 	if m.session.Spec == nil {
 		m.viewState.VisibleOperationKeys = nil
-		m.viewState.OperationsCursor = 0
-		m.viewState.OperationsScrollOffset = 0
+		listState := operationsui.ResetListState()
+		m.viewState.OperationsCursor = listState.Cursor
+		m.viewState.OperationsScrollOffset = listState.ScrollOffset
 		m.session.SelectedOperationKey = ""
 		m.syncActivePaneSections()
 		return
 	}
 
-	filter := strings.TrimSpace(strings.ToLower(m.viewState.FilterText))
-	visible := make([]model.OperationKey, 0, len(m.session.Spec.Operations))
-	for _, operation := range m.session.Spec.Operations {
-		if filter == "" || operationsui.MatchFilter(operation, filter) {
-			visible = append(visible, operation.Key)
-		}
-	}
-
-	m.viewState.VisibleOperationKeys = m.groupOperationKeys(visible)
+	m.viewState.VisibleOperationKeys = operationsui.FilterVisibleKeys(m.session.Spec.Operations, m.viewState.FilterText)
 	m.syncSelectedOperationAfterVisibilityChange()
 }
 
+// syncSelectedOperationAfterVisibilityChange keeps selection and cursor state valid after filtering.
 func (m *Model) syncSelectedOperationAfterVisibilityChange() {
 	previous := m.session.SelectedOperationKey
 	if len(m.viewState.VisibleOperationKeys) == 0 {
 		m.session.SelectedOperationKey = ""
-		m.viewState.OperationsCursor = 0
-		m.viewState.OperationsScrollOffset = 0
+		listState := operationsui.ResetListState()
+		m.viewState.OperationsCursor = listState.Cursor
+		m.viewState.OperationsScrollOffset = listState.ScrollOffset
 		m.onSelectionChanged(previous, "")
 		return
 	}
@@ -61,12 +51,14 @@ func (m *Model) syncSelectedOperationAfterVisibilityChange() {
 	m.onSelectionChanged(previous, m.session.SelectedOperationKey)
 }
 
+// setSelectedOperationByVisibleIndex selects the operation at the requested visible index.
 func (m *Model) setSelectedOperationByVisibleIndex(index int) {
 	previous := m.session.SelectedOperationKey
 	if len(m.viewState.VisibleOperationKeys) == 0 {
 		m.session.SelectedOperationKey = ""
-		m.viewState.OperationsCursor = 0
-		m.viewState.OperationsScrollOffset = 0
+		listState := operationsui.ResetListState()
+		m.viewState.OperationsCursor = listState.Cursor
+		m.viewState.OperationsScrollOffset = listState.ScrollOffset
 		m.onSelectionChanged(previous, "")
 		return
 	}
@@ -84,43 +76,17 @@ func (m *Model) setSelectedOperationByVisibleIndex(index int) {
 	m.onSelectionChanged(previous, m.session.SelectedOperationKey)
 }
 
-func (m *Model) groupedVisibleOperations() []operationsui.KeyGroup {
-	return operationsui.GroupKeys(m.viewState.VisibleOperationKeys, m.operationByKey)
-}
-
-func (m *Model) groupOperationKeys(keys []model.OperationKey) []model.OperationKey {
-	return operationsui.FlattenKeys(operationsui.GroupKeys(keys, m.operationByKey))
-}
-
+// jumpToAdjacentOperationGroup moves selection to the first row of the adjacent operations group.
 func (m *Model) jumpToAdjacentOperationGroup(direction int) {
-	groups := m.groupedVisibleOperations()
-	if len(groups) == 0 {
+	if m.session.Spec == nil {
 		return
 	}
 
-	currentKey := m.session.SelectedOperationKey
-	currentGroupIndex := -1
-	for index, group := range groups {
-		for _, key := range group.Keys {
-			if key == currentKey {
-				currentGroupIndex = index
-				break
-			}
-		}
-		if currentGroupIndex >= 0 {
-			break
-		}
-	}
-	if currentGroupIndex < 0 {
-		currentGroupIndex = 0
-	}
-
-	targetIndex := currentGroupIndex + direction
-	if targetIndex < 0 || targetIndex >= len(groups) || len(groups[targetIndex].Keys) == 0 {
+	targetKey := operationsui.AdjacentGroupTarget(m.session.Spec.Operations, m.viewState.VisibleOperationKeys, m.session.SelectedOperationKey, direction)
+	if targetKey == "" {
 		return
 	}
 
-	targetKey := groups[targetIndex].Keys[0]
 	for visibleIndex, key := range m.viewState.VisibleOperationKeys {
 		if key == targetKey {
 			m.setSelectedOperationByVisibleIndex(visibleIndex)
@@ -129,152 +95,126 @@ func (m *Model) jumpToAdjacentOperationGroup(direction int) {
 	}
 }
 
+// ensureActiveOperationVisible keeps the selected operations row within the rendered list window.
 func (m *Model) ensureActiveOperationVisible() {
-	if len(m.viewState.VisibleOperationKeys) == 0 {
-		m.viewState.OperationsCursor = 0
-		m.viewState.OperationsScrollOffset = 0
+	if m.session.Spec == nil {
+		listState := operationsui.ResetListState()
+		m.viewState.OperationsCursor = listState.Cursor
+		m.viewState.OperationsScrollOffset = listState.ScrollOffset
 		return
 	}
-	if m.viewState.OperationsCursor < 0 {
-		m.viewState.OperationsCursor = 0
-	}
-	if m.viewState.OperationsCursor >= len(m.viewState.VisibleOperationKeys) {
-		m.viewState.OperationsCursor = len(m.viewState.VisibleOperationKeys) - 1
-	}
 
-	totalRows := len(m.viewState.VisibleOperationKeys)
-	maxOffset := totalRows - 1
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
-	endAlignedOffset := m.maxOperationsScrollOffset()
-	if endAlignedOffset < maxOffset {
-		maxOffset = endAlignedOffset
-	}
-	m.viewState.OperationsScrollOffset = util.Clamp(m.viewState.OperationsScrollOffset, 0, maxOffset)
-
-	scrolloff := 5
-	for range 3 {
-		visibleRows := m.visibleOperationRowCount(m.viewState.OperationsScrollOffset)
-		if visibleRows <= 0 {
-			m.viewState.OperationsScrollOffset = 0
-			return
-		}
-
-		maxScrolloff := max(visibleRows-1, 0)
-		if scrolloff > maxScrolloff {
-			scrolloff = maxScrolloff
-		}
-
-		minCursor := m.viewState.OperationsScrollOffset + scrolloff
-		maxCursor := m.viewState.OperationsScrollOffset + visibleRows - scrolloff - 1
-		if maxCursor < minCursor {
-			maxCursor = minCursor
-		}
-
-		nextOffset := m.viewState.OperationsScrollOffset
-		switch {
-		case m.viewState.OperationsCursor < minCursor:
-			nextOffset = m.viewState.OperationsCursor - scrolloff
-		case m.viewState.OperationsCursor > maxCursor:
-			nextOffset = m.viewState.OperationsCursor - visibleRows + scrolloff + 1
-		default:
-			return
-		}
-
-		nextOffset = util.Clamp(nextOffset, 0, maxOffset)
-		if nextOffset == m.viewState.OperationsScrollOffset {
-			return
-		}
-		m.viewState.OperationsScrollOffset = nextOffset
-	}
+	contentWidth, maxLines := m.operationsPaneMetrics()
+	listState := operationsui.SyncListState(operationsui.StateInput{
+		Operations:   m.session.Spec.Operations,
+		VisibleKeys:  m.viewState.VisibleOperationKeys,
+		ContentWidth: contentWidth,
+		MaxLines:     maxLines,
+	}, operationsui.ListState{
+		Cursor:       m.viewState.OperationsCursor,
+		ScrollOffset: m.viewState.OperationsScrollOffset,
+	})
+	m.viewState.OperationsCursor = listState.Cursor
+	m.viewState.OperationsScrollOffset = listState.ScrollOffset
 }
 
+// maxOperationsScrollOffset returns the largest valid operations scroll offset.
 func (m *Model) maxOperationsScrollOffset() int {
-	totalRows := len(m.viewState.VisibleOperationKeys)
-	if totalRows <= 1 {
+	if m.session.Spec == nil {
 		return 0
 	}
 
-	for offset := 0; offset < totalRows; offset++ {
-		if m.visibleOperationRowCount(offset) == totalRows-offset {
-			return offset
-		}
-	}
-
-	return totalRows - 1
+	contentWidth, maxLines := m.operationsPaneMetrics()
+	return operationsui.MaxScrollOffset(operationsui.PaneInput{
+		HasSpec:      true,
+		Operations:   m.session.Spec.Operations,
+		VisibleKeys:  m.viewState.VisibleOperationKeys,
+		ContentWidth: contentWidth,
+		MaxLines:     maxLines,
+	})
 }
 
-func (m *Model) availableDetailsSections() []string {
+// syncActiveDetailsSection clamps the active details section to the currently visible sections.
+func (m *Model) syncActiveDetailsSection() {
 	var warnings []model.SpecWarning
 	if m.session.Spec != nil {
 		warnings = m.session.Spec.Warnings
 	}
 
-	return detailsui.AvailableSections(
+	m.panes.activeDetailsSection = detailsui.ResolveActiveSection(
+		m.panes.activeDetailsSection,
 		m.resolvedSelectedOperation(),
 		m.effectiveSecurityRequirement(m.resolvedSelectedOperation()),
 		warnings,
 	)
 }
 
-func (m *Model) syncActiveDetailsSection() {
-	available := m.availableDetailsSections()
-	m.activeDetailsSection = widgets.ResolveActiveSection(m.activeDetailsSection, available, detailsui.SectionSummary)
-}
-
+// availableRequestSections returns the visible request sections for the selected operation.
 func (m *Model) availableRequestSections() []string {
 	return requestui.AvailableSections(m.resolvedSelectedOperation(), m.effectiveSecurityRequirement(m.resolvedSelectedOperation()))
 }
 
+// resetActiveRequestSection resets the active request section to the first available section.
 func (m *Model) resetActiveRequestSection() {
-	available := m.availableRequestSections()
-	m.activeRequestSection = widgets.ResolveActiveSection("", available, "")
+	m.panes.activeRequestSection = requestui.ResolveActiveSection("", m.resolvedSelectedOperation(), m.effectiveSecurityRequirement(m.resolvedSelectedOperation()))
 	m.resetRequestCursorAndScroll()
 	m.clearRequestValidation()
 }
 
+// moveRequestSection moves the active request section by the given direction.
 func (m *Model) moveRequestSection(direction int) {
-	available := m.availableRequestSections()
-	m.activeRequestSection = widgets.MoveActiveSection(m.activeRequestSection, available, direction, "")
+	m.panes.activeRequestSection = requestui.MoveActiveSection(m.panes.activeRequestSection, direction, m.resolvedSelectedOperation(), m.effectiveSecurityRequirement(m.resolvedSelectedOperation()))
 	m.resetRequestCursorAndScroll()
 	m.clearRequestValidation()
 }
 
+// setRequestSectionBoundary moves the active request section to the first or last section.
 func (m *Model) setRequestSectionBoundary(last bool) {
-	available := m.availableRequestSections()
-	m.activeRequestSection = widgets.BoundaryActiveSection(available, last, "")
+	m.panes.activeRequestSection = requestui.BoundaryActiveSection(last, m.resolvedSelectedOperation(), m.effectiveSecurityRequirement(m.resolvedSelectedOperation()))
 	m.resetRequestCursorAndScroll()
 	m.clearRequestValidation()
 }
 
-func (m *Model) availableResponseSections() []string {
+// resetActiveResponseSection resets the active response section to the first available section.
+func (m *Model) resetActiveResponseSection() {
 	selected := m.resolvedSelectedOperation()
 	if selected == nil {
-		return nil
+		m.panes.activeResponseSection = ""
+		m.viewState.ResponseScrollOffset = 0
+		return
 	}
 
-	return responseui.AvailableSections(selected.Responses)
-}
-
-func (m *Model) resetActiveResponseSection() {
-	available := m.availableResponseSections()
-	m.activeResponseSection = widgets.ResolveActiveSection("", available, "")
+	m.panes.activeResponseSection = responseui.ResolveActiveSection("", selected.Responses)
 	m.viewState.ResponseScrollOffset = 0
 }
 
+// moveResponseSection moves the active response section by the given direction.
 func (m *Model) moveResponseSection(direction int) {
-	available := m.availableResponseSections()
-	m.activeResponseSection = widgets.MoveActiveSection(m.activeResponseSection, available, direction, "")
+	selected := m.resolvedSelectedOperation()
+	if selected == nil {
+		m.panes.activeResponseSection = ""
+		m.viewState.ResponseScrollOffset = 0
+		return
+	}
+
+	m.panes.activeResponseSection = responseui.MoveActiveSection(m.panes.activeResponseSection, direction, selected.Responses)
 	m.viewState.ResponseScrollOffset = 0
 }
 
+// setResponseSectionBoundary moves the active response section to the first or last section.
 func (m *Model) setResponseSectionBoundary(last bool) {
-	available := m.availableResponseSections()
-	m.activeResponseSection = widgets.BoundaryActiveSection(available, last, "")
+	selected := m.resolvedSelectedOperation()
+	if selected == nil {
+		m.panes.activeResponseSection = ""
+		m.viewState.ResponseScrollOffset = 0
+		return
+	}
+
+	m.panes.activeResponseSection = responseui.BoundaryActiveSection(last, selected.Responses)
 	m.viewState.ResponseScrollOffset = 0
 }
 
+// syncActivePaneSections resets pane-local section state after a selection change.
 func (m *Model) syncActivePaneSections() {
 	m.syncActiveDetailsSection()
 	m.resetActiveRequestSection()
@@ -284,6 +224,7 @@ func (m *Model) syncActivePaneSections() {
 	m.clearRequestValidation()
 }
 
+// onSelectionChanged updates pane-local state when the selected operation changes.
 func (m *Model) onSelectionChanged(previous, current model.OperationKey) {
 	m.syncActiveDetailsSection()
 	if previous != current {
@@ -295,18 +236,40 @@ func (m *Model) onSelectionChanged(previous, current model.OperationKey) {
 	}
 }
 
+// moveDetailsSection moves the active details section by the given direction.
 func (m *Model) moveDetailsSection(direction int) {
-	available := m.availableDetailsSections()
-	m.activeDetailsSection = widgets.MoveActiveSection(m.activeDetailsSection, available, direction, detailsui.SectionSummary)
+	var warnings []model.SpecWarning
+	if m.session.Spec != nil {
+		warnings = m.session.Spec.Warnings
+	}
+
+	m.panes.activeDetailsSection = detailsui.MoveActiveSection(
+		m.panes.activeDetailsSection,
+		direction,
+		m.resolvedSelectedOperation(),
+		m.effectiveSecurityRequirement(m.resolvedSelectedOperation()),
+		warnings,
+	)
 	m.viewState.DetailsScrollOffset = 0
 }
 
+// setDetailsSectionBoundary moves the active details section to the first or last section.
 func (m *Model) setDetailsSectionBoundary(last bool) {
-	available := m.availableDetailsSections()
-	m.activeDetailsSection = widgets.BoundaryActiveSection(available, last, detailsui.SectionSummary)
+	var warnings []model.SpecWarning
+	if m.session.Spec != nil {
+		warnings = m.session.Spec.Warnings
+	}
+
+	m.panes.activeDetailsSection = detailsui.BoundaryActiveSection(
+		last,
+		m.resolvedSelectedOperation(),
+		m.effectiveSecurityRequirement(m.resolvedSelectedOperation()),
+		warnings,
+	)
 	m.viewState.DetailsScrollOffset = 0
 }
 
+// scrollDetailsBy scrolls the active details section by the requested delta.
 func (m *Model) scrollDetailsBy(delta int) {
 	maxOffset := m.maxDetailsScrollOffset()
 	target := m.viewState.DetailsScrollOffset + delta
@@ -320,6 +283,7 @@ func (m *Model) scrollDetailsBy(delta int) {
 	m.viewState.DetailsScrollOffset = target
 }
 
+// scrollDetailsToBoundary scrolls the active details section to the first or last line.
 func (m *Model) scrollDetailsToBoundary(last bool) {
 	if last {
 		m.viewState.DetailsScrollOffset = m.maxDetailsScrollOffset()
@@ -329,6 +293,7 @@ func (m *Model) scrollDetailsToBoundary(last bool) {
 	m.viewState.DetailsScrollOffset = 0
 }
 
+// scrollResponseBy scrolls the active response section by the requested delta.
 func (m *Model) scrollResponseBy(delta int) {
 	maxOffset := m.maxResponseScrollOffset()
 	target := m.viewState.ResponseScrollOffset + delta
@@ -342,6 +307,7 @@ func (m *Model) scrollResponseBy(delta int) {
 	m.viewState.ResponseScrollOffset = target
 }
 
+// scrollResponseToBoundary scrolls the active response section to the first or last line.
 func (m *Model) scrollResponseToBoundary(last bool) {
 	if last {
 		m.viewState.ResponseScrollOffset = m.maxResponseScrollOffset()
@@ -351,19 +317,15 @@ func (m *Model) scrollResponseToBoundary(last bool) {
 	m.viewState.ResponseScrollOffset = 0
 }
 
+// maxResponseScrollOffset returns the largest valid response scroll offset for the active section.
 func (m *Model) maxResponseScrollOffset() int {
-	lines := len(splitLines(responseui.ActiveSectionBody(m.projectResponsePane().Sections, m.activeResponseSection)))
-	visible := m.responseVisibleBodyLines()
-	if lines <= visible {
-		return 0
-	}
-
-	return lines - visible
+	return responseui.MaxScrollOffset(m.projectResponsePane(), m.responseVisibleBodyLines())
 }
 
+// responseVisibleBodyLines returns the visible response body height for the current layout.
 func (m *Model) responseVisibleBodyLines() int {
 	width, height := m.resolvedDimensions()
-	bodyHeight := max(height-lipgloss.Height(m.renderStatusBar(width)), 12)
+	bodyHeight := max(height-m.statusBarHeight(width), 12)
 
 	var paneHeight int
 	if m.viewState.RightPaneLayoutPreset == layoutPresetWide {
@@ -374,23 +336,19 @@ func (m *Model) responseVisibleBodyLines() int {
 		paneHeight = responseHeight
 	}
 
+	// reserve six lines for the pane frame, section strip, and spacing above the body content.
 	return max(paneHeight-6, 1)
 }
 
+// maxDetailsScrollOffset returns the largest valid details scroll offset for the active section.
 func (m *Model) maxDetailsScrollOffset() int {
-	data := m.projectDetailsPane()
-	lines := len(splitLines(detailsui.RenderActiveSection(data)))
-	visible := m.detailsVisibleBodyLines()
-	if lines <= visible {
-		return 0
-	}
-
-	return lines - visible
+	return detailsui.MaxScrollOffset(m.projectDetailsPane(), m.detailsVisibleBodyLines())
 }
 
+// detailsVisibleBodyLines returns the visible details body height for the current layout.
 func (m *Model) detailsVisibleBodyLines() int {
 	width, height := m.resolvedDimensions()
-	bodyHeight := max(height-lipgloss.Height(m.renderStatusBar(width)), 12)
+	bodyHeight := max(height-m.statusBarHeight(width), 12)
 	var paneHeight int
 	if m.viewState.RightPaneLayoutPreset == layoutPresetWide {
 		paneHeight = computeWidePaneHeights(bodyHeight).Details
@@ -398,5 +356,6 @@ func (m *Model) detailsVisibleBodyLines() int {
 		paneHeight = computeNarrowPaneHeights(bodyHeight).Details
 	}
 
+	// reserve six lines for the pane frame, section strip, and spacing above the body content.
 	return max(paneHeight-6, 1)
 }

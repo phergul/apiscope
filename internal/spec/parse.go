@@ -13,6 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// parseDocument decodes a loaded document and identifies its source family.
 func (l *Loader) parseDocument(document *pipeline.LoadedDocument) (*pipeline.ParsedDocument, error) {
 	decoded, err := decodeDocument(document)
 	if err != nil {
@@ -53,6 +54,7 @@ func (l *Loader) parseDocument(document *pipeline.LoadedDocument) (*pipeline.Par
 	return parsed, nil
 }
 
+// decodeDocument decodes the raw JSON or YAML document into a generic object map.
 func decodeDocument(document *pipeline.LoadedDocument) (map[string]any, error) {
 	var decoded map[string]any
 
@@ -96,6 +98,7 @@ func decodeDocument(document *pipeline.LoadedDocument) (map[string]any, error) {
 	return decoded, nil
 }
 
+// detectSpecFamilyVersion identifies the supported spec family and version markers.
 func detectSpecFamilyVersion(document *pipeline.LoadedDocument, decoded map[string]any) (model.SourceFamily, string, error) {
 	if rawVersion, ok := decoded["openapi"]; ok {
 		version := strings.TrimSpace(fmt.Sprint(rawVersion))
@@ -133,6 +136,7 @@ func detectSpecFamilyVersion(document *pipeline.LoadedDocument, decoded map[stri
 	}
 }
 
+// parseOpenAPI3Document converts a decoded OpenAPI 3 document into the kin-openapi model.
 func parseOpenAPI3Document(document *pipeline.LoadedDocument, decoded map[string]any) (*openapi3.T, error) {
 	jsonBytes, err := json.Marshal(decoded)
 	if err != nil {

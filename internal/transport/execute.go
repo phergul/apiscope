@@ -13,6 +13,7 @@ import (
 	"github.com/phergul/apiscope/internal/model"
 )
 
+// Execute sends the prepared HTTP request and captures a normalized response.
 func (e *Executor) Execute(ctx context.Context, operationKey model.OperationKey, request *http.Request) *model.HTTPResponse {
 	response := &model.HTTPResponse{
 		OperationKey: operationKey,
@@ -52,6 +53,7 @@ func (e *Executor) Execute(ctx context.Context, operationKey model.OperationKey,
 	return response
 }
 
+// normaliseContentType strips parameters from a content type value.
 func normaliseContentType(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -66,6 +68,7 @@ func normaliseContentType(value string) string {
 	return mediaType
 }
 
+// prettyBody pretty-prints response bytes when the content type is JSON.
 func prettyBody(contentType string, body []byte) string {
 	if len(body) == 0 {
 		return ""

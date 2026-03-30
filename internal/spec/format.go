@@ -16,6 +16,7 @@ const (
 	DocumentFormatYAML = pipeline.DocumentFormatYAML
 )
 
+// formatFromLocation infers the document format from the source location suffix.
 func formatFromLocation(location string) (DocumentFormat, bool) {
 	ext := strings.ToLower(path.Ext(location))
 	switch ext {
@@ -28,6 +29,7 @@ func formatFromLocation(location string) (DocumentFormat, bool) {
 	}
 }
 
+// formatFromContentType infers the document format from an HTTP content type.
 func formatFromContentType(contentType string) (DocumentFormat, bool) {
 	if contentType == "" {
 		return "", false
@@ -48,6 +50,7 @@ func formatFromContentType(contentType string) (DocumentFormat, bool) {
 	}
 }
 
+// formatFromContent infers the document format by sniffing the raw document bytes.
 func formatFromContent(raw []byte) (DocumentFormat, bool) {
 	trimmed := strings.TrimSpace(string(raw))
 	if trimmed == "" {
@@ -65,6 +68,7 @@ func formatFromContent(raw []byte) (DocumentFormat, bool) {
 	return "", false
 }
 
+// looksLikeYAML reports whether the content resembles a YAML object document.
 func looksLikeYAML(content string) bool {
 	if strings.HasPrefix(content, "---") || strings.HasPrefix(content, "%YAML") {
 		return true

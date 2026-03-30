@@ -3,60 +3,73 @@ package tui
 import (
 	"strings"
 
-	"github.com/phergul/apiscope/internal/app"
 	"github.com/phergul/apiscope/internal/model"
 	detailsui "github.com/phergul/apiscope/internal/tui/details"
 	operationsui "github.com/phergul/apiscope/internal/tui/operations"
-	requestui "github.com/phergul/apiscope/internal/tui/request"
 	responseui "github.com/phergul/apiscope/internal/tui/response"
 	statusbarui "github.com/phergul/apiscope/internal/tui/statusbar"
-	"github.com/phergul/apiscope/internal/tui/widgets"
 )
 
+// projectOperationsPane projects root state into the operations pane render model.
 func (m *Model) projectOperationsPane() operationsui.Data {
-	data := operationsui.Data{
-		LoadInFlight: m.viewState.LoadInFlight,
-		LoadFailed:   m.loadErr != nil,
-		HasSpec:      m.session.Spec != nil,
-	}
-	if m.session.Spec == nil {
-		return data
-	}
-
-	data.TotalOperations = len(m.session.Spec.Operations)
-	selected := m.resolvedSelectedOperation()
-
-	for _, group := range m.groupedVisibleOperations() {
-		projectedGroup := operationsui.Group{Name: group.Name}
-		for _, key := range group.Keys {
-			operation := m.operationByKey(key)
-			if operation == nil {
-				continue
-			}
-
-			projectedGroup.Rows = append(projectedGroup.Rows, operationsui.Row{
-				Method:   operation.Method,
-				Path:     operation.Path,
-				Selected: selected != nil && operation.Key == selected.Key,
-			})
-		}
-		data.Groups = append(data.Groups, projectedGroup)
-	}
-
-	return data
+	return m.projectOperationsPaneForState(0, 0, m.viewState.OperationsScrollOffset).Data
 }
 
+// projectOperationsPaneForState projects root state into the operations pane for a specific size and offset.
+func (m *Model) projectOperationsPaneForState(contentWidth, maxLines, scrollOffset int) operationsui.PaneProjection {
+	selectedKey := model.OperationKey("")
+	if selected := m.resolvedSelectedOperation(); selected != nil {
+		selectedKey = selected.Key
+	}
+
+	input := operationsui.PaneInput{
+		LoadInFlight: m.viewState.LoadInFlight,
+		LoadFailed:   m.shell.loadErr != nil,
+		HasSpec:      m.session.Spec != nil,
+		VisibleKeys:  append([]model.OperationKey(nil), m.viewState.VisibleOperationKeys...),
+		SelectedKey:  selectedKey,
+		ContentWidth: contentWidth,
+		ScrollOffset: scrollOffset,
+		MaxLines:     maxLines,
+	}
+	if m.session.Spec != nil {
+		input.Operations = append([]model.Operation(nil), m.session.Spec.Operations...)
+	}
+
+	return operationsui.ProjectPane(input)
+}
+
+// projectDetailsPane projects root state into the details pane render model without viewport clipping.
 func (m *Model) projectDetailsPane() detailsui.Data {
-	data := detailsui.Data{
+	return m.projectDetailsPaneForSize(0, 0).Data
+}
+
+// projectDetailsPaneForSize projects root state into the details pane for a specific pane size.
+func (m *Model) projectDetailsPaneForSize(width, height int) detailsui.PaneProjection {
+	contentWidth := 0
+	contentHeight := 0
+	if width > 0 {
+		// subtract the pane frame padding and borders before projecting feature content.
+		contentWidth = max(width-4, 1)
+	}
+	if height > 0 {
+		// reserve space for the pane frame, section strip, and the blank spacer before the body.
+		contentHeight = max(height-6, 1)
+	}
+
+	data := detailsui.PaneInput{
 		LoadInFlight:  m.viewState.LoadInFlight,
 		LoadErrorBody: "",
 		Selected:      m.resolvedSelectedOperation(),
 		FilterText:    m.viewState.FilterText,
-		ActiveSection: string(m.activeDetailsSection),
+		ActiveSection: m.panes.activeDetailsSection,
+		ContentWidth:  contentWidth,
+		ContentHeight: contentHeight,
+		ScrollOffset:  m.viewState.DetailsScrollOffset,
 	}
-	if m.loadErr != nil {
+	if m.shell.loadErr != nil {
 		data.LoadErrorBody = m.renderLoadErrorContent()
-		return data
+		return detailsui.ProjectPane(data)
 	}
 	if data.Selected != nil {
 		data.Security = m.effectiveSecurityRequirement(data.Selected)
@@ -65,69 +78,42 @@ func (m *Model) projectDetailsPane() detailsui.Data {
 		data.Warnings = append([]model.SpecWarning{}, m.session.Spec.Warnings...)
 	}
 
-	return data
+	return detailsui.ProjectPane(data)
 }
 
-func (m *Model) projectRequestPane() requestui.Data {
-	data := requestui.Data{
-		LoadInFlight: m.viewState.LoadInFlight,
-	}
-
-	selected := m.resolvedSelectedOperation()
-	if selected == nil {
-		data.EmptyState = "No operation selected.\nChoose an operation in pane 1 to inspect request details."
-		return data
-	}
-
-	draft := app.EnsureRequestDraft(&m.session, selected)
-	data.Sections = m.availableRequestSections()
-	data.ActiveSection = m.activeRequestSection
-	data.ActiveRow = m.viewState.RequestActiveRow
-	data.Edit = requestui.BuildEditView(m.currentRequestEditorState(selected, draft))
-	for _, row := range m.activeRequestRows() {
-		issue, hasIssue := m.requestValidation.IssueForTarget(row.ID)
-		errorText := ""
-		if hasIssue {
-			errorText = issue.Message
-		}
-		data.Rows = append(data.Rows, requestui.Row{
-			Label:    row.Label,
-			Meta:     row.Meta,
-			Value:    row.Value,
-			Editable: row.Editable,
-			Error:    errorText,
-		})
-	}
-	data.ValidationNotice = m.requestValidation.MessagesForSection(data.ActiveSection)
-	if len(data.Sections) == 0 {
-		data.EmptyState = "This operation does not declare request parameters, request body, or auth requirements."
-	}
-
-	return data
-}
+// projectResponsePane projects root state into the response pane render model without viewport clipping.
 func (m *Model) projectResponsePane() responseui.Data {
-	data := responseui.Data{
-		LoadInFlight: m.viewState.LoadInFlight,
-	}
-
-	selected := m.resolvedSelectedOperation()
-	if selected == nil {
-		data.EmptyState = "No operation selected.\nChoose an operation in pane 1 to inspect response details."
-		return data
-	}
-
-	data.Sections = append([]widgets.Section{responseui.LiveSection(m.session.LastResponse, selected)}, responseui.Sections(selected.Responses)...)
-	data.ActiveSection = m.activeResponseSection
-	if len(data.Sections) == 0 {
-		data.EmptyState = "This operation does not declare any responses."
-	}
-
-	return data
+	return m.projectResponsePaneForSize(0, 0).Data
 }
 
+// projectResponsePaneForSize projects root state into the response pane for a specific pane size.
+func (m *Model) projectResponsePaneForSize(width, height int) responseui.PaneProjection {
+	contentWidth := 0
+	contentHeight := 0
+	if width > 0 {
+		// subtract the pane frame padding and borders before projecting feature content.
+		contentWidth = max(width-4, 1)
+	}
+	if height > 0 {
+		// reserve space for the pane frame, section strip, and the blank spacer before the body.
+		contentHeight = max(height-6, 1)
+	}
+
+	return responseui.ProjectPane(responseui.PaneInput{
+		LoadInFlight:  m.viewState.LoadInFlight,
+		Selected:      m.resolvedSelectedOperation(),
+		LastResponse:  m.session.LastResponse,
+		ActiveSection: m.panes.activeResponseSection,
+		ContentWidth:  contentWidth,
+		ContentHeight: contentHeight,
+		ScrollOffset:  m.viewState.ResponseScrollOffset,
+	})
+}
+
+// projectStatusBar projects root state into the status bar render model.
 func (m *Model) projectStatusBar() statusbarui.Data {
 	data := statusbarui.Data{
-		Source:   m.source,
+		Source:   m.shell.source,
 		State:    m.loadStateLabel(),
 		Focus:    focusedPaneLabel(m.viewState.FocusedPane),
 		HasSpec:  m.session.Spec != nil,
@@ -147,13 +133,14 @@ func (m *Model) projectStatusBar() statusbarui.Data {
 	return data
 }
 
+// loadStateLabel returns the current high-level app activity label for the status bar.
 func (m *Model) loadStateLabel() string {
 	switch {
 	case m.viewState.ExecuteInFlight:
 		return "executing"
 	case m.viewState.LoadInFlight:
 		return "loading"
-	case m.loadErr != nil:
+	case m.shell.loadErr != nil:
 		return "load failed"
 	case m.session.Spec != nil:
 		return "loaded"
@@ -162,6 +149,7 @@ func (m *Model) loadStateLabel() string {
 	}
 }
 
+// focusedPaneLabel formats a focused pane identifier for the status bar.
 func focusedPaneLabel(pane model.FocusedPane) string {
 	switch pane {
 	case model.FocusedPaneDetails:

@@ -2,22 +2,20 @@ package tui
 
 import (
 	"context"
-	"strings"
 
 	"github.com/phergul/apiscope/internal/app"
 	"github.com/phergul/apiscope/internal/model"
 	requestui "github.com/phergul/apiscope/internal/tui/request"
-	responseui "github.com/phergul/apiscope/internal/tui/response"
-	"github.com/phergul/apiscope/internal/tui/widgets"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
+// ensureSelectedRequestDraft returns the current request draft for the selected operation.
 func (m *Model) ensureSelectedRequestDraft() *model.RequestDraft {
 	return app.EnsureRequestDraft(&m.session, m.resolvedSelectedOperation())
 }
 
+// activeRequestRows returns the request rows for the active request section.
 func (m *Model) activeRequestRows() []requestui.RowDescriptor {
 	selected := m.resolvedSelectedOperation()
 	if selected == nil {
@@ -27,65 +25,76 @@ func (m *Model) activeRequestRows() []requestui.RowDescriptor {
 	return requestui.ActiveRows(
 		selected,
 		app.EnsureRequestDraft(&m.session, selected),
-		m.activeRequestSection,
+		m.panes.activeRequestSection,
 		m.effectiveSecurityRequirement(selected),
 	)
 }
 
+// requestRowState returns the current request row selection and scroll state.
+func (m *Model) requestRowState() requestui.RowState {
+	return requestui.RowState{
+		ActiveRow:    m.viewState.RequestActiveRow,
+		ScrollOffset: m.viewState.RequestScrollOffset,
+	}
+}
+
+// applyRequestRowState writes the request row state back to the root view state.
+func (m *Model) applyRequestRowState(state requestui.RowState) {
+	m.viewState.RequestActiveRow = state.ActiveRow
+	m.viewState.RequestScrollOffset = state.ScrollOffset
+}
+
+// syncActiveRequestRow clamps the current request row state and keeps the active row visible.
 func (m *Model) syncActiveRequestRow() {
-	rows := m.activeRequestRows()
-	if len(rows) == 0 {
-		m.viewState.RequestActiveRow = 0
-		m.viewState.RequestScrollOffset = 0
-		return
-	}
-
-	m.viewState.RequestActiveRow = requestui.ClampActiveRow(m.viewState.RequestActiveRow, len(rows))
-	m.ensureActiveRequestRowVisible()
-}
-
-func (m *Model) resetRequestCursorAndScroll() {
-	m.viewState.RequestActiveRow = 0
-	m.viewState.RequestScrollOffset = 0
-}
-
-func (m *Model) moveRequestRow(direction int) {
-	rows := m.activeRequestRows()
-	if len(rows) == 0 {
-		m.resetRequestCursorAndScroll()
-		return
-	}
-
-	m.viewState.RequestActiveRow = requestui.MoveActiveRow(m.viewState.RequestActiveRow, len(rows), direction)
-	m.ensureActiveRequestRowVisible()
-}
-
-func (m *Model) setRequestRowBoundary(last bool) {
-	rows := m.activeRequestRows()
-	if len(rows) == 0 {
-		m.resetRequestCursorAndScroll()
-		return
-	}
-
-	m.viewState.RequestActiveRow = requestui.BoundaryActiveRow(len(rows), last)
-	m.ensureActiveRequestRowVisible()
-}
-
-func (m *Model) ensureActiveRequestRowVisible() {
-	if m.viewState.RequestEditKind == model.RequestEditKindBody {
-		return
-	}
-
-	m.viewState.RequestScrollOffset = requestui.EnsureVisibleOffset(
-		m.viewState.RequestActiveRow,
-		m.viewState.RequestScrollOffset,
+	m.applyRequestRowState(requestui.SyncRowState(
+		m.activeRequestRows(),
+		m.requestRowState(),
+		m.viewState.RequestEditKind,
 		m.requestVisibleBodyLines(),
-	)
+	))
 }
 
+// resetRequestCursorAndScroll resets the request row selection state.
+func (m *Model) resetRequestCursorAndScroll() {
+	m.applyRequestRowState(requestui.ResetRowState())
+}
+
+// moveRequestRow moves the active request row by the given direction.
+func (m *Model) moveRequestRow(direction int) {
+	m.applyRequestRowState(requestui.MoveRowState(
+		m.activeRequestRows(),
+		m.requestRowState(),
+		direction,
+		m.viewState.RequestEditKind,
+		m.requestVisibleBodyLines(),
+	))
+}
+
+// setRequestRowBoundary moves the active request row to the first or last row.
+func (m *Model) setRequestRowBoundary(last bool) {
+	m.applyRequestRowState(requestui.BoundaryRowState(
+		m.activeRequestRows(),
+		m.requestRowState(),
+		last,
+		m.viewState.RequestEditKind,
+		m.requestVisibleBodyLines(),
+	))
+}
+
+// ensureActiveRequestRowVisible syncs the request row state against the current viewport size.
+func (m *Model) ensureActiveRequestRowVisible() {
+	m.applyRequestRowState(requestui.SyncRowState(
+		m.activeRequestRows(),
+		m.requestRowState(),
+		m.viewState.RequestEditKind,
+		m.requestVisibleBodyLines(),
+	))
+}
+
+// requestVisibleBodyLines returns the visible body height for the request pane content area.
 func (m *Model) requestVisibleBodyLines() int {
 	width, height := m.resolvedDimensions()
-	bodyHeight := max(height-lipgloss.Height(m.renderStatusBar(width)), 12)
+	bodyHeight := max(height-m.statusBarHeight(width), 12)
 
 	var paneHeight int
 	if m.viewState.RightPaneLayoutPreset == layoutPresetWide {
@@ -96,81 +105,130 @@ func (m *Model) requestVisibleBodyLines() int {
 		paneHeight = requestHeight
 	}
 
+	// reserve six lines for the pane frame, section strip, and spacing above the body content.
 	return max(paneHeight-6, 1)
 }
 
+// currentRequestEditorView returns the bare widget view for the active request editor.
 func (m *Model) currentRequestEditorView() string {
 	m.ensureWidgetDefaults()
 
 	switch m.viewState.RequestEditKind {
 	case model.RequestEditKindField:
-		return m.requestFieldInput.BareView()
+		return m.widgets.requestFieldInput.BareView()
 	case model.RequestEditKindBody:
-		return m.requestBodyInput.BareView()
+		return m.widgets.requestBodyInput.BareView()
 	default:
 		return ""
 	}
 }
 
-func (m *Model) currentRequestEditorState(selected *model.Operation, draft *model.RequestDraft) requestui.EditorState {
-	state := requestui.EditorState{
-		Kind:   string(m.viewState.RequestEditKind),
-		Buffer: m.viewState.RequestEditBuffer,
-		View:   m.currentRequestEditorView(),
+// requestEditorInput returns the low-level request editor inputs used by the request feature package.
+func (m *Model) requestEditorInput() requestui.EditorInput {
+	m.ensureWidgetDefaults()
+
+	return requestui.EditorInput{
+		Kind:      m.viewState.RequestEditKind,
+		Buffer:    m.viewState.RequestEditBuffer,
+		FieldView: m.widgets.requestFieldInput.BareView(),
+		BodyView:  m.widgets.requestBodyInput.BareView(),
+	}
+}
+
+// requestValidationState flattens request validation into request-pane inputs.
+func (m *Model) requestValidationState(activeSection string) requestui.ValidationState {
+	state := requestui.ValidationState{
+		MessagesBySection: m.requestUI.validation.MessagesForSection(activeSection),
+	}
+	if len(m.requestUI.validation.Issues) == 0 {
+		return state
 	}
 
-	switch m.viewState.RequestEditKind {
-	case model.RequestEditKindBody:
-		state.BodyMediaType = requestui.DraftBodyMediaType(selected, draft)
-	case model.RequestEditKindField:
-		if row := m.currentRequestEditRow(); row != nil {
-			state.ActiveRowLabel = row.Label
-			state.ActiveRowMeta = row.Meta
-		}
+	state.RowErrors = make(map[string]string, len(m.requestUI.validation.Issues))
+	for _, issue := range m.requestUI.validation.Issues {
+		state.RowErrors[issue.Target] = issue.Message
 	}
 
 	return state
 }
 
-func (m *Model) currentRequestHelpOverlay() helpOverlayView {
-	if !m.requestEditActive() {
-		return helpOverlayView{}
-	}
-
-	help := requestui.BuildHelpView(m.currentRequestEditorState(m.resolvedSelectedOperation(), m.ensureSelectedRequestDraft()))
-	overlay := helpOverlayView{Hint: help.Hint}
-	if !m.requestEditHelpOpen || strings.TrimSpace(help.Body) == "" {
-		return overlay
-	}
-
-	overlay.Title = help.Title
-	overlay.Body = help.Body
-	return overlay
+// projectRequestPane returns the unwindowed request pane data for default rendering and tests.
+func (m *Model) projectRequestPane() requestui.Data {
+	return m.projectRequestPaneForSize(0, 0).Data
 }
 
-func (m *Model) requestPaneContentForSize(width, height int) string {
-	contentWidth := max(width-4, 1)
+// projectRequestPaneForSize projects the request pane for the given pane size.
+func (m *Model) projectRequestPaneForSize(width, height int) requestui.PaneProjection {
+	contentWidth := 0
+	contentHeight := 0
+	if width > 0 {
+		// subtract the pane frame padding and borders before handing width to the feature package.
+		contentWidth = max(width-4, 1)
+	}
+	if height > 0 {
+		// reserve space for the pane frame, section strip, and the blank spacer between strip and body.
+		contentHeight = max(height-6, 1)
+	}
+	if contentWidth > 0 || contentHeight > 0 {
+		m.configureRequestEditors(contentWidth, height)
+	}
+
+	selected := m.resolvedSelectedOperation()
+	draft := app.EnsureRequestDraft(&m.session, selected)
+	security := m.effectiveSecurityRequirement(selected)
+	activeSection := requestui.ResolveActiveSection(m.panes.activeRequestSection, selected, security)
+
+	return requestui.ProjectPane(requestui.PaneInput{
+		LoadInFlight:  m.viewState.LoadInFlight,
+		Selected:      selected,
+		Draft:         draft,
+		Security:      security,
+		ActiveSection: activeSection,
+		ActiveRow:     m.viewState.RequestActiveRow,
+		ScrollOffset:  m.viewState.RequestScrollOffset,
+		Validation:    m.requestValidationState(activeSection),
+		Editor:        m.requestEditorInput(),
+		ContentWidth:  contentWidth,
+		ContentHeight: contentHeight,
+		HelpOpen:      m.requestUI.editHelpOpen,
+	})
+}
+
+// configureRequestEditors sizes the request editor widgets for the current pane.
+func (m *Model) configureRequestEditors(contentWidth, height int) {
+	// keep field editors narrower so they stay visually tied to the selected row.
 	fieldPopupWidth := min(max(contentWidth-10, 24), 64)
+	// allow the body editor to use more width because it edits multi-line payload content.
 	bodyPopupWidth := min(max(contentWidth-8, 28), 84)
-	m.requestFieldInput.SetWidth(max(fieldPopupWidth-4, 12))
-	m.requestBodyInput.SetSize(max(bodyPopupWidth-4, 20), max(min(height-10, 12), 4))
+	// subtract the popup frame chrome before sizing the embedded text input.
+	m.widgets.requestFieldInput.SetWidth(max(fieldPopupWidth-4, 12))
 
-	data := m.projectRequestPane()
-	data.ContentWidth = contentWidth
-	data.ContentHeight = max(height-6, 1)
-	if data.LoadInFlight || len(data.Sections) == 0 {
-		return requestui.Render(data)
-	}
-
-	visibleLines := max(height-6, 1)
-	return requestui.Render(requestui.VisibleData(data, m.viewState.RequestScrollOffset, visibleLines))
+	// keep the body editor short enough to preserve surrounding pane context while editing.
+	m.widgets.requestBodyInput.SetSize(max(bodyPopupWidth-4, 20), max(min(height-10, 12), 4))
 }
 
+// currentRequestHelpOverlay returns the current request editor help overlay, if any.
+func (m *Model) currentRequestHelpOverlay() helpOverlayView {
+	overlay := m.projectRequestPaneForSize(0, 0).HelpOverlay
+	return helpOverlayView{
+		Title: overlay.Title,
+		Body:  overlay.Body,
+		Hint:  overlay.Hint,
+	}
+}
+
+// requestPaneContentForSize renders the request pane body for the given pane size.
+func (m *Model) requestPaneContentForSize(width, height int) string {
+	return requestui.Render(m.projectRequestPaneForSize(width, height).Data)
+}
+
+// requestEditActive reports whether the request pane is currently editing a request input.
 func (m *Model) requestEditActive() bool {
 	return m.viewState.ActiveEditorMode == model.EditorModeEdit &&
 		m.viewState.RequestEditKind != model.RequestEditKindNone
 }
 
+// beginRequestEdit starts the request editor for the active request row.
 func (m *Model) beginRequestEdit() {
 	m.clearRequestValidation()
 	selected := m.resolvedSelectedOperation()
@@ -192,20 +250,21 @@ func (m *Model) beginRequestEdit() {
 	m.viewState.RequestEditKind = start.Kind
 	m.viewState.RequestEditTarget = start.Target
 	m.viewState.RequestEditBuffer = start.Buffer
-	m.requestEditHelpOpen = false
+	m.requestUI.editHelpOpen = false
 	if start.ResetScroll {
 		m.viewState.RequestScrollOffset = 0
 	}
 	if start.FocusField {
-		m.requestFieldInput.SetValue(start.Buffer)
-		m.requestFieldInput.Focus()
+		m.widgets.requestFieldInput.SetValue(start.Buffer)
+		m.widgets.requestFieldInput.Focus()
 	}
 	if start.FocusBody {
-		m.requestBodyInput.SetValue(start.Buffer)
-		m.requestBodyInput.Focus()
+		m.widgets.requestBodyInput.SetValue(start.Buffer)
+		m.widgets.requestBodyInput.Focus()
 	}
 }
 
+// saveRequestEdit saves the active request editor contents back into the request draft.
 func (m *Model) saveRequestEdit() {
 	if requestui.SaveEdit(
 		&m.session,
@@ -222,22 +281,25 @@ func (m *Model) saveRequestEdit() {
 	m.cancelRequestEdit()
 }
 
+// cancelRequestEdit closes the active request editor without applying additional changes.
 func (m *Model) cancelRequestEdit() {
 	m.finishRequestEdit()
 }
 
+// finishRequestEdit resets the request editor state after saving or canceling.
 func (m *Model) finishRequestEdit() {
-	m.requestFieldInput.Blur()
-	m.requestBodyInput.Blur()
+	m.widgets.requestFieldInput.Blur()
+	m.widgets.requestBodyInput.Blur()
 	m.viewState.ActiveEditorMode = model.EditorModeBrowse
 	m.viewState.RequestEditKind = model.RequestEditKindNone
 	m.viewState.RequestEditTarget = ""
 	m.viewState.RequestEditBuffer = ""
-	m.requestEditHelpOpen = false
+	m.requestUI.editHelpOpen = false
 	m.clearRequestValidation()
 	m.syncActiveRequestRow()
 }
 
+// scrollRequestEditBy scrolls the body editor overlay by the given delta.
 func (m *Model) scrollRequestEditBy(delta int) {
 	if m.viewState.RequestEditKind != model.RequestEditKindBody {
 		return
@@ -255,6 +317,7 @@ func (m *Model) scrollRequestEditBy(delta int) {
 	m.viewState.RequestScrollOffset = target
 }
 
+// scrollRequestEditToBoundary scrolls the body editor overlay to the first or last line.
 func (m *Model) scrollRequestEditToBoundary(last bool) {
 	if m.viewState.RequestEditKind != model.RequestEditKindBody {
 		return
@@ -268,27 +331,22 @@ func (m *Model) scrollRequestEditToBoundary(last bool) {
 	m.viewState.RequestScrollOffset = 0
 }
 
+// maxRequestEditScrollOffset returns the maximum scroll offset for the active request editor body.
 func (m *Model) maxRequestEditScrollOffset() int {
-	data := m.projectRequestPane()
-	lines := len(splitLines(requestui.RenderActiveSection(data)))
-	visible := m.requestVisibleBodyLines()
-	if lines <= visible {
-		return 0
-	}
-
-	return lines - visible
+	return requestui.MaxActiveSectionScrollOffset(m.projectRequestPaneForSize(0, 0).Data, m.requestVisibleBodyLines())
 }
 
+// updateRequestEditKey handles key input while the request editor is active.
 func (m *Model) updateRequestEditKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.requestEditHelpOpen {
+	if m.requestUI.editHelpOpen {
 		switch msg.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
 		case "?":
-			m.requestEditHelpOpen = false
+			m.requestUI.editHelpOpen = false
 			return m, nil
 		default:
-			m.requestEditHelpOpen = false
+			m.requestUI.editHelpOpen = false
 			return m, nil
 		}
 	}
@@ -299,7 +357,7 @@ func (m *Model) updateRequestEditKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		m.cancelRequestEdit()
 	case "?":
-		m.requestEditHelpOpen = !m.requestEditHelpOpen
+		m.requestUI.editHelpOpen = !m.requestUI.editHelpOpen
 		return m, nil
 	case "ctrl+s":
 		if m.viewState.RequestEditKind == model.RequestEditKindBody {
@@ -314,22 +372,24 @@ func (m *Model) updateRequestEditKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch m.viewState.RequestEditKind {
 	case model.RequestEditKindField:
-		cmd := m.requestFieldInput.Update(msg)
-		m.viewState.RequestEditBuffer = m.requestFieldInput.Value()
+		cmd := m.widgets.requestFieldInput.Update(msg)
+		m.viewState.RequestEditBuffer = m.widgets.requestFieldInput.Value()
 		return m, cmd
 	case model.RequestEditKindBody:
-		cmd := m.requestBodyInput.Update(msg)
-		m.viewState.RequestEditBuffer = m.requestBodyInput.Value()
+		cmd := m.widgets.requestBodyInput.Update(msg)
+		m.viewState.RequestEditBuffer = m.widgets.requestBodyInput.Value()
 		return m, cmd
 	}
 
 	return m, nil
 }
 
+// clearRequestValidation clears the current request validation state.
 func (m *Model) clearRequestValidation() {
-	m.requestValidation = app.RequestValidationResult{}
+	m.requestUI.validation = app.RequestValidationResult{}
 }
 
+// executeCurrentRequest validates and executes the active request draft.
 func (m *Model) executeCurrentRequest() tea.Cmd {
 	selected := m.resolvedSelectedOperation()
 	if selected == nil || m.viewState.LoadInFlight || m.viewState.ExecuteInFlight {
@@ -338,15 +398,11 @@ func (m *Model) executeCurrentRequest() tea.Cmd {
 
 	validation := app.ValidateRequest(selected, app.EnsureRequestDraft(&m.session, selected))
 	if validation.HasIssues() {
-		m.requestValidation = validation
+		m.requestUI.validation = validation
 		if issue, ok := validation.FirstIssue(); ok {
-			m.activeRequestSection = issue.Section
-			rows := m.activeRequestRows()
-			for index, row := range rows {
-				if row.ID == issue.Target {
-					m.viewState.RequestActiveRow = index
-					break
-				}
+			m.panes.activeRequestSection = issue.Section
+			if index := requestui.RowIndexByID(m.activeRequestRows(), issue.Target); index >= 0 {
+				m.viewState.RequestActiveRow = index
 			}
 			m.ensureActiveRequestRowVisible()
 		}
@@ -372,54 +428,4 @@ func (m *Model) executeCurrentRequest() tea.Cmd {
 			result:    service.ExecuteCurrent(context.Background(), session),
 		}
 	}
-}
-
-func (m *Model) responsePaneContentForSize(width, height int) string {
-	data := m.projectResponsePane()
-	if data.LoadInFlight || len(data.Sections) == 0 {
-		return responseui.Render(data)
-	}
-
-	visibleLines := max(height-6, 1)
-	contentWidth := max(width-4, 1)
-	viewport := widgets.NewViewport(contentWidth, visibleLines)
-	viewport.SetContent(responseui.ActiveSectionBody(data.Sections, data.ActiveSection))
-	viewport.SetYOffset(m.viewState.ResponseScrollOffset)
-	clipped := viewport.View()
-
-	sections := append([]widgets.Section(nil), data.Sections...)
-	active := data.ActiveSection
-	if active == "" && len(sections) > 0 {
-		active = sections[0].Label
-	}
-	for index := range sections {
-		if sections[index].Label == active {
-			sections[index].Body = clipped
-			break
-		}
-	}
-
-	return responseui.Render(responseui.Data{
-		LoadInFlight:  data.LoadInFlight,
-		Sections:      sections,
-		ActiveSection: active,
-		EmptyState:    data.EmptyState,
-	})
-}
-
-func (m *Model) currentRequestEditRow() *requestui.RowDescriptor {
-	rows := m.activeRequestRows()
-	if len(rows) == 0 {
-		return nil
-	}
-
-	index := m.viewState.RequestActiveRow
-	if index < 0 {
-		index = 0
-	}
-	if index >= len(rows) {
-		index = len(rows) - 1
-	}
-
-	return &rows[index]
 }

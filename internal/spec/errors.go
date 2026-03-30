@@ -29,6 +29,7 @@ const (
 type ErrorKind = pipeline.ErrorKind
 type Error = pipeline.Error
 
+// IsErrorKind reports whether err unwraps to a spec error with the requested kind.
 func IsErrorKind(err error, kind ErrorKind) bool {
 	var specErr *Error
 	if !errors.As(err, &specErr) {

@@ -15,6 +15,7 @@ type LoadErrorView struct {
 	Hint     string
 }
 
+// DescribeLoadError maps a spec load failure to stable user-facing copy.
 func DescribeLoadError(err error, fallbackSource string) LoadErrorView {
 	view := LoadErrorView{
 		Category: "load error",

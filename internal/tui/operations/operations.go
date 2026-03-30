@@ -10,22 +10,26 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// Row describes one rendered operations row.
 type Row struct {
 	Method   string
 	Path     string
 	Selected bool
 }
 
+// Group describes one rendered operations group.
 type Group struct {
 	Name string
 	Rows []Row
 }
 
+// KeyGroup groups visible operation keys by rendered group name.
 type KeyGroup struct {
 	Name string
 	Keys []model.OperationKey
 }
 
+// Data contains the render-ready state for the operations pane.
 type Data struct {
 	LoadInFlight    bool
 	LoadFailed      bool
@@ -37,6 +41,7 @@ type Data struct {
 	Groups          []Group
 }
 
+// MatchFilter reports whether an operation matches the current filter text.
 func MatchFilter(operation model.Operation, filter string) bool {
 	if filter == "" {
 		return true
@@ -58,20 +63,22 @@ func MatchFilter(operation model.Operation, filter string) bool {
 	return false
 }
 
-func GroupKeys(keys []model.OperationKey, lookup func(model.OperationKey) *model.Operation) []KeyGroup {
+// GroupKeys groups visible operation keys by their rendered group name.
+func GroupKeys(keys []model.OperationKey, operations []model.Operation) []KeyGroup {
 	if len(keys) == 0 {
 		return nil
 	}
 
+	lookup := operationMap(operations)
 	groups := make([]KeyGroup, 0)
 	indexByName := make(map[string]int)
 	for _, key := range keys {
-		operation := lookup(key)
-		if operation == nil {
+		operation, ok := lookup[key]
+		if !ok {
 			continue
 		}
 
-		groupName := GroupName(operation)
+		groupName := GroupName(&operation)
 		groupIndex, ok := indexByName[groupName]
 		if !ok {
 			groupIndex = len(groups)
@@ -85,6 +92,7 @@ func GroupKeys(keys []model.OperationKey, lookup func(model.OperationKey) *model
 	return groups
 }
 
+// FlattenKeys flattens grouped operation keys into their rendered order.
 func FlattenKeys(groups []KeyGroup) []model.OperationKey {
 	total := 0
 	for _, group := range groups {
@@ -99,6 +107,7 @@ func FlattenKeys(groups []KeyGroup) []model.OperationKey {
 	return ordered
 }
 
+// GroupName returns the rendered group name for an operation.
 func GroupName(operation *model.Operation) string {
 	if operation == nil || len(operation.Tags) == 0 || strings.TrimSpace(operation.Tags[0]) == "" {
 		return "Untagged"
@@ -107,6 +116,7 @@ func GroupName(operation *model.Operation) string {
 	return operation.Tags[0]
 }
 
+// Render renders the operations pane from its render-ready data.
 func Render(data Data) string {
 	switch {
 	case data.LoadInFlight:
@@ -131,6 +141,7 @@ func Render(data Data) string {
 	return strings.Join(lines, "\n")
 }
 
+// VisibleRowCount returns the number of visible operation rows for the projected pane data.
 func VisibleRowCount(data Data) int {
 	switch {
 	case data.LoadInFlight, data.LoadFailed, !data.HasSpec, data.TotalOperations == 0, len(data.Groups) == 0:
@@ -141,6 +152,7 @@ func VisibleRowCount(data Data) int {
 	return rowCount
 }
 
+// collectLines renders the grouped operation rows into display lines.
 func collectLines(data Data) ([]string, int) {
 	lines := []string{}
 	skippedRows := 0
@@ -196,6 +208,7 @@ func collectLines(data Data) ([]string, int) {
 	return lines, renderedRows
 }
 
+// renderRow renders one operation row with the current selection styling.
 func renderRow(row Row, width int) string {
 	methodLabel := fmt.Sprintf(" %-6s ", strings.ToUpper(row.Method))
 	methodStyle := lipgloss.NewStyle().Foreground(widgets.MethodColor(row.Method)).Bold(true)
@@ -214,4 +227,14 @@ func renderRow(row Row, width int) string {
 	}
 
 	return rowStyle.Render(content)
+}
+
+// operationMap builds a by-key lookup for operations projection helpers.
+func operationMap(operations []model.Operation) map[model.OperationKey]model.Operation {
+	lookup := make(map[model.OperationKey]model.Operation, len(operations))
+	for _, operation := range operations {
+		lookup[operation.Key] = operation
+	}
+
+	return lookup
 }

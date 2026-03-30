@@ -31,7 +31,7 @@ func TestDetailsPaneContentUsesTopLevelSecurityFallback(t *testing.T) {
 	m := newLoadedModelForRendering()
 	m.session.SelectedOperationKey = model.NewOperationKey("POST", "/pets")
 	m.syncActiveDetailsSection()
-	m.activeDetailsSection = detailsui.SectionSecurity
+	m.panes.activeDetailsSection = detailsui.SectionSecurity
 
 	content := m.detailsPaneContent()
 	content = stripANSI(content)
@@ -80,7 +80,7 @@ func TestRenderLoadErrorContentUsesStructuredMessage(t *testing.T) {
 	t.Parallel()
 
 	m := newLoadedModelForRendering()
-	m.loadErr = errors.New("boom")
+	m.shell.loadErr = errors.New("boom")
 
 	content := m.renderLoadErrorContent()
 	content = stripANSI(content)
@@ -103,8 +103,8 @@ func TestDetailsPaneContentForHeightClipsLongSummaryBody(t *testing.T) {
 
 	m := newLoadedModelForRendering()
 	m.session.Spec.Operations[0].Description = "line1\nline2\nline3\nline4\nline5\nline6"
-	m.width = 80
-	m.height = 12
+	m.shell.width = 80
+	m.shell.height = 12
 	m.viewState.RightPaneLayoutPreset = layoutPresetNarrow
 
 	content := m.detailsPaneContentForHeight(5)
@@ -125,8 +125,8 @@ func TestRenderShowsOperationsFilterInPaneFooterOnly(t *testing.T) {
 	t.Parallel()
 
 	m := newLoadedModelForRendering()
-	m.width = 120
-	m.height = 30
+	m.shell.width = 120
+	m.shell.height = 30
 	m.viewState.ActiveEditorMode = model.EditorModeFilter
 
 	content := m.render()
@@ -143,8 +143,8 @@ func TestRenderHidesOperationsFilterFooterWhenIdle(t *testing.T) {
 	t.Parallel()
 
 	m := newLoadedModelForRendering()
-	m.width = 120
-	m.height = 30
+	m.shell.width = 120
+	m.shell.height = 30
 
 	content := m.render()
 	content = stripANSI(content)
@@ -157,7 +157,7 @@ func TestRenderBlockingLoadErrorShowsCenteredQuitPopup(t *testing.T) {
 	t.Parallel()
 
 	m := newLoadedModelForRendering()
-	m.loadErr = errors.New("boom")
+	m.shell.loadErr = errors.New("boom")
 
 	content := m.render()
 	content = stripANSI(content)
@@ -183,8 +183,8 @@ func TestRenderZoomLayoutShowsOnlyFocusedPaneAndStatusBar(t *testing.T) {
 	t.Parallel()
 
 	m := newLoadedModelForRendering()
-	m.width = 120
-	m.height = 30
+	m.shell.width = 120
+	m.shell.height = 30
 	m.viewState.FocusedPane = model.FocusedPaneResponse
 	m.viewState.ExpandedRightPane = model.FocusedPaneResponse
 	m.viewState.ZoomedPane = true
@@ -207,8 +207,8 @@ func TestOperationsPaneContentScrollsWithFiveRowBuffer(t *testing.T) {
 	t.Parallel()
 
 	m := newLoadedModelForRendering()
-	m.width = 80
-	m.height = 18
+	m.shell.width = 80
+	m.shell.height = 18
 	m.viewState.ZoomedPane = true
 	m.viewState.FocusedPane = model.FocusedPaneOperations
 	m.session.Spec.Operations = nil
@@ -287,8 +287,8 @@ func TestRenderWideLayoutKeepsRequestAboveResponseWhenResponseIsExpanded(t *test
 	t.Parallel()
 
 	m := newLoadedModelForRendering()
-	m.width = 120
-	m.height = 30
+	m.shell.width = 120
+	m.shell.height = 30
 	m.viewState.ExpandedRightPane = model.FocusedPaneResponse
 
 	content := m.render()
@@ -307,8 +307,8 @@ func TestRequestPaneShowsSendHintOnlyWhenFocused(t *testing.T) {
 	t.Parallel()
 
 	m := newLoadedModelForRendering()
-	m.width = 120
-	m.height = 30
+	m.shell.width = 120
+	m.shell.height = 30
 	m.viewState.FocusedPane = model.FocusedPaneRequest
 
 	content := stripANSI(m.render())
@@ -344,12 +344,12 @@ func TestRenderAnchorsRequestHelpPopupAboveStatusBarHint(t *testing.T) {
 	t.Parallel()
 
 	m := newLoadedModelForRendering()
-	m.width = 100
-	m.height = 20
+	m.shell.width = 100
+	m.shell.height = 20
 	m.viewState.FocusedPane = model.FocusedPaneRequest
 	m.viewState.ActiveEditorMode = model.EditorModeEdit
 	m.viewState.RequestEditKind = model.RequestEditKindField
-	m.requestEditHelpOpen = true
+	m.requestUI.editHelpOpen = true
 
 	content := stripANSI(m.render())
 	lines := strings.Split(content, "\n")
@@ -445,10 +445,14 @@ func newLoadedModelForRendering() *Model {
 	}
 
 	return &Model{
-		source:                "demo.yaml",
-		activeDetailsSection:  detailsui.SectionSummary,
-		activeRequestSection:  "Path",
-		activeResponseSection: "200",
+		shell: shellState{
+			source: "demo.yaml",
+		},
+		panes: paneState{
+			activeDetailsSection:  detailsui.SectionSummary,
+			activeRequestSection:  "Path",
+			activeResponseSection: "200",
+		},
 		session: model.SessionState{
 			Spec:                 spec,
 			SelectedOperationKey: model.NewOperationKey("GET", "/pets"),

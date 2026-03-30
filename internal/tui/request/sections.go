@@ -1,6 +1,9 @@
 package request
 
-import "github.com/phergul/apiscope/internal/model"
+import (
+	"github.com/phergul/apiscope/internal/model"
+	"github.com/phergul/apiscope/internal/tui/widgets"
+)
 
 const (
 	SectionBody = "Body"
@@ -14,6 +17,7 @@ var parameterLocations = []model.ParameterLocation{
 	model.ParameterLocationCookie,
 }
 
+// AvailableSections returns the visible request pane sections for the selected operation.
 func AvailableSections(selected *model.Operation, security *model.SecurityRequirement) []string {
 	if selected == nil {
 		return nil
@@ -35,6 +39,22 @@ func AvailableSections(selected *model.Operation, security *model.SecurityRequir
 	return sections
 }
 
+// ResolveActiveSection resolves the current request section against the available request sections.
+func ResolveActiveSection(current string, selected *model.Operation, security *model.SecurityRequirement) string {
+	return widgets.ResolveActiveSection(current, AvailableSections(selected, security), "")
+}
+
+// MoveActiveSection moves the active request section by one step in the given direction.
+func MoveActiveSection(current string, direction int, selected *model.Operation, security *model.SecurityRequirement) string {
+	return widgets.MoveActiveSection(current, AvailableSections(selected, security), direction, "")
+}
+
+// BoundaryActiveSection returns the first or last available request section.
+func BoundaryActiveSection(last bool, selected *model.Operation, security *model.SecurityRequirement) string {
+	return widgets.BoundaryActiveSection(AvailableSections(selected, security), last, "")
+}
+
+// hasParametersInLocation reports whether the selected operation exposes parameters in the given location.
 func hasParametersInLocation(parameters []model.Parameter, location model.ParameterLocation) bool {
 	for _, parameter := range parameters {
 		if parameter.In == location {
@@ -45,6 +65,7 @@ func hasParametersInLocation(parameters []model.Parameter, location model.Parame
 	return false
 }
 
+// locationSectionLabel maps a parameter location to the request pane section label.
 func locationSectionLabel(location model.ParameterLocation) string {
 	switch location {
 	case model.ParameterLocationPath:

@@ -14,6 +14,7 @@ const (
 	SectionWarnings = "Warnings"
 )
 
+// Data contains the render-ready state for the details pane.
 type Data struct {
 	LoadInFlight  bool
 	LoadErrorBody string
@@ -22,8 +23,10 @@ type Data struct {
 	ActiveSection string
 	Security      *model.SecurityRequirement
 	Warnings      []model.SpecWarning
+	Sections      []widgets.Section
 }
 
+// AvailableSections returns the visible details sections for the selected operation.
 func AvailableSections(selected *model.Operation, security *model.SecurityRequirement, warnings []model.SpecWarning) []string {
 	if selected == nil {
 		return []string{SectionSummary}
@@ -40,6 +43,22 @@ func AvailableSections(selected *model.Operation, security *model.SecurityRequir
 	return sections
 }
 
+// ResolveActiveSection returns the active details section, falling back when needed.
+func ResolveActiveSection(current string, selected *model.Operation, security *model.SecurityRequirement, warnings []model.SpecWarning) string {
+	return widgets.ResolveActiveSection(current, AvailableSections(selected, security, warnings), SectionSummary)
+}
+
+// MoveActiveSection moves the active details section by the requested direction.
+func MoveActiveSection(current string, direction int, selected *model.Operation, security *model.SecurityRequirement, warnings []model.SpecWarning) string {
+	return widgets.MoveActiveSection(current, AvailableSections(selected, security, warnings), direction, SectionSummary)
+}
+
+// BoundaryActiveSection returns the first or last available details section.
+func BoundaryActiveSection(last bool, selected *model.Operation, security *model.SecurityRequirement, warnings []model.SpecWarning) string {
+	return widgets.BoundaryActiveSection(AvailableSections(selected, security, warnings), last, SectionSummary)
+}
+
+// Render renders the details pane from its render-ready data.
 func Render(data Data) string {
 	switch {
 	case data.LoadInFlight:
@@ -60,12 +79,13 @@ func Render(data Data) string {
 	}
 
 	return widgets.RenderSectionView(widgets.SectionViewData{
-		Sections:   Sections(data),
+		Sections:   dataSections(data),
 		Active:     data.ActiveSection,
 		EmptyState: "",
 	})
 }
 
+// RenderActiveSection renders the currently active details section body.
 func RenderActiveSection(data Data) string {
 	switch data.ActiveSection {
 	case SectionSecurity:
@@ -77,6 +97,7 @@ func RenderActiveSection(data Data) string {
 	}
 }
 
+// Sections builds the unwindowed details sections for the supplied data.
 func Sections(data Data) []widgets.Section {
 	sections := []widgets.Section{
 		{Label: SectionSummary, Body: RenderActiveSection(Data{
@@ -106,6 +127,16 @@ func Sections(data Data) []widgets.Section {
 	return sections
 }
 
+// dataSections returns the projected sections when present or builds them on demand.
+func dataSections(data Data) []widgets.Section {
+	if len(data.Sections) > 0 {
+		return append([]widgets.Section(nil), data.Sections...)
+	}
+
+	return Sections(data)
+}
+
+// renderSummaryContent renders the summary section for the selected operation.
 func renderSummaryContent(data Data) string {
 	return strings.Join([]string{
 		fmt.Sprintf("Summary: %s", fallbackText(data.Selected.Summary, "None")),
@@ -115,6 +146,7 @@ func renderSummaryContent(data Data) string {
 	}, "\n")
 }
 
+// fallbackText returns a trimmed value or the provided fallback string.
 func fallbackText(value, fallback string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -124,6 +156,7 @@ func fallbackText(value, fallback string) string {
 	return value
 }
 
+// yesNo formats a boolean as an explicit yes or no string.
 func yesNo(value bool) string {
 	if value {
 		return "yes"
@@ -132,6 +165,7 @@ func yesNo(value bool) string {
 	return "no"
 }
 
+// formatTags joins operation tags or returns an explicit empty-state label.
 func formatTags(tags []string) string {
 	if len(tags) == 0 {
 		return "None"
@@ -140,6 +174,7 @@ func formatTags(tags []string) string {
 	return strings.Join(tags, ", ")
 }
 
+// formatSecurityRequirement renders the effective security requirement for the pane.
 func formatSecurityRequirement(requirement *model.SecurityRequirement) string {
 	if requirement == nil || len(requirement.Alternatives) == 0 {
 		return "None"
@@ -167,6 +202,7 @@ func formatSecurityRequirement(requirement *model.SecurityRequirement) string {
 	return strings.Join(lines, "\nOR\n")
 }
 
+// formatWarnings renders spec warnings for the warnings details section.
 func formatWarnings(warnings []model.SpecWarning) string {
 	if len(warnings) == 0 {
 		return "No warnings."

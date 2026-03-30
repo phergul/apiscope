@@ -14,6 +14,7 @@ type Executor struct {
 	client *http.Client
 }
 
+// NewExecutor builds a transport executor with the provided HTTP client.
 func NewExecutor(client *http.Client) *Executor {
 	if client == nil {
 		client = http.DefaultClient
@@ -22,6 +23,7 @@ func NewExecutor(client *http.Client) *Executor {
 	return &Executor{client: client}
 }
 
+// PrepareRequest builds an HTTP request from the selected operation and draft inputs.
 func (e *Executor) PrepareRequest(operation *model.Operation, draft *model.RequestDraft, serverURL string) (*http.Request, error) {
 	if operation == nil {
 		return nil, errors.New("no operation selected")
@@ -83,6 +85,7 @@ func (e *Executor) PrepareRequest(operation *model.Operation, draft *model.Reque
 	return request, nil
 }
 
+// resolvePath substitutes draft path parameters into an operation path template.
 func resolvePath(path string, draft *model.RequestDraft) (string, error) {
 	resolved := path
 	if draft != nil {

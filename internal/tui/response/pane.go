@@ -26,6 +26,7 @@ type PaneProjection struct {
 func ProjectPane(input PaneInput) PaneProjection {
 	data := Data{
 		LoadInFlight: input.LoadInFlight,
+		ContentWidth: input.ContentWidth,
 	}
 	if input.Selected == nil {
 		data.EmptyState = "No operation selected.\nChoose an operation in pane 1 to inspect response details."
@@ -33,7 +34,7 @@ func ProjectPane(input PaneInput) PaneProjection {
 	}
 
 	data.Sections = append(
-		[]widgets.Section{LiveSection(input.LastResponse, input.Selected)},
+		[]widgets.Section{LiveSection(input.LastResponse, input.Selected, input.ContentWidth)},
 		Sections(input.Selected.Responses)...,
 	)
 	data.ActiveSection = ResolveActiveSection(input.ActiveSection, input.Selected.Responses)

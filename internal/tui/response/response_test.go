@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
+	"github.com/phergul/apiscope/internal/model"
 	"github.com/phergul/apiscope/internal/tui/widgets"
 )
 
@@ -51,6 +52,37 @@ func TestRenderShowsDeclaredResponses(t *testing.T) {
 	for _, snippet := range wantSnippets {
 		if !strings.Contains(content, snippet) {
 			t.Fatalf("expected response pane to include %q, got %q", snippet, content)
+		}
+	}
+}
+
+func TestLiveSectionWrapsLongHeadersAndRendersBodyBlock(t *testing.T) {
+	t.Parallel()
+
+	section := LiveSection(&model.HTTPResponse{
+		OperationKey: model.NewOperationKey("GET", "/pets"),
+		Status:       "401 Unauthorized",
+		ContentType:  "application/json",
+		Headers: map[string][]string{
+			"Access-Control-Allow-Headers": {"Accept", "App-Platform", "Authorization", "Content-Type", "Origin"},
+		},
+		PrettyBody: "{\n  \"error\": true\n}",
+	}, &model.Operation{
+		Key: model.NewOperationKey("GET", "/pets"),
+	}, 32)
+
+	content := ansi.Strip(section.Body)
+	for _, snippet := range []string{
+		"Status: ",
+		"Headers:",
+		"- Access-Control-Allow-Headers:",
+		"  Accept, App-Platform,",
+		"Body:",
+		"│ {",
+		"│   \"error\": true",
+	} {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected live response section to include %q, got %q", snippet, content)
 		}
 	}
 }

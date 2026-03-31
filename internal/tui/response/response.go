@@ -2,11 +2,15 @@ package response
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/phergul/apiscope/internal/model"
 	"github.com/phergul/apiscope/internal/tui/describe"
 	"github.com/phergul/apiscope/internal/tui/widgets"
+	"github.com/phergul/apiscope/internal/util"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 const SectionLive = "Live"
@@ -17,6 +21,7 @@ type Data struct {
 	Sections      []widgets.Section
 	ActiveSection string
 	EmptyState    string
+	ContentWidth  int
 }
 
 // AvailableSections returns the visible response sections for the selected operation.
@@ -72,10 +77,10 @@ func Render(data Data) string {
 }
 
 // LiveSection builds the live response section for the selected operation.
-func LiveSection(response *model.HTTPResponse, selected *model.Operation) widgets.Section {
+func LiveSection(response *model.HTTPResponse, selected *model.Operation, contentWidth int) widgets.Section {
 	body := "No request has been sent for this operation yet."
 	if response != nil && selected != nil && response.OperationKey == selected.Key {
-		body = liveSectionBody(response)
+		body = liveSectionBody(response, contentWidth)
 	}
 
 	return widgets.Section{
@@ -104,7 +109,7 @@ func ActiveSectionBody(sections []widgets.Section, active string) string {
 // sectionBody renders a declared response section body.
 func sectionBody(response model.ResponseSpec) string {
 	lines := []string{
-		"Description: " + describe.NormaliseInlineText(fallbackText(response.Description, "None")),
+		"Description: " + describe.NormaliseInlineText(util.FallbackText(response.Description, "None")),
 		"Headers:",
 	}
 	if len(response.Headers) == 0 {
@@ -120,7 +125,7 @@ func sectionBody(response model.ResponseSpec) string {
 }
 
 // liveSectionBody renders the live response section body from execution output.
-func liveSectionBody(response *model.HTTPResponse) string {
+func liveSectionBody(response *model.HTTPResponse, contentWidth int) string {
 	if response == nil {
 		return "No request has been sent for this operation yet."
 	}
@@ -131,29 +136,27 @@ func liveSectionBody(response *model.HTTPResponse) string {
 	}
 
 	lines := []string{
-		fmt.Sprintf("Status: %s", status),
-		fmt.Sprintf("Duration: %s", response.Duration),
+		renderMetaLine("Status", status),
+		renderMetaLine("Duration", fmt.Sprintf("%s", response.Duration)),
 	}
 	if strings.TrimSpace(response.ContentType) != "" {
-		lines = append(lines, fmt.Sprintf("Content type: %s", response.ContentType))
+		lines = append(lines, renderMetaLine("Content type", response.ContentType))
 	}
 	if response.ContentLength > 0 {
-		lines = append(lines, fmt.Sprintf("Content length: %d", response.ContentLength))
+		lines = append(lines, renderMetaLine("Content length", fmt.Sprintf("%d", response.ContentLength)))
 	}
 	if strings.TrimSpace(response.TransportError) != "" {
 		lines = append(lines, widgets.ErrorTextStyle().Bold(true).Render("Transport error: "+response.TransportError))
 	}
 
-	lines = append(lines, "Headers:")
+	lines = append(lines, "", "Headers:")
 	if len(response.Headers) == 0 {
 		lines = append(lines, "- none")
 	} else {
-		for name, values := range response.Headers {
-			lines = append(lines, fmt.Sprintf("- %s: %s", name, strings.Join(values, ", ")))
-		}
+		lines = append(lines, renderWrappedHeaders(response.Headers, contentWidth)...)
 	}
 
-	lines = append(lines, "Body:")
+	lines = append(lines, "", "Body:")
 	body := strings.TrimSpace(response.PrettyBody)
 	if body == "" {
 		body = strings.TrimSpace(string(response.Body))
@@ -161,17 +164,57 @@ func liveSectionBody(response *model.HTTPResponse) string {
 	if body == "" {
 		body = "<empty>"
 	}
-	lines = append(lines, body)
+	lines = append(lines, renderBodyBlock(body)...)
 
 	return strings.Join(lines, "\n")
 }
 
-// fallbackText returns a trimmed value or the provided fallback string.
-func fallbackText(value, fallback string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return fallback
+// renderMetaLine renders one response metadata label/value pair.
+func renderMetaLine(label, value string) string {
+	return widgets.MutedTextStyle().Render(label+": ") + widgets.BodyTextStyle().Render(value)
+}
+
+// renderWrappedHeaders renders sorted response headers with wrapped values.
+func renderWrappedHeaders(headers map[string][]string, contentWidth int) []string {
+	names := make([]string, 0, len(headers))
+	for name := range headers {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+
+	lines := make([]string, 0, len(headers)*2)
+	for _, name := range names {
+		value := strings.Join(headers[name], ", ")
+		lines = append(lines, renderWrappedHeader(name, value, contentWidth)...)
 	}
 
-	return value
+	return lines
+}
+
+// renderWrappedHeader renders one response header as a wrapped block.
+func renderWrappedHeader(name, value string, contentWidth int) []string {
+	headerLine := widgets.MutedTextStyle().Render("- " + name + ":")
+	if strings.TrimSpace(value) == "" {
+		return []string{headerLine, "  " + widgets.MutedTextStyle().Render("<empty>")}
+	}
+
+	wrapWidth := max(contentWidth-4, 20)
+	valueLines := strings.Split(ansi.Wordwrap(value, wrapWidth, ""), "\n")
+	lines := []string{headerLine}
+	for _, line := range valueLines {
+		lines = append(lines, "  "+line)
+	}
+
+	return lines
+}
+
+// renderBodyBlock renders the response body as an indented content block.
+func renderBodyBlock(body string) []string {
+	bodyLines := strings.Split(body, "\n")
+	lines := make([]string, 0, len(bodyLines))
+	for _, line := range bodyLines {
+		lines = append(lines, widgets.MutedTextStyle().Render("│ ")+widgets.BodyTextStyle().Render(line))
+	}
+
+	return lines
 }

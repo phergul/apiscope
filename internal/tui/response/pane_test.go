@@ -51,10 +51,10 @@ func TestProjectPaneClipsLiveBodyAndTracksScroll(t *testing.T) {
 	}
 
 	content := ansi.Strip(Render(projected.Data))
-	if strings.Contains(content, "Status:") || strings.Contains(content, "Duration:") || strings.Contains(content, "line1") {
+	if strings.Contains(content, "Status:") || strings.Contains(content, "Duration:") || strings.Contains(content, "Headers:") {
 		t.Fatalf("expected live response body to be clipped, got %q", content)
 	}
-	if !strings.Contains(content, "line3") || !strings.Contains(content, "line5") {
+	if !strings.Contains(content, "line1") || !strings.Contains(content, "line3") {
 		t.Fatalf("expected clipped live response body to respect scroll offset, got %q", content)
 	}
 }

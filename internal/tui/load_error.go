@@ -21,7 +21,7 @@ func (m *Model) loadErrorBody(includeQuit bool) string {
 		view.Title,
 		"",
 		fmt.Sprintf("Category: %s", view.Category),
-		fmt.Sprintf("Source: %s", fallbackText(view.Source, m.shell.source)),
+		fmt.Sprintf("Source: %s", util.FallbackText(view.Source, m.shell.source)),
 		"",
 		view.Summary,
 		"",

@@ -16,7 +16,15 @@ type EditStart struct {
 	CycleBodyMediaType bool
 }
 
-func StartEdit(selected *model.Operation, draft *model.RequestDraft, rows []RowDescriptor, activeRow int) EditStart {
+// StartEdit resolves the edit action for the active request row.
+func StartEdit(
+	selected *model.Operation,
+	draft *model.RequestDraft,
+	rows []RowDescriptor,
+	activeRow int,
+	securitySchemes map[string]model.SecurityScheme,
+	authState map[string]model.AuthValue,
+) EditStart {
 	if selected == nil || len(rows) == 0 {
 		return EditStart{}
 	}
@@ -31,6 +39,17 @@ func StartEdit(selected *model.Operation, draft *model.RequestDraft, rows []RowD
 			Kind:       model.RequestEditKindField,
 			Target:     row.ID,
 			Buffer:     DraftParameterValue(draft, *row.Parameter),
+			FocusField: true,
+		}
+	case RowKindAuthField:
+		scheme, ok := lookupSecurityScheme(securitySchemes, row.AuthSchemeName)
+		if !ok || !row.Editable {
+			return EditStart{}
+		}
+		return EditStart{
+			Kind:       model.RequestEditKindField,
+			Target:     row.ID,
+			Buffer:     app.AuthFieldValue(authState[scheme.Name], row.AuthField),
 			FocusField: true,
 		}
 	case RowKindBodyMediaType:
@@ -52,7 +71,16 @@ func StartEdit(selected *model.Operation, draft *model.RequestDraft, rows []RowD
 	}
 }
 
-func SaveEdit(session *model.SessionState, selected *model.Operation, rows []RowDescriptor, activeRow int, kind model.RequestEditKind, buffer string) bool {
+// SaveEdit persists the current request editor buffer back into session state.
+func SaveEdit(
+	session *model.SessionState,
+	selected *model.Operation,
+	rows []RowDescriptor,
+	activeRow int,
+	kind model.RequestEditKind,
+	buffer string,
+	securitySchemes map[string]model.SecurityScheme,
+) bool {
 	if session == nil || selected == nil || len(rows) == 0 {
 		return false
 	}
@@ -63,6 +91,12 @@ func SaveEdit(session *model.SessionState, selected *model.Operation, rows []Row
 		if row.Parameter != nil {
 			app.SetDraftParameter(session, selected, *row.Parameter, buffer)
 		}
+		if row.Kind == RowKindAuthField {
+			scheme, ok := lookupSecurityScheme(securitySchemes, row.AuthSchemeName)
+			if ok {
+				app.SetAuthField(session, scheme, row.AuthField, buffer)
+			}
+		}
 	case model.RequestEditKindBody:
 		app.SetDraftBodyRaw(session, selected, buffer)
 	}
@@ -70,6 +104,17 @@ func SaveEdit(session *model.SessionState, selected *model.Operation, rows []Row
 	return true
 }
 
+// lookupSecurityScheme resolves one named security scheme from the spec map.
+func lookupSecurityScheme(securitySchemes map[string]model.SecurityScheme, schemeName string) (model.SecurityScheme, bool) {
+	if schemeName == "" {
+		return model.SecurityScheme{}, false
+	}
+
+	scheme, ok := securitySchemes[schemeName]
+	return scheme, ok
+}
+
+// CycleBodyMediaType advances the selected request-body media type for the current draft.
 func CycleBodyMediaType(session *model.SessionState, selected *model.Operation) bool {
 	if session == nil || selected == nil || selected.RequestBody == nil || len(selected.RequestBody.Content) == 0 {
 		return false

@@ -13,6 +13,7 @@ import (
 	"github.com/phergul/apiscope/internal/model"
 	"github.com/phergul/apiscope/internal/spec"
 	detailsui "github.com/phergul/apiscope/internal/tui/details"
+	requestui "github.com/phergul/apiscope/internal/tui/request"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -695,6 +696,9 @@ func TestModelCtrlRExecutesAndSelectsLiveResponse(t *testing.T) {
 		if got := r.Header.Get("Content-Type"); got != "application/json" {
 			t.Fatalf("expected content type application/json, got %q", got)
 		}
+		if got := r.Header.Get("X-API-Key"); got != "secret" {
+			t.Fatalf("expected X-API-Key header secret, got %q", got)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	}))
@@ -704,6 +708,9 @@ func TestModelCtrlRExecutesAndSelectsLiveResponse(t *testing.T) {
 	m.service = app.NewService(nil)
 	m.viewState.FocusedPane = model.FocusedPaneRequest
 	m.session.SelectedServerURL = server.URL
+	m.session.AuthState = map[string]model.AuthValue{
+		"api_key": {Type: model.AuthSchemeValueTypeAPIKey, APIKey: "secret"},
+	}
 	draft := m.ensureSelectedRequestDraft()
 	draft.PathParams["petId"] = "abc"
 	draft.BodyRaw = `{"name":"fido"}`
@@ -735,6 +742,33 @@ func TestModelCtrlRExecutesAndSelectsLiveResponse(t *testing.T) {
 	}
 	if updated.session.LastResponse.StatusCode != http.StatusOK {
 		t.Fatalf("expected HTTP 200 response, got %d", updated.session.LastResponse.StatusCode)
+	}
+}
+
+func TestModelCtrlRShowsAuthValidationInAuthSection(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	draft := m.ensureSelectedRequestDraft()
+	draft.PathParams["petId"] = "abc"
+	draft.BodyRaw = `{"name":"fido"}`
+	draft.BodyMediaType = "application/json"
+
+	updatedModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlR})
+	updated := updatedModel.(*Model)
+	if cmd != nil {
+		t.Fatal("expected ctrl+r to skip execution when auth validation fails")
+	}
+	if updated.panes.activeRequestSection != requestui.SectionAuth {
+		t.Fatalf("expected auth section to become active, got %q", updated.panes.activeRequestSection)
+	}
+	if !updated.requestUI.validation.HasIssues() {
+		t.Fatal("expected auth validation issues to be stored")
+	}
+	data := updated.projectRequestPane()
+	if len(data.Rows) == 0 || data.Rows[0].Error == "" {
+		t.Fatalf("expected auth row to show inline validation error, got %#v", data.Rows)
 	}
 }
 
@@ -1193,6 +1227,19 @@ func TestModelOperationsScrollingKeepsFiveRowsBelowCursorWhenMovingDown(t *testi
 
 func newLoadedModelForNavigation() *Model {
 	spec := &model.APISpec{
+		SecuritySchemes: map[string]model.SecurityScheme{
+			"api_key": {
+				Name:          "api_key",
+				Type:          model.SecuritySchemeTypeAPIKey,
+				In:            model.ParameterLocationHeader,
+				ParameterName: "X-API-Key",
+			},
+			"global_auth": {
+				Name:   "global_auth",
+				Type:   model.SecuritySchemeTypeHTTP,
+				Scheme: model.HTTPAuthSchemeBearer,
+			},
+		},
 		Operations: []model.Operation{
 			{
 				Key:         model.NewOperationKey("GET", "/pets"),
@@ -1249,6 +1296,7 @@ func newLoadedModelForNavigation() *Model {
 		session: model.SessionState{
 			Spec:                 spec,
 			SelectedOperationKey: model.NewOperationKey("GET", "/pets"),
+			AuthState:            map[string]model.AuthValue{},
 		},
 		viewState: model.ViewState{
 			FocusedPane: model.FocusedPaneOperations,

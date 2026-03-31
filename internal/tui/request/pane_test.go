@@ -60,3 +60,40 @@ func TestProjectPaneKeepsOnlyHintWhenHelpIsClosed(t *testing.T) {
 		t.Fatalf("expected closed help overlay to omit body, got %+v", projection.HelpOverlay)
 	}
 }
+
+func TestProjectPaneBuildsEditableAuthRows(t *testing.T) {
+	t.Parallel()
+
+	projection := ProjectPane(PaneInput{
+		Selected: &model.Operation{},
+		Security: &model.SecurityRequirement{
+			Alternatives: []model.SecurityAlternative{
+				{Schemes: []model.SecurityRequirementRef{{Name: "bearer_auth"}}},
+			},
+		},
+		SecuritySchemes: map[string]model.SecurityScheme{
+			"bearer_auth": {
+				Name:   "bearer_auth",
+				Type:   model.SecuritySchemeTypeHTTP,
+				Scheme: model.HTTPAuthSchemeBearer,
+			},
+		},
+		AuthState: map[string]model.AuthValue{
+			"bearer_auth": {Type: model.AuthSchemeValueTypeBearer, BearerToken: "secret"},
+		},
+		ActiveSection: SectionAuth,
+	})
+
+	if projection.Data.ActiveSection != SectionAuth {
+		t.Fatalf("expected auth section, got %q", projection.Data.ActiveSection)
+	}
+	if len(projection.Data.Rows) != 1 {
+		t.Fatalf("expected one auth row, got %d", len(projection.Data.Rows))
+	}
+	if !projection.Data.Rows[0].Editable {
+		t.Fatal("expected auth row to be editable")
+	}
+	if projection.Data.Rows[0].Value != "token set" {
+		t.Fatalf("expected masked auth summary, got %q", projection.Data.Rows[0].Value)
+	}
+}

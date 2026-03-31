@@ -71,7 +71,7 @@ func (s *Service) ExecuteCurrent(ctx context.Context, session model.SessionState
 	}
 
 	draft := EnsureRequestDraft(&session, operation)
-	validation := ValidateRequest(operation, draft)
+	validation := ValidateExecutableRequest(session, operation, draft)
 	if validation.HasIssues() {
 		return ExecuteResult{
 			OperationKey: operation.Key,
@@ -80,7 +80,14 @@ func (s *Service) ExecuteCurrent(ctx context.Context, session model.SessionState
 		}
 	}
 
-	request, err := s.executor.PrepareRequest(operation, draft, session.SelectedServerURL)
+	request, err := s.executor.PrepareRequest(
+		operation,
+		draft,
+		session.SelectedServerURL,
+		EffectiveSecurityRequirement(session, operation),
+		session.Spec.SecuritySchemes,
+		session.AuthState,
+	)
 	if err != nil {
 		return ExecuteResult{
 			OperationKey: operation.Key,

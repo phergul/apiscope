@@ -172,6 +172,9 @@ func TestServiceExecuteCurrentBuildsAndExecutesRequest(t *testing.T) {
 		if got := r.Header.Get("X-Trace-ID"); got != "trace-1" {
 			t.Fatalf("expected X-Trace-ID header, got %q", got)
 		}
+		if got := r.Header.Get("X-API-Key"); got != "secret" {
+			t.Fatalf("expected X-API-Key header, got %q", got)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	}))
@@ -188,14 +191,30 @@ func TestServiceExecuteCurrentBuildsAndExecutesRequest(t *testing.T) {
 			Required: true,
 			Content:  []model.MediaTypeSpec{{MediaType: "application/json"}},
 		},
+		Security: &model.SecurityRequirement{
+			Alternatives: []model.SecurityAlternative{
+				{Schemes: []model.SecurityRequirementRef{{Name: "api_key"}}},
+			},
+		},
 	}
 	session := model.SessionState{
 		SelectedServerURL:    server.URL,
 		SelectedOperationKey: operation.Key,
 		Spec: &model.APISpec{
 			Operations: []model.Operation{operation},
+			SecuritySchemes: map[string]model.SecurityScheme{
+				"api_key": {
+					Name:          "api_key",
+					Type:          model.SecuritySchemeTypeAPIKey,
+					In:            model.ParameterLocationHeader,
+					ParameterName: "X-API-Key",
+				},
+			},
 		},
 		RequestDrafts: map[model.DraftKey]*model.RequestDraft{},
+		AuthState: map[string]model.AuthValue{
+			"api_key": {Type: model.AuthSchemeValueTypeAPIKey, APIKey: "secret"},
+		},
 	}
 	draft := EnsureRequestDraft(&session, &operation)
 	draft.PathParams["petId"] = "abc"
@@ -217,5 +236,46 @@ func TestServiceExecuteCurrentBuildsAndExecutesRequest(t *testing.T) {
 	}
 	if result.Response.OperationKey != operation.Key {
 		t.Fatalf("expected response to track operation key, got %q", result.Response.OperationKey)
+	}
+}
+
+func TestServiceExecuteCurrentReturnsAuthValidationIssuesBeforeTransport(t *testing.T) {
+	t.Parallel()
+
+	operation := model.Operation{
+		Key:    model.NewOperationKey("GET", "/me"),
+		Method: "GET",
+		Path:   "/me",
+		Security: &model.SecurityRequirement{
+			Alternatives: []model.SecurityAlternative{
+				{Schemes: []model.SecurityRequirementRef{{Name: "bearer_auth"}}},
+			},
+		},
+	}
+	session := model.SessionState{
+		SelectedServerURL:    "https://api.example.com",
+		SelectedOperationKey: operation.Key,
+		Spec: &model.APISpec{
+			Operations: []model.Operation{operation},
+			SecuritySchemes: map[string]model.SecurityScheme{
+				"bearer_auth": {
+					Name:   "bearer_auth",
+					Type:   model.SecuritySchemeTypeHTTP,
+					Scheme: model.HTTPAuthSchemeBearer,
+				},
+			},
+		},
+		RequestDrafts: map[model.DraftKey]*model.RequestDraft{},
+	}
+
+	result := NewService(nil).ExecuteCurrent(context.Background(), session)
+	if !result.Validation.HasIssues() {
+		t.Fatal("expected auth validation errors before execution")
+	}
+	if _, ok := result.Validation.IssueForTarget(AuthFieldTarget("bearer_auth", AuthFieldBearerToken)); !ok {
+		t.Fatalf("expected missing bearer token issue, got %#v", result.Validation.Issues)
+	}
+	if result.Response != nil {
+		t.Fatalf("expected no response when auth validation fails, got %#v", result.Response)
 	}
 }

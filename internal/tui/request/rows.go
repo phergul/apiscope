@@ -1,9 +1,9 @@
 package request
 
 import (
-	"strconv"
 	"strings"
 
+	"github.com/phergul/apiscope/internal/app"
 	"github.com/phergul/apiscope/internal/model"
 	"github.com/phergul/apiscope/internal/tui/describe"
 )
@@ -14,20 +14,31 @@ const (
 	RowKindParameter     RowKind = "parameter"
 	RowKindBodyMediaType RowKind = "body_media_type"
 	RowKindBodyText      RowKind = "body_text"
-	RowKindAuth          RowKind = "auth"
+	RowKindAuthField     RowKind = "auth_field"
+	RowKindAuthInfo      RowKind = "auth_info"
 )
 
 type RowDescriptor struct {
-	ID        string
-	Kind      RowKind
-	Parameter *model.Parameter
-	Label     string
-	Meta      string
-	Value     string
-	Editable  bool
+	ID             string
+	Kind           RowKind
+	Parameter      *model.Parameter
+	AuthSchemeName string
+	AuthField      app.AuthField
+	Label          string
+	Meta           string
+	Value          string
+	Editable       bool
 }
 
-func ActiveRows(selected *model.Operation, draft *model.RequestDraft, activeSection string, security *model.SecurityRequirement) []RowDescriptor {
+// ActiveRows returns the request rows for the currently active request-pane section.
+func ActiveRows(
+	selected *model.Operation,
+	draft *model.RequestDraft,
+	activeSection string,
+	security *model.SecurityRequirement,
+	securitySchemes map[string]model.SecurityScheme,
+	authState map[string]model.AuthValue,
+) []RowDescriptor {
 	if selected == nil {
 		return nil
 	}
@@ -44,12 +55,13 @@ func ActiveRows(selected *model.Operation, draft *model.RequestDraft, activeSect
 	case SectionBody:
 		return bodyRows(selected.RequestBody, draft)
 	case SectionAuth:
-		return authRows(security)
+		return authRows(security, securitySchemes, authState)
 	default:
 		return nil
 	}
 }
 
+// parameterRows builds request rows for one parameter location.
 func parameterRows(parameters []model.Parameter, draft *model.RequestDraft) []RowDescriptor {
 	rows := make([]RowDescriptor, 0, len(parameters))
 	for index := range parameters {
@@ -69,6 +81,7 @@ func parameterRows(parameters []model.Parameter, draft *model.RequestDraft) []Ro
 	return rows
 }
 
+// ParameterValue returns the rendered parameter value and whether the row is editable.
 func ParameterValue(parameter model.Parameter, draft *model.RequestDraft) (string, bool) {
 	if len(parameter.Content) > 0 {
 		return "<unsupported: content-based parameter>", false
@@ -82,6 +95,7 @@ func ParameterValue(parameter model.Parameter, draft *model.RequestDraft) (strin
 	return value, true
 }
 
+// DraftParameterValue returns the raw stored draft value for the provided parameter.
 func DraftParameterValue(draft *model.RequestDraft, parameter model.Parameter) string {
 	if draft == nil {
 		return ""
@@ -147,28 +161,63 @@ func BodyPreview(draft *model.RequestDraft) string {
 	return strings.TrimRight(draft.BodyRaw, "\n")
 }
 
-func authRows(requirement *model.SecurityRequirement) []RowDescriptor {
+// authRows builds editable auth rows for the effective security requirement.
+func authRows(requirement *model.SecurityRequirement, securitySchemes map[string]model.SecurityScheme, authState map[string]model.AuthValue) []RowDescriptor {
 	if requirement == nil || len(requirement.Alternatives) == 0 {
 		return nil
 	}
 
-	rows := make([]RowDescriptor, 0, len(requirement.Alternatives))
-	for index, alternative := range requirement.Alternatives {
-		parts := make([]string, 0, len(alternative.Schemes))
-		for _, scheme := range alternative.Schemes {
-			part := scheme.Name
-			if len(scheme.Scopes) > 0 {
-				part += " (" + strings.Join(scheme.Scopes, ", ") + ")"
+	seen := make(map[string]bool)
+	rows := make([]RowDescriptor, 0, len(requirement.Alternatives)*2)
+	for _, alternative := range requirement.Alternatives {
+		for _, ref := range alternative.Schemes {
+			if seen[ref.Name] {
+				continue
 			}
-			parts = append(parts, part)
+			seen[ref.Name] = true
+
+			scheme, ok := securitySchemes[ref.Name]
+			if !ok {
+				rows = append(rows, RowDescriptor{
+					ID:             app.AuthFieldTarget(ref.Name, ""),
+					Kind:           RowKindAuthInfo,
+					AuthSchemeName: ref.Name,
+					Label:          ref.Name,
+					Meta:           "missing security scheme",
+					Value:          "<missing from spec>",
+					Editable:       false,
+				})
+				continue
+			}
+
+			fields := app.SupportedAuthFields(scheme)
+			if len(fields) == 0 {
+				rows = append(rows, RowDescriptor{
+					ID:             app.AuthFieldTarget(ref.Name, ""),
+					Kind:           RowKindAuthInfo,
+					AuthSchemeName: ref.Name,
+					Label:          ref.Name,
+					Meta:           "unsupported auth",
+					Value:          "<unsupported auth type>",
+					Editable:       false,
+				})
+				continue
+			}
+
+			value := authState[ref.Name]
+			for _, field := range fields {
+				rows = append(rows, RowDescriptor{
+					ID:             app.AuthFieldTarget(ref.Name, field),
+					Kind:           RowKindAuthField,
+					AuthSchemeName: ref.Name,
+					AuthField:      field,
+					Label:          app.AuthFieldLabel(scheme, field),
+					Meta:           app.AuthFieldMeta(scheme, field),
+					Value:          app.AuthFieldSummary(value, field),
+					Editable:       true,
+				})
+			}
 		}
-		rows = append(rows, RowDescriptor{
-			ID:       "auth:" + strconv.Itoa(index),
-			Kind:     RowKindAuth,
-			Label:    "Alternative " + strconv.Itoa(index+1),
-			Value:    strings.Join(parts, " AND "),
-			Editable: false,
-		})
 	}
 
 	return rows

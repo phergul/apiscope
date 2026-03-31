@@ -27,7 +27,7 @@ func TestPrepareRequestBuildsPathQueryHeadersCookiesAndBody(t *testing.T) {
 		BodyRaw:       `{"name":"fido"}`,
 	}
 
-	request, err := executor.PrepareRequest(operation, draft, "https://api.example.com")
+	request, err := executor.PrepareRequest(operation, draft, "https://api.example.com", nil, nil, nil)
 	if err != nil {
 		t.Fatalf("PrepareRequest returned error: %v", err)
 	}
@@ -46,6 +46,105 @@ func TestPrepareRequestBuildsPathQueryHeadersCookiesAndBody(t *testing.T) {
 	}
 	if cookie.Value != "cookie-1" {
 		t.Fatalf("expected cookie value cookie-1, got %q", cookie.Value)
+	}
+}
+
+func TestPrepareRequestAppliesSupportedAuth(t *testing.T) {
+	t.Parallel()
+
+	executor := NewExecutor(nil)
+	operation := &model.Operation{Method: "GET", Path: "/me"}
+	requirement := &model.SecurityRequirement{
+		Alternatives: []model.SecurityAlternative{
+			{Schemes: []model.SecurityRequirementRef{{Name: "bearer_auth"}}},
+		},
+	}
+	request, err := executor.PrepareRequest(
+		operation,
+		&model.RequestDraft{},
+		"https://api.example.com",
+		requirement,
+		map[string]model.SecurityScheme{
+			"bearer_auth": {
+				Name:   "bearer_auth",
+				Type:   model.SecuritySchemeTypeHTTP,
+				Scheme: model.HTTPAuthSchemeBearer,
+			},
+		},
+		map[string]model.AuthValue{
+			"bearer_auth": {Type: model.AuthSchemeValueTypeBearer, BearerToken: "token-123"},
+		},
+	)
+	if err != nil {
+		t.Fatalf("PrepareRequest returned error: %v", err)
+	}
+	if got := request.Header.Get("Authorization"); got != "Bearer token-123" {
+		t.Fatalf("expected bearer auth header, got %q", got)
+	}
+}
+
+func TestPrepareRequestAppliesBasicAuth(t *testing.T) {
+	t.Parallel()
+
+	executor := NewExecutor(nil)
+	request, err := executor.PrepareRequest(
+		&model.Operation{Method: "GET", Path: "/me"},
+		&model.RequestDraft{},
+		"https://api.example.com",
+		&model.SecurityRequirement{
+			Alternatives: []model.SecurityAlternative{
+				{Schemes: []model.SecurityRequirementRef{{Name: "basic_auth"}}},
+			},
+		},
+		map[string]model.SecurityScheme{
+			"basic_auth": {
+				Name:   "basic_auth",
+				Type:   model.SecuritySchemeTypeHTTP,
+				Scheme: model.HTTPAuthSchemeBasic,
+			},
+		},
+		map[string]model.AuthValue{
+			"basic_auth": {Type: model.AuthSchemeValueTypeBasic, Username: "alice", Password: "secret"},
+		},
+	)
+	if err != nil {
+		t.Fatalf("PrepareRequest returned error: %v", err)
+	}
+	if got := request.Header.Get("Authorization"); !strings.HasPrefix(got, "Basic ") {
+		t.Fatalf("expected basic auth header, got %q", got)
+	}
+}
+
+func TestPrepareRequestAppliesQueryAPIKey(t *testing.T) {
+	t.Parallel()
+
+	executor := NewExecutor(nil)
+	request, err := executor.PrepareRequest(
+		&model.Operation{Method: "GET", Path: "/me"},
+		&model.RequestDraft{},
+		"https://api.example.com",
+		&model.SecurityRequirement{
+			Alternatives: []model.SecurityAlternative{
+				{Schemes: []model.SecurityRequirementRef{{Name: "query_key"}}},
+			},
+		},
+		map[string]model.SecurityScheme{
+			"query_key": {
+				Name:          "query_key",
+				Type:          model.SecuritySchemeTypeAPIKey,
+				In:            model.ParameterLocationQuery,
+				ParameterName: "api_key",
+			},
+		},
+		map[string]model.AuthValue{
+			"query_key": {Type: model.AuthSchemeValueTypeAPIKey, APIKey: "secret"},
+		},
+	)
+	if err != nil {
+		t.Fatalf("PrepareRequest returned error: %v", err)
+	}
+	if got := request.URL.Query().Get("api_key"); got != "secret" {
+		t.Fatalf("expected query api key, got %q", got)
 	}
 }
 

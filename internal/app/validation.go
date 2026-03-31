@@ -102,6 +102,18 @@ func ValidateRequest(operation *model.Operation, draft *model.RequestDraft) Requ
 	return result
 }
 
+// ValidateExecutableRequest checks request inputs and auth requirements before execution.
+func ValidateExecutableRequest(session model.SessionState, operation *model.Operation, draft *model.RequestDraft) RequestValidationResult {
+	result := ValidateRequest(operation, draft)
+	securitySchemes := map[string]model.SecurityScheme(nil)
+	if session.Spec != nil {
+		securitySchemes = session.Spec.SecuritySchemes
+	}
+	authValidation := ValidateAuth(EffectiveSecurityRequirement(session, operation), securitySchemes, session.AuthState)
+	result.Issues = append(result.Issues, authValidation.Issues...)
+	return result
+}
+
 // draftParameterValue returns the current draft value for the requested parameter.
 func draftParameterValue(draft *model.RequestDraft, parameter model.Parameter) string {
 	if draft == nil {

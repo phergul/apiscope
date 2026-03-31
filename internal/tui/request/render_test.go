@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-func TestRenderShowsGroupedInputsAndAuthSummary(t *testing.T) {
+func TestRenderShowsGroupedInputsAndAuthRows(t *testing.T) {
 	t.Parallel()
 
 	content := ansi.Strip(Render(Data{
@@ -39,6 +39,29 @@ func TestRenderShowsGroupedInputsAndAuthSummary(t *testing.T) {
 		if !strings.Contains(content, snippet) {
 			t.Fatalf("expected request pane to include %q, got %q", snippet, content)
 		}
+	}
+}
+
+func TestRenderShowsEditableAuthRow(t *testing.T) {
+	t.Parallel()
+
+	content := ansi.Strip(Render(Data{
+		Sections:      []string{"Auth"},
+		ActiveSection: "Auth",
+		Rows: []Row{
+			{
+				Kind:     RowKindAuthField,
+				Label:    "bearer_auth",
+				Meta:     "Bearer token",
+				Value:    "token set",
+				Editable: true,
+			},
+		},
+		ActiveRow: 0,
+	}))
+
+	if !strings.Contains(content, "bearer_auth (Bearer token) = token set") {
+		t.Fatalf("expected auth row content, got %q", content)
 	}
 }
 

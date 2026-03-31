@@ -7,21 +7,25 @@ type ValidationState struct {
 	RowErrors         map[string]string
 }
 
+// PaneInput contains the root-owned request pane state needed to project a render model.
 type PaneInput struct {
-	LoadInFlight  bool
-	Selected      *model.Operation
-	Draft         *model.RequestDraft
-	Security      *model.SecurityRequirement
-	ActiveSection string
-	ActiveRow     int
-	ScrollOffset  int
-	Validation    ValidationState
-	Editor        EditorInput
-	ContentWidth  int
-	ContentHeight int
-	HelpOpen      bool
+	LoadInFlight    bool
+	Selected        *model.Operation
+	Draft           *model.RequestDraft
+	Security        *model.SecurityRequirement
+	SecuritySchemes map[string]model.SecurityScheme
+	AuthState       map[string]model.AuthValue
+	ActiveSection   string
+	ActiveRow       int
+	ScrollOffset    int
+	Validation      ValidationState
+	Editor          EditorInput
+	ContentWidth    int
+	ContentHeight   int
+	HelpOpen        bool
 }
 
+// PaneProjection contains the rendered request pane data and any detached help overlay.
 type PaneProjection struct {
 	Data        Data
 	HelpOverlay HelpView
@@ -60,7 +64,7 @@ func projectPaneData(input PaneInput) (Data, EditorState) {
 
 	activeSection := ResolveActiveSection(input.ActiveSection, input.Selected, input.Security)
 	sections := AvailableSections(input.Selected, input.Security)
-	rows := ActiveRows(input.Selected, input.Draft, activeSection, input.Security)
+	rows := ActiveRows(input.Selected, input.Draft, activeSection, input.Security, input.SecuritySchemes, input.AuthState)
 	editorState := BuildEditorState(input.Editor, rows, input.ActiveRow, input.Selected, input.Draft)
 
 	data.Sections = sections

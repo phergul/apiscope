@@ -24,6 +24,8 @@ func TestStartEditReturnsFieldEditorStateForEditableParameter(t *testing.T) {
 			Editable:  true,
 		}},
 		0,
+		nil,
+		nil,
 	)
 
 	if got.Kind != model.RequestEditKindField {
@@ -80,6 +82,7 @@ func TestSaveEditWritesBodyBufferToDraft(t *testing.T) {
 		0,
 		model.RequestEditKindBody,
 		"{\"name\":\"fido\"}",
+		nil,
 	)
 	if !ok {
 		t.Fatal("expected save to succeed")
@@ -88,5 +91,71 @@ func TestSaveEditWritesBodyBufferToDraft(t *testing.T) {
 	draft := app.EnsureRequestDraft(&session, selected)
 	if draft.BodyRaw != "{\"name\":\"fido\"}" {
 		t.Fatalf("expected body draft to be saved, got %q", draft.BodyRaw)
+	}
+}
+
+func TestStartEditSeedsAuthFieldBufferFromSessionAuthState(t *testing.T) {
+	t.Parallel()
+
+	scheme := model.SecurityScheme{
+		Name:          "api_key",
+		Type:          model.SecuritySchemeTypeAPIKey,
+		In:            model.ParameterLocationHeader,
+		ParameterName: "X-API-Key",
+	}
+	got := StartEdit(
+		&model.Operation{Key: model.NewOperationKey("GET", "/pets")},
+		nil,
+		[]RowDescriptor{{
+			ID:             "auth:api_key:api_key",
+			Kind:           RowKindAuthField,
+			AuthSchemeName: "api_key",
+			AuthField:      app.AuthFieldAPIKey,
+			Editable:       true,
+		}},
+		0,
+		map[string]model.SecurityScheme{"api_key": scheme},
+		map[string]model.AuthValue{"api_key": {Type: model.AuthSchemeValueTypeAPIKey, APIKey: "secret"}},
+	)
+
+	if got.Kind != model.RequestEditKindField {
+		t.Fatalf("expected field edit kind, got %q", got.Kind)
+	}
+	if got.Buffer != "secret" {
+		t.Fatalf("expected auth value to seed edit buffer, got %q", got.Buffer)
+	}
+}
+
+func TestSaveEditWritesAuthFieldToSessionState(t *testing.T) {
+	t.Parallel()
+
+	session := model.SessionState{}
+	selected := &model.Operation{Key: model.NewOperationKey("GET", "/pets")}
+	scheme := model.SecurityScheme{
+		Name:   "bearer_auth",
+		Type:   model.SecuritySchemeTypeHTTP,
+		Scheme: model.HTTPAuthSchemeBearer,
+	}
+
+	ok := SaveEdit(
+		&session,
+		selected,
+		[]RowDescriptor{{
+			ID:             "auth:bearer_auth:bearer_token",
+			Kind:           RowKindAuthField,
+			AuthSchemeName: "bearer_auth",
+			AuthField:      app.AuthFieldBearerToken,
+			Editable:       true,
+		}},
+		0,
+		model.RequestEditKindField,
+		"token-123",
+		map[string]model.SecurityScheme{"bearer_auth": scheme},
+	)
+	if !ok {
+		t.Fatal("expected auth save to succeed")
+	}
+	if got := session.AuthState["bearer_auth"].BearerToken; got != "token-123" {
+		t.Fatalf("expected bearer token to be saved, got %q", got)
 	}
 }

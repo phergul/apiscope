@@ -27,6 +27,8 @@ func (m *Model) activeRequestRows() []requestui.RowDescriptor {
 		app.EnsureRequestDraft(&m.session, selected),
 		m.panes.activeRequestSection,
 		m.effectiveSecurityRequirement(selected),
+		m.securitySchemes(),
+		m.session.AuthState,
 	)
 }
 
@@ -179,18 +181,20 @@ func (m *Model) projectRequestPaneForSize(width, height int) requestui.PaneProje
 	activeSection := requestui.ResolveActiveSection(m.panes.activeRequestSection, selected, security)
 
 	return requestui.ProjectPane(requestui.PaneInput{
-		LoadInFlight:  m.viewState.LoadInFlight,
-		Selected:      selected,
-		Draft:         draft,
-		Security:      security,
-		ActiveSection: activeSection,
-		ActiveRow:     m.viewState.RequestActiveRow,
-		ScrollOffset:  m.viewState.RequestScrollOffset,
-		Validation:    m.requestValidationState(activeSection),
-		Editor:        m.requestEditorInput(),
-		ContentWidth:  contentWidth,
-		ContentHeight: contentHeight,
-		HelpOpen:      m.requestUI.editHelpOpen,
+		LoadInFlight:    m.viewState.LoadInFlight,
+		Selected:        selected,
+		Draft:           draft,
+		Security:        security,
+		SecuritySchemes: m.securitySchemes(),
+		AuthState:       m.session.AuthState,
+		ActiveSection:   activeSection,
+		ActiveRow:       m.viewState.RequestActiveRow,
+		ScrollOffset:    m.viewState.RequestScrollOffset,
+		Validation:      m.requestValidationState(activeSection),
+		Editor:          m.requestEditorInput(),
+		ContentWidth:    contentWidth,
+		ContentHeight:   contentHeight,
+		HelpOpen:        m.requestUI.editHelpOpen,
 	})
 }
 
@@ -217,6 +221,15 @@ func (m *Model) currentRequestHelpOverlay() helpOverlayView {
 	}
 }
 
+// securitySchemes returns the loaded security-scheme map when a spec is available.
+func (m *Model) securitySchemes() map[string]model.SecurityScheme {
+	if m.session.Spec == nil {
+		return nil
+	}
+
+	return m.session.Spec.SecuritySchemes
+}
+
 // requestPaneContentForSize renders the request pane body for the given pane size.
 func (m *Model) requestPaneContentForSize(width, height int) string {
 	return requestui.Render(m.projectRequestPaneForSize(width, height).Data)
@@ -237,6 +250,8 @@ func (m *Model) beginRequestEdit() {
 		app.EnsureRequestDraft(&m.session, selected),
 		m.activeRequestRows(),
 		m.viewState.RequestActiveRow,
+		m.securitySchemes(),
+		m.session.AuthState,
 	)
 	if start.CycleBodyMediaType {
 		requestui.CycleBodyMediaType(&m.session, selected)
@@ -273,6 +288,7 @@ func (m *Model) saveRequestEdit() {
 		m.viewState.RequestActiveRow,
 		m.viewState.RequestEditKind,
 		m.viewState.RequestEditBuffer,
+		m.securitySchemes(),
 	) {
 		m.finishRequestEdit()
 		return
@@ -396,7 +412,7 @@ func (m *Model) executeCurrentRequest() tea.Cmd {
 		return nil
 	}
 
-	validation := app.ValidateRequest(selected, app.EnsureRequestDraft(&m.session, selected))
+	validation := app.ValidateExecutableRequest(m.session, selected, app.EnsureRequestDraft(&m.session, selected))
 	if validation.HasIssues() {
 		m.requestUI.validation = validation
 		if issue, ok := validation.FirstIssue(); ok {

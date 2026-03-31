@@ -24,7 +24,14 @@ func NewExecutor(client *http.Client) *Executor {
 }
 
 // PrepareRequest builds an HTTP request from the selected operation and draft inputs.
-func (e *Executor) PrepareRequest(operation *model.Operation, draft *model.RequestDraft, serverURL string) (*http.Request, error) {
+func (e *Executor) PrepareRequest(
+	operation *model.Operation,
+	draft *model.RequestDraft,
+	serverURL string,
+	requirement *model.SecurityRequirement,
+	securitySchemes map[string]model.SecurityScheme,
+	authState map[string]model.AuthValue,
+) (*http.Request, error) {
 	if operation == nil {
 		return nil, errors.New("no operation selected")
 	}
@@ -80,6 +87,9 @@ func (e *Executor) PrepareRequest(operation *model.Operation, draft *model.Reque
 		if draft.BodyRaw != "" && strings.TrimSpace(draft.BodyMediaType) != "" {
 			request.Header.Set("Content-Type", draft.BodyMediaType)
 		}
+	}
+	if err := applyAuth(request, requirement, securitySchemes, authState); err != nil {
+		return nil, err
 	}
 
 	return request, nil

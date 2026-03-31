@@ -96,7 +96,7 @@ func (m *Model) projectResponsePaneForSize(width, height int) responseui.PanePro
 	}
 	if height > 0 {
 		// reserve space for the pane frame, section strip, and the blank spacer before the body.
-		contentHeight = max(height-6, 1)
+		contentHeight = max(height-4, 1)
 	}
 
 	return responseui.ProjectPane(responseui.PaneInput{

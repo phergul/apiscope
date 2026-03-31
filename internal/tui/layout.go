@@ -219,3 +219,26 @@ func (m *Model) rightPaneHeights(heights stackedPaneHeights) (int, int) {
 
 	return heights.Expanded, heights.Folded
 }
+
+// responsePaneSize returns the rendered response pane size for the current shell layout.
+func (m *Model) responsePaneSize() (int, int) {
+	width, height := m.resolvedDimensions()
+	bodyHeight := max(height-m.statusBarHeight(width), 12)
+	if m.viewState.ZoomedPane && m.viewState.FocusedPane == model.FocusedPaneResponse {
+		return width, bodyHeight
+	}
+
+	preset := m.viewState.RightPaneLayoutPreset
+	if preset == "" {
+		preset = chooseLayoutPreset(width)
+	}
+
+	if preset == layoutPresetWide {
+		_, rightWidth := m.wideColumnWidths(width)
+		_, responseHeight := m.rightPaneHeights(computeWidePaneHeights(bodyHeight))
+		return rightWidth, responseHeight
+	}
+
+	_, responseHeight := m.rightPaneHeights(computeNarrowPaneHeights(bodyHeight))
+	return width, responseHeight
+}

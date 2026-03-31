@@ -67,6 +67,7 @@ type Model struct {
 // NewProgram builds the CLI-facing Bubble Tea program wrapper.
 func NewProgram(service *app.Service, source string, input io.Reader, output io.Writer) *Program {
 	options := []tea.ProgramOption{
+		tea.WithAltScreen(),
 		tea.WithInput(input),
 		tea.WithOutput(output),
 	}

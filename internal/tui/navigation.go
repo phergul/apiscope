@@ -319,25 +319,22 @@ func (m *Model) scrollResponseToBoundary(last bool) {
 
 // maxResponseScrollOffset returns the largest valid response scroll offset for the active section.
 func (m *Model) maxResponseScrollOffset() int {
-	return responseui.MaxScrollOffset(m.projectResponsePane(), m.responseVisibleBodyLines())
+	return responseui.MaxScrollOffset(m.unclippedResponsePaneData(), m.responseVisibleBodyLines())
 }
 
 // responseVisibleBodyLines returns the visible response body height for the current layout.
 func (m *Model) responseVisibleBodyLines() int {
-	width, height := m.resolvedDimensions()
-	bodyHeight := max(height-m.statusBarHeight(width), 12)
+	_, paneHeight := m.responsePaneSize()
 
-	var paneHeight int
-	if m.viewState.RightPaneLayoutPreset == layoutPresetWide {
-		_, responseHeight := m.rightPaneHeights(computeWidePaneHeights(bodyHeight))
-		paneHeight = responseHeight
-	} else {
-		_, responseHeight := m.rightPaneHeights(computeNarrowPaneHeights(bodyHeight))
-		paneHeight = responseHeight
-	}
+	// reserve lines for the pane frame, section strip, and spacing above the body content.
+	return max(paneHeight-4, 1)
+}
 
-	// reserve six lines for the pane frame, section strip, and spacing above the body content.
-	return max(paneHeight-6, 1)
+// unclippedResponsePaneData projects response content with the rendered pane width but without viewport clipping.
+func (m *Model) unclippedResponsePaneData() responseui.Data {
+	width, _ := m.responsePaneSize()
+	// keep the real pane width for header wrapping, but avoid clipping the body before measuring max scroll.
+	return m.projectResponsePaneForSize(width, 0).Data
 }
 
 // maxDetailsScrollOffset returns the largest valid details scroll offset for the active section.

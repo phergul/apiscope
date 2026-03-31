@@ -81,6 +81,7 @@ func projectRows(rows []RowDescriptor, rowErrors map[string]string) []Row {
 	projected := make([]Row, 0, len(rows))
 	for _, row := range rows {
 		projected = append(projected, Row{
+			Kind:     row.Kind,
 			Label:    row.Label,
 			Meta:     row.Meta,
 			Value:    row.Value,

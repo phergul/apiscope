@@ -101,6 +101,7 @@ func DraftParameterValue(draft *model.RequestDraft, parameter model.Parameter) s
 	}
 }
 
+// bodyRows returns the editable request-body rows for the active request section.
 func bodyRows(body *model.RequestBodySpec, draft *model.RequestDraft) []RowDescriptor {
 	if body == nil {
 		return nil
@@ -137,17 +138,13 @@ func DraftBodyMediaType(operation *model.Operation, draft *model.RequestDraft) s
 	return "none"
 }
 
+// BodyPreview returns the full request body text used in the request-pane preview row.
 func BodyPreview(draft *model.RequestDraft) string {
-	if draft == nil || draft.BodyRaw == "" {
+	if draft == nil || strings.TrimSpace(draft.BodyRaw) == "" {
 		return "<empty>"
 	}
 
-	lines := strings.Split(draft.BodyRaw, "\n")
-	if len(lines) == 1 {
-		return draft.BodyRaw
-	}
-
-	return lines[0] + " ... (" + strconv.Itoa(len(lines)) + " lines)"
+	return strings.TrimRight(draft.BodyRaw, "\n")
 }
 
 func authRows(requirement *model.SecurityRequirement) []RowDescriptor {

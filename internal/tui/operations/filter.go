@@ -48,7 +48,7 @@ func RenderFooter(input FilterFooterInput) string {
 		return input.EditorView
 	}
 
-	return widgets.InputFrameStyle(false).Render("Filter: " + input.FilterText)
+	return widgets.InputTextStyle().Render("Filter: " + input.FilterText)
 }
 
 // UpdateFilterEditor handles one keypress in the operations filter editor.

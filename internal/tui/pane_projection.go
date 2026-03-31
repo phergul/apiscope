@@ -54,7 +54,7 @@ func (m *Model) projectDetailsPaneForSize(width, height int) detailsui.PaneProje
 	}
 	if height > 0 {
 		// reserve space for the pane frame, section strip, and the blank spacer before the body.
-		contentHeight = max(height-6, 1)
+		contentHeight = max(height-4, 1)
 	}
 
 	data := detailsui.PaneInput{

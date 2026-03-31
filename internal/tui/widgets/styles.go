@@ -1,6 +1,10 @@
 package widgets
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+)
 
 func BodyTextStyle() lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(CurrentTheme().Palette.Text)
@@ -40,21 +44,49 @@ func RenderValidationMessage(content string) string {
 func InputTextStyle() lipgloss.Style {
 	theme := CurrentTheme()
 	return lipgloss.NewStyle().
-		Foreground(theme.Palette.InputText)
+		Foreground(theme.Palette.InputText).
+		Background(theme.Palette.InputBackground)
 }
 
 func InputPlaceholderStyle() lipgloss.Style {
 	theme := CurrentTheme()
 	return lipgloss.NewStyle().
-		Foreground(theme.Palette.InputPlaceholder)
+		Foreground(theme.Palette.InputPlaceholder).
+		Background(theme.Palette.InputBackground)
 }
 
 func InputCursorStyle() lipgloss.Style {
 	theme := CurrentTheme()
 	return lipgloss.NewStyle().
 		Foreground(theme.Palette.InputBorder).
+		Background(theme.Palette.InputBackground).
 		Underline(true).
 		Bold(true)
+}
+
+// InputAreaStyle returns the filled background style for an input area of the requested size.
+func InputAreaStyle(width, height int) lipgloss.Style {
+	theme := CurrentTheme()
+	return lipgloss.NewStyle().
+		Width(width).
+		Height(height).
+		MaxWidth(width).
+		MaxHeight(height).
+		Background(theme.Palette.InputBackground)
+}
+
+// RenderFilledInputArea renders a full-size input background block and overlays content onto it.
+func RenderFilledInputArea(content string, width, height int) string {
+	baseLine := InputAreaStyle(width, 1).Render("")
+	var base strings.Builder
+	for row := 0; row < max(height, 1); row++ {
+		if row > 0 {
+			base.WriteString("\n")
+		}
+		base.WriteString(baseLine)
+	}
+
+	return Overlay(base.String(), content, 0, 0)
 }
 
 func InputFrameStyle(focused bool) lipgloss.Style {

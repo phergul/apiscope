@@ -47,8 +47,8 @@ func (m *Model) operationsPaneContentForHeight(height int) string {
 func (m *Model) operationsPaneContentForSizeAndHeight(width, height int) string {
 	// subtract the pane frame padding and borders before passing width to the renderer.
 	contentWidth := max(width-4, 1)
-	// the operations pane only needs to reserve the frame chrome because it has no section strip.
-	maxLines := max(height-4, 1)
+	// the operations pane only loses the top and bottom frame rows before content begins.
+	maxLines := max(height-2, 1)
 	return operationsui.Render(m.projectOperationsPaneForState(contentWidth, maxLines, m.viewState.OperationsScrollOffset).Data)
 }
 
@@ -68,7 +68,7 @@ func (m *Model) operationsPaneMetrics() (int, int) {
 		}
 	}
 
-	// subtract the pane frame padding and borders before returning inner content dimensions.
+	// keep the existing navigation metrics so scrolloff behavior does not change with the visual fill tweak.
 	return max(paneWidth-4, 1), max(paneHeight-4, 1)
 }
 
@@ -156,7 +156,7 @@ func (m *Model) operationsPaneFooter() string {
 	return operationsui.RenderFooter(operationsui.FilterFooterInput{
 		Editing:    m.viewState.ActiveEditorMode == model.EditorModeFilter,
 		FilterText: m.viewState.FilterText,
-		EditorView: m.widgets.filterInput.View(),
+		EditorView: m.widgets.filterInput.BareFilledView(),
 	})
 }
 

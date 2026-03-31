@@ -116,6 +116,31 @@ func TestRenderShowsInlineValidationState(t *testing.T) {
 	}
 }
 
+func TestRenderShowsMultilineBodyPreview(t *testing.T) {
+	t.Parallel()
+
+	content := ansi.Strip(Render(Data{
+		Sections:      []string{"Body"},
+		ActiveSection: "Body",
+		ContentWidth:  40,
+		Rows: []Row{
+			{
+				Kind:     RowKindBodyText,
+				Label:    "Body",
+				Value:    "{\n  \"name\": \"fido\",\n  \"age\": 4\n}",
+				Editable: true,
+			},
+		},
+		ActiveRow: 0,
+	}))
+
+	for _, snippet := range []string{"Body =", "Enter edit", "│ {", "│   \"name\": \"fido\",", "│   \"age\": 4"} {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected multiline body preview to include %q, got %q", snippet, content)
+		}
+	}
+}
+
 func TestRenderShowsFieldEditorAsPopupWithoutDefaultControls(t *testing.T) {
 	t.Parallel()
 

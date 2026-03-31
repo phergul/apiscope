@@ -10,6 +10,7 @@ import (
 )
 
 type Row struct {
+	Kind     RowKind
 	Label    string
 	Meta     string
 	Value    string
@@ -76,25 +77,11 @@ func RenderActiveSection(data Data) string {
 	activeIndex := requestActiveRowIndex(data.Rows, data.ActiveRow)
 	lines := make([]string, 0, len(data.Rows)*2)
 	for index, row := range data.Rows {
-		label := row.Label
-		if row.Meta != "" {
-			label += " (" + row.Meta + ")"
+		if row.Kind == RowKindBodyText {
+			lines = append(lines, renderBodyPreviewRow(row, index == activeIndex, data.ContentWidth))
+		} else {
+			lines = append(lines, renderRequestRow(row, index == activeIndex))
 		}
-
-		value := row.Value
-		if !row.Editable && value != "" {
-			value += " [read-only]"
-		}
-
-		line := label
-		if value != "" {
-			line += " = " + value
-		}
-		lines = append(lines, widgets.RenderList([]widgets.ListItem{{
-			Content:  line,
-			Selected: index == activeIndex,
-			Muted:    !row.Editable,
-		}}))
 		if strings.TrimSpace(row.Error) != "" {
 			lines = append(lines, "  "+widgets.RenderValidationMessage(row.Error))
 		}
@@ -109,6 +96,91 @@ func RenderActiveSection(data Data) string {
 	}
 
 	return renderEditorOverlay(base, data)
+}
+
+// renderRequestRow renders a standard single-line request row.
+func renderRequestRow(row Row, selected bool) string {
+	label := row.Label
+	if row.Meta != "" {
+		label += " (" + row.Meta + ")"
+	}
+
+	value := row.Value
+	if !row.Editable && value != "" {
+		value += " [read-only]"
+	}
+
+	line := label
+	if value != "" {
+		line += " = " + value
+	}
+
+	return widgets.RenderList([]widgets.ListItem{{
+		Content:  line,
+		Selected: selected,
+		Muted:    !row.Editable,
+	}})
+}
+
+// renderBodyPreviewRow renders the request body row with a multiline preview block.
+func renderBodyPreviewRow(row Row, selected bool, contentWidth int) string {
+	label := row.Label
+	if row.Meta != "" {
+		label += " (" + row.Meta + ")"
+	}
+
+	lines := []string{renderBodyPreviewHeader(label, row.Editable, selected, contentWidth), "\n"}
+	for _, previewLine := range renderBodyPreviewLines(row.Value, !row.Editable) {
+		lines = append(lines, previewLine)
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// renderBodyPreviewHeader renders the selectable body preview header row.
+func renderBodyPreviewHeader(label string, editable, selected bool, contentWidth int) string {
+	content := label + " ="
+	if editable {
+		hint := "Enter edit"
+		content += " " + hint
+	}
+
+	return widgets.RenderList([]widgets.ListItem{{
+		Content:  content,
+		Selected: selected,
+		Muted:    !editable,
+		Width:    0,
+	}})
+}
+
+// renderBodyPreviewLines renders the visible body preview lines for the body request row.
+func renderBodyPreviewLines(value string, muted bool) []string {
+	if strings.TrimSpace(value) == "" {
+		value = "<empty>"
+	}
+
+	previewLines := strings.Split(value, "\n")
+	rendered := make([]string, 0, len(previewLines))
+	for _, line := range previewLines {
+		rendered = append(rendered,
+			lipgloss.JoinHorizontal(
+				lipgloss.Top,
+				widgets.MutedTextStyle().Render("│ "),
+				bodyPreviewTextStyle(muted).Render(line),
+			),
+		)
+	}
+
+	return rendered
+}
+
+// bodyPreviewTextStyle returns the preview text style for body preview lines.
+func bodyPreviewTextStyle(muted bool) lipgloss.Style {
+	if muted {
+		return widgets.MutedTextStyle()
+	}
+
+	return widgets.BodyTextStyle()
 }
 
 // renderEditorOverlay renders the active request editor popup over the base pane content.
@@ -169,7 +241,8 @@ func editorPopupBody(data Data) string {
 		lines = append(lines, data.Edit.Context, "")
 	}
 
-	editor := strings.TrimSpace(data.Edit.View)
+	// preserve the widget's padded view so textarea backgrounds fill the full editor area.
+	editor := data.Edit.View
 	if editor == "" {
 		editor = data.Edit.Buffer
 	}
@@ -193,17 +266,17 @@ func popupWidth(data Data) int {
 	return util.Clamp(data.ContentWidth-10, 24, 64)
 }
 
-// popupX centers the request editor popup within the current pane width.
+// popupX places the editor under the selected row.
 func popupX(data Data, popup string) int {
-	popupWidth := lipgloss.Width(popup)
-	return max((max(data.ContentWidth, popupWidth)-popupWidth)/2, 0)
+	return 0
 }
 
 // popupY returns the request editor popup anchor inside the pane body.
 func popupY(data Data, popup string) int {
 	popupHeight := lipgloss.Height(popup)
 	if data.Edit.Kind == "body" {
-		return max((max(data.ContentHeight, popupHeight)-popupHeight)/2, 0)
+		// always anchor to the top of the pane body for the body editor.
+		return 0
 	}
 
 	summaryHeight := 0

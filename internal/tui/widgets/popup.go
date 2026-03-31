@@ -27,8 +27,9 @@ func RenderPopup(data PopupData) string {
 		lines = append(lines, header, "")
 	}
 
-	body := strings.TrimRight(data.Body, "\n")
+	body := data.Body
 	if body != "" {
+		// preserve trailing blank lines so embedded editors keep their full rendered height.
 		for line := range strings.SplitSeq(body, "\n") {
 			lines = append(lines, fitPopupLine(line, innerWidth))
 		}
@@ -56,12 +57,8 @@ func Overlay(base, popup string, x, y int) string {
 	if len(baseLines) == 0 {
 		baseLines = []string{""}
 	}
-	if x < 0 {
-		x = 0
-	}
-	if y < 0 {
-		y = 0
-	}
+	x = max(0, x)
+	y = max(0, y)
 
 	for len(baseLines) < y+len(popupLines) {
 		baseLines = append(baseLines, "")

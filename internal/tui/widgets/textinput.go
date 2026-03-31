@@ -74,12 +74,24 @@ func (i TextInput) View() string {
 	if !i.initialized {
 		i = NewTextInput()
 	}
-	return InputFrameStyle(i.model.Focused()).Render(i.model.View())
+
+	return InputFrameStyle(i.model.Focused()).Render(
+		InputAreaStyle(i.model.Width, 1).Render(i.model.View()),
+	)
 }
 
 func (i TextInput) BareView() string {
 	if !i.initialized {
 		i = NewTextInput()
 	}
-	return i.model.View()
+
+	return InputAreaStyle(i.model.Width, 1).Render(i.model.View())
+}
+
+func (i TextInput) BareFilledView() string {
+	if !i.initialized {
+		i = NewTextInput()
+	}
+
+	return RenderFilledInputArea(i.model.View(), i.model.Width, 1)
 }

@@ -13,6 +13,7 @@ type EditStart struct {
 	FocusField         bool
 	FocusBody          bool
 	ResetScroll        bool
+	CycleServerURL     bool
 	CycleBodyMediaType bool
 }
 
@@ -31,6 +32,8 @@ func StartEdit(
 
 	row := rows[ClampActiveRow(activeRow, len(rows))]
 	switch row.Kind {
+	case RowKindServer:
+		return EditStart{CycleServerURL: true}
 	case RowKindParameter:
 		if !row.Editable || row.Parameter == nil {
 			return EditStart{}
@@ -112,6 +115,11 @@ func lookupSecurityScheme(securitySchemes map[string]model.SecurityScheme, schem
 
 	scheme, ok := securitySchemes[schemeName]
 	return scheme, ok
+}
+
+// CycleServerURL advances the selected top-level spec server for the running session.
+func CycleServerURL(session *model.SessionState, servers []model.Server) bool {
+	return app.CycleSelectedServer(session, servers)
 }
 
 // CycleBodyMediaType advances the selected request-body media type for the current draft.

@@ -9,20 +9,22 @@ type ValidationState struct {
 
 // PaneInput contains the root-owned request pane state needed to project a render model.
 type PaneInput struct {
-	LoadInFlight    bool
-	Selected        *model.Operation
-	Draft           *model.RequestDraft
-	Security        *model.SecurityRequirement
-	SecuritySchemes map[string]model.SecurityScheme
-	AuthState       map[string]model.AuthValue
-	ActiveSection   string
-	ActiveRow       int
-	ScrollOffset    int
-	Validation      ValidationState
-	Editor          EditorInput
-	ContentWidth    int
-	ContentHeight   int
-	HelpOpen        bool
+	LoadInFlight      bool
+	Selected          *model.Operation
+	Draft             *model.RequestDraft
+	Security          *model.SecurityRequirement
+	Servers           []model.Server
+	SelectedServerURL string
+	SecuritySchemes   map[string]model.SecurityScheme
+	AuthState         map[string]model.AuthValue
+	ActiveSection     string
+	ActiveRow         int
+	ScrollOffset      int
+	Validation        ValidationState
+	Editor            EditorInput
+	ContentWidth      int
+	ContentHeight     int
+	HelpOpen          bool
 }
 
 // PaneProjection contains the rendered request pane data and any detached help overlay.
@@ -62,9 +64,9 @@ func projectPaneData(input PaneInput) (Data, EditorState) {
 		return data, EditorState{}
 	}
 
-	activeSection := ResolveActiveSection(input.ActiveSection, input.Selected, input.Security)
-	sections := AvailableSections(input.Selected, input.Security)
-	rows := ActiveRows(input.Selected, input.Draft, activeSection, input.Security, input.SecuritySchemes, input.AuthState)
+	activeSection := ResolveActiveSection(input.ActiveSection, input.Selected, input.Security, input.Servers)
+	sections := AvailableSections(input.Selected, input.Security, input.Servers)
+	rows := ActiveRows(input.Selected, input.Draft, activeSection, input.Security, input.Servers, input.SelectedServerURL, input.SecuritySchemes, input.AuthState)
 	editorState := BuildEditorState(input.Editor, rows, input.ActiveRow, input.Selected, input.Draft)
 
 	data.Sections = sections

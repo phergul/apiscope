@@ -67,6 +67,49 @@ func TestCycleBodyMediaTypeAdvancesDraftSelection(t *testing.T) {
 	}
 }
 
+func TestStartEditReturnsServerCycleAction(t *testing.T) {
+	t.Parallel()
+
+	got := StartEdit(
+		&model.Operation{Key: model.NewOperationKey("GET", "/pets")},
+		nil,
+		[]RowDescriptor{{
+			ID:       "server:url",
+			Kind:     RowKindServer,
+			Editable: true,
+		}},
+		0,
+		nil,
+		nil,
+	)
+
+	if !got.CycleServerURL {
+		t.Fatal("expected server row to trigger a server cycle action")
+	}
+	if got.Kind != model.RequestEditKindNone {
+		t.Fatalf("expected no editor to open for server row, got %q", got.Kind)
+	}
+}
+
+func TestCycleServerURLAdvancesSelectedServer(t *testing.T) {
+	t.Parallel()
+
+	session := model.SessionState{
+		SelectedServerURL: "https://api.example.com",
+	}
+
+	ok := CycleServerURL(&session, []model.Server{
+		{URL: "https://api.example.com"},
+		{URL: "https://staging.example.com"},
+	})
+	if !ok {
+		t.Fatal("expected server cycle to succeed")
+	}
+	if session.SelectedServerURL != "https://staging.example.com" {
+		t.Fatalf("expected selected server to advance, got %q", session.SelectedServerURL)
+	}
+}
+
 func TestSaveEditWritesBodyBufferToDraft(t *testing.T) {
 	t.Parallel()
 

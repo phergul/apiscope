@@ -856,6 +856,76 @@ func TestModelRequestBodyMediaTypeCyclesOnEnter(t *testing.T) {
 	}
 }
 
+func TestModelRequestServerCyclesOnEnterAndExecutionUsesNewSelection(t *testing.T) {
+	t.Parallel()
+
+	production := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("production"))
+	}))
+	defer production.Close()
+
+	staging := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("staging"))
+	}))
+	defer staging.Close()
+
+	m := &Model{
+		service: app.NewService(nil),
+		session: model.SessionState{
+			Spec: &model.APISpec{
+				Servers: []model.Server{
+					{URL: production.URL, Description: "Production"},
+					{URL: staging.URL, Description: "Staging"},
+				},
+				Operations: []model.Operation{
+					{
+						Key:    model.NewOperationKey("GET", "/pets"),
+						Method: "GET",
+						Path:   "/pets",
+						Responses: []model.ResponseSpec{
+							{StatusCode: "200", Description: "OK"},
+						},
+					},
+				},
+			},
+			SelectedServerURL:    production.URL,
+			SelectedOperationKey: model.NewOperationKey("GET", "/pets"),
+			RequestDrafts:        map[model.DraftKey]*model.RequestDraft{},
+		},
+		viewState: model.ViewState{
+			FocusedPane: model.FocusedPaneRequest,
+			VisibleOperationKeys: []model.OperationKey{
+				model.NewOperationKey("GET", "/pets"),
+			},
+		},
+		panes: paneState{
+			activeRequestSection: requestui.SectionServer,
+		},
+	}
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated := updatedModel.(*Model)
+	if updated.session.SelectedServerURL != staging.URL {
+		t.Fatalf("expected enter on server row to cycle to staging, got %q", updated.session.SelectedServerURL)
+	}
+
+	updatedModel, cmd := updated.Update(tea.KeyMsg{Type: tea.KeyCtrlR})
+	updated = updatedModel.(*Model)
+	if cmd == nil {
+		t.Fatal("expected ctrl+r to start execution after switching servers")
+	}
+
+	msg := cmd()
+	updatedModel, _ = updated.Update(msg)
+	updated = updatedModel.(*Model)
+	if updated.session.LastResponse == nil {
+		t.Fatal("expected live response after execution")
+	}
+	if got := string(updated.session.LastResponse.Body); got != "staging" {
+		t.Fatalf("expected execution to use staging server, got %q", got)
+	}
+}
+
 func TestModelRequestBodyEditorSavesAndCancels(t *testing.T) {
 	t.Parallel()
 

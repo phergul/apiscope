@@ -97,3 +97,30 @@ func TestProjectPaneBuildsEditableAuthRows(t *testing.T) {
 		t.Fatalf("expected masked auth summary, got %q", projection.Data.Rows[0].Value)
 	}
 }
+
+func TestProjectPaneBuildsServerSwitchRow(t *testing.T) {
+	t.Parallel()
+
+	projection := ProjectPane(PaneInput{
+		Selected: &model.Operation{},
+		Servers: []model.Server{
+			{URL: "https://api.example.com", Description: "Production"},
+			{URL: "https://staging.example.com", Description: "Staging"},
+		},
+		SelectedServerURL: "https://staging.example.com",
+		ActiveSection:     SectionServer,
+	})
+
+	if projection.Data.ActiveSection != SectionServer {
+		t.Fatalf("expected server section, got %q", projection.Data.ActiveSection)
+	}
+	if len(projection.Data.Rows) != 1 {
+		t.Fatalf("expected one server row, got %d", len(projection.Data.Rows))
+	}
+	if projection.Data.Rows[0].Label != "Base URL" {
+		t.Fatalf("expected base url row label, got %q", projection.Data.Rows[0].Label)
+	}
+	if projection.Data.Rows[0].Value != "https://staging.example.com" {
+		t.Fatalf("expected selected server url to render, got %q", projection.Data.Rows[0].Value)
+	}
+}

@@ -151,26 +151,26 @@ func (m *Model) syncActiveDetailsSection() {
 
 // availableRequestSections returns the visible request sections for the selected operation.
 func (m *Model) availableRequestSections() []string {
-	return requestui.AvailableSections(m.resolvedSelectedOperation(), m.effectiveSecurityRequirement(m.resolvedSelectedOperation()))
+	return requestui.AvailableSections(m.resolvedSelectedOperation(), m.effectiveSecurityRequirement(m.resolvedSelectedOperation()), m.topLevelServers())
 }
 
 // resetActiveRequestSection resets the active request section to the first available section.
 func (m *Model) resetActiveRequestSection() {
-	m.panes.activeRequestSection = requestui.ResolveActiveSection("", m.resolvedSelectedOperation(), m.effectiveSecurityRequirement(m.resolvedSelectedOperation()))
+	m.panes.activeRequestSection = requestui.ResolveActiveSection("", m.resolvedSelectedOperation(), m.effectiveSecurityRequirement(m.resolvedSelectedOperation()), m.topLevelServers())
 	m.resetRequestCursorAndScroll()
 	m.clearRequestValidation()
 }
 
 // moveRequestSection moves the active request section by the given direction.
 func (m *Model) moveRequestSection(direction int) {
-	m.panes.activeRequestSection = requestui.MoveActiveSection(m.panes.activeRequestSection, direction, m.resolvedSelectedOperation(), m.effectiveSecurityRequirement(m.resolvedSelectedOperation()))
+	m.panes.activeRequestSection = requestui.MoveActiveSection(m.panes.activeRequestSection, direction, m.resolvedSelectedOperation(), m.effectiveSecurityRequirement(m.resolvedSelectedOperation()), m.topLevelServers())
 	m.resetRequestCursorAndScroll()
 	m.clearRequestValidation()
 }
 
 // setRequestSectionBoundary moves the active request section to the first or last section.
 func (m *Model) setRequestSectionBoundary(last bool) {
-	m.panes.activeRequestSection = requestui.BoundaryActiveSection(last, m.resolvedSelectedOperation(), m.effectiveSecurityRequirement(m.resolvedSelectedOperation()))
+	m.panes.activeRequestSection = requestui.BoundaryActiveSection(last, m.resolvedSelectedOperation(), m.effectiveSecurityRequirement(m.resolvedSelectedOperation()), m.topLevelServers())
 	m.resetRequestCursorAndScroll()
 	m.clearRequestValidation()
 }

@@ -125,6 +125,9 @@ func (m *Model) projectStatusBar() statusbarui.Data {
 		data.OperationLabel = strings.ToUpper(selected.Method) + " " + selected.Path
 	}
 	if m.session.Spec != nil {
+		data.SelectedServer = m.session.SelectedServerURL
+	}
+	if m.session.Spec != nil {
 		data.OperationCount = len(m.session.Spec.Operations)
 		data.VisibleCount = len(m.viewState.VisibleOperationKeys)
 		data.WarningCount = len(m.session.Spec.Warnings)

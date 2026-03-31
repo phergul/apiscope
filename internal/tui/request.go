@@ -27,6 +27,8 @@ func (m *Model) activeRequestRows() []requestui.RowDescriptor {
 		app.EnsureRequestDraft(&m.session, selected),
 		m.panes.activeRequestSection,
 		m.effectiveSecurityRequirement(selected),
+		m.topLevelServers(),
+		m.session.SelectedServerURL,
 		m.securitySchemes(),
 		m.session.AuthState,
 	)
@@ -178,23 +180,25 @@ func (m *Model) projectRequestPaneForSize(width, height int) requestui.PaneProje
 	selected := m.resolvedSelectedOperation()
 	draft := app.EnsureRequestDraft(&m.session, selected)
 	security := m.effectiveSecurityRequirement(selected)
-	activeSection := requestui.ResolveActiveSection(m.panes.activeRequestSection, selected, security)
+	activeSection := requestui.ResolveActiveSection(m.panes.activeRequestSection, selected, security, m.topLevelServers())
 
 	return requestui.ProjectPane(requestui.PaneInput{
-		LoadInFlight:    m.viewState.LoadInFlight,
-		Selected:        selected,
-		Draft:           draft,
-		Security:        security,
-		SecuritySchemes: m.securitySchemes(),
-		AuthState:       m.session.AuthState,
-		ActiveSection:   activeSection,
-		ActiveRow:       m.viewState.RequestActiveRow,
-		ScrollOffset:    m.viewState.RequestScrollOffset,
-		Validation:      m.requestValidationState(activeSection),
-		Editor:          m.requestEditorInput(),
-		ContentWidth:    contentWidth,
-		ContentHeight:   contentHeight,
-		HelpOpen:        m.requestUI.editHelpOpen,
+		LoadInFlight:      m.viewState.LoadInFlight,
+		Selected:          selected,
+		Draft:             draft,
+		Security:          security,
+		Servers:           m.topLevelServers(),
+		SelectedServerURL: m.session.SelectedServerURL,
+		SecuritySchemes:   m.securitySchemes(),
+		AuthState:         m.session.AuthState,
+		ActiveSection:     activeSection,
+		ActiveRow:         m.viewState.RequestActiveRow,
+		ScrollOffset:      m.viewState.RequestScrollOffset,
+		Validation:        m.requestValidationState(activeSection),
+		Editor:            m.requestEditorInput(),
+		ContentWidth:      contentWidth,
+		ContentHeight:     contentHeight,
+		HelpOpen:          m.requestUI.editHelpOpen,
 	})
 }
 
@@ -230,6 +234,15 @@ func (m *Model) securitySchemes() map[string]model.SecurityScheme {
 	return m.session.Spec.SecuritySchemes
 }
 
+// topLevelServers returns the normalized top-level spec servers for the loaded document.
+func (m *Model) topLevelServers() []model.Server {
+	if m.session.Spec == nil {
+		return nil
+	}
+
+	return m.session.Spec.Servers
+}
+
 // requestPaneContentForSize renders the request pane body for the given pane size.
 func (m *Model) requestPaneContentForSize(width, height int) string {
 	return requestui.Render(m.projectRequestPaneForSize(width, height).Data)
@@ -255,6 +268,10 @@ func (m *Model) beginRequestEdit() {
 	)
 	if start.CycleBodyMediaType {
 		requestui.CycleBodyMediaType(&m.session, selected)
+		return
+	}
+	if start.CycleServerURL {
+		requestui.CycleServerURL(&m.session, m.topLevelServers())
 		return
 	}
 	if start.Kind == model.RequestEditKindNone {

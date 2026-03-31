@@ -11,6 +11,7 @@ import (
 type RowKind string
 
 const (
+	RowKindServer        RowKind = "server"
 	RowKindParameter     RowKind = "parameter"
 	RowKindBodyMediaType RowKind = "body_media_type"
 	RowKindBodyText      RowKind = "body_text"
@@ -22,6 +23,7 @@ type RowDescriptor struct {
 	ID             string
 	Kind           RowKind
 	Parameter      *model.Parameter
+	ServerURL      string
 	AuthSchemeName string
 	AuthField      app.AuthField
 	Label          string
@@ -36,6 +38,8 @@ func ActiveRows(
 	draft *model.RequestDraft,
 	activeSection string,
 	security *model.SecurityRequirement,
+	servers []model.Server,
+	selectedServerURL string,
 	securitySchemes map[string]model.SecurityScheme,
 	authState map[string]model.AuthValue,
 ) []RowDescriptor {
@@ -52,6 +56,8 @@ func ActiveRows(
 		return parameterRows(describe.ParametersInLocation(selected.Parameters, model.ParameterLocationHeader), draft)
 	case "Cookie":
 		return parameterRows(describe.ParametersInLocation(selected.Parameters, model.ParameterLocationCookie), draft)
+	case SectionServer:
+		return serverRows(servers, selectedServerURL)
 	case SectionBody:
 		return bodyRows(selected.RequestBody, draft)
 	case SectionAuth:
@@ -59,6 +65,42 @@ func ActiveRows(
 	default:
 		return nil
 	}
+}
+
+// serverRows builds the request-pane row used to switch between top-level spec servers.
+func serverRows(servers []model.Server, selectedServerURL string) []RowDescriptor {
+	if len(servers) <= 1 {
+		return nil
+	}
+
+	selected := selectedServerURL
+	selectedDescription := ""
+	for _, server := range servers {
+		if server.URL != selectedServerURL {
+			continue
+		}
+		selectedDescription = server.Description
+		break
+	}
+	if strings.TrimSpace(selected) == "" {
+		selected = servers[0].URL
+		selectedDescription = servers[0].Description
+	}
+
+	meta := "spec server"
+	if strings.TrimSpace(selectedDescription) != "" {
+		meta = selectedDescription
+	}
+
+	return []RowDescriptor{{
+		ID:        "server:url",
+		Kind:      RowKindServer,
+		ServerURL: selected,
+		Label:     "Base URL",
+		Meta:      meta,
+		Value:     selected,
+		Editable:  true,
+	}}
 }
 
 // parameterRows builds request rows for one parameter location.

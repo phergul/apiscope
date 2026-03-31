@@ -14,6 +14,7 @@ type Data struct {
 	HelpHint       string
 	Focus          string
 	OperationLabel string
+	SelectedServer string
 	HasSpec        bool
 	OperationCount int
 	VisibleCount   int
@@ -32,6 +33,9 @@ func Render(data Data, width int) string {
 	}
 	if strings.TrimSpace(data.OperationLabel) != "" {
 		parts = append(parts, fmt.Sprintf("Operation: %s", data.OperationLabel))
+	}
+	if strings.TrimSpace(data.SelectedServer) != "" {
+		parts = append(parts, fmt.Sprintf("Server: %s", data.SelectedServer))
 	}
 	if data.HasSpec {
 		parts = append(parts, fmt.Sprintf("Count: %d", data.OperationCount))

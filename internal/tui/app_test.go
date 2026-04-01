@@ -545,6 +545,38 @@ func TestModelRequestSectionNavigationMovesAcrossParameterBodyAndAuth(t *testing
 	}
 }
 
+func TestModelProjectRequestPaneShowsSupportNotesForUnsupportedAndDowngradedInputs(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.panes.activeRequestSection = "Query"
+	m.session.Spec.Operations[0].Parameters = append(m.session.Spec.Operations[0].Parameters,
+		model.Parameter{
+			Name:             "tags",
+			In:               model.ParameterLocationQuery,
+			CollectionFormat: "pipes",
+			Schema:           &model.Schema{Type: "array"},
+		},
+		model.Parameter{
+			Name:    "legacy",
+			In:      model.ParameterLocationQuery,
+			Content: []model.MediaTypeSpec{{MediaType: "application/json"}},
+		},
+	)
+
+	data := m.projectRequestPane()
+	if len(data.SupportNotice) != 2 {
+		t.Fatalf("expected section support notes for query inputs, got %#v", data.SupportNotice)
+	}
+	if len(data.Rows) != 2 {
+		t.Fatalf("expected projected query rows, got %#v", data.Rows)
+	}
+	if len(data.Rows[0].Support) != 1 || len(data.Rows[1].Support) != 1 {
+		t.Fatalf("expected row support notes, got %#v", data.Rows)
+	}
+}
+
 func TestModelRequestRowNavigationMovesWithinActiveSection(t *testing.T) {
 	t.Parallel()
 
@@ -742,6 +774,50 @@ func TestModelCtrlRExecutesAndSelectsLiveResponse(t *testing.T) {
 	}
 	if updated.session.LastResponse.StatusCode != http.StatusOK {
 		t.Fatalf("expected HTTP 200 response, got %d", updated.session.LastResponse.StatusCode)
+	}
+}
+
+func TestModelCtrlRStillExecutesWhenOperationShowsSupportNotes(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	m := newLoadedModelForNavigation()
+	m.service = app.NewService(nil)
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.session.SelectedServerURL = server.URL
+	m.session.AuthState = map[string]model.AuthValue{
+		"api_key": {Type: model.AuthSchemeValueTypeAPIKey, APIKey: "secret"},
+	}
+	m.session.Spec.Operations[0].Parameters = append(m.session.Spec.Operations[0].Parameters, model.Parameter{
+		Name:             "tags",
+		In:               model.ParameterLocationQuery,
+		CollectionFormat: "pipes",
+		Schema:           &model.Schema{Type: "array"},
+	})
+	draft := m.ensureSelectedRequestDraft()
+	draft.PathParams["petId"] = "abc"
+	draft.BodyRaw = `{"name":"fido"}`
+	draft.BodyMediaType = "application/json"
+	draft.QueryParams["tags"] = "a|b"
+
+	updatedModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlR})
+	updated := updatedModel.(*Model)
+	if cmd == nil {
+		t.Fatal("expected ctrl+r to execute even with support notes present")
+	}
+
+	msg := cmd()
+	updatedModel, _ = updated.Update(msg)
+	updated = updatedModel.(*Model)
+	if updated.session.LastResponse == nil {
+		t.Fatal("expected response after execution")
+	}
+	if updated.session.LastResponse.TransportError != "" {
+		t.Fatalf("expected successful execution, got %q", updated.session.LastResponse.TransportError)
 	}
 }
 

@@ -2,9 +2,30 @@ package request
 
 import "github.com/phergul/apiscope/internal/model"
 
+// SupportSeverity describes how strongly the request pane should call out a support note.
+type SupportSeverity string
+
+const (
+	SupportSeverityUnsupported SupportSeverity = "unsupported"
+	SupportSeverityDowngraded  SupportSeverity = "downgraded"
+)
+
+// SupportNote describes one non-blocking support note rendered in the request pane.
+type SupportNote struct {
+	Severity SupportSeverity
+	Summary  string
+	Detail   string
+}
+
 type ValidationState struct {
 	MessagesBySection []string
 	RowErrors         map[string]string
+}
+
+// SupportState carries section-level and row-level support notes for request rendering.
+type SupportState struct {
+	MessagesBySection []SupportNote
+	RowNotes          map[string][]SupportNote
 }
 
 // PaneInput contains the root-owned request pane state needed to project a render model.
@@ -21,6 +42,7 @@ type PaneInput struct {
 	ActiveRow         int
 	ScrollOffset      int
 	Validation        ValidationState
+	Support           SupportState
 	Editor            EditorInput
 	ContentWidth      int
 	ContentHeight     int
@@ -74,7 +96,8 @@ func projectPaneData(input PaneInput) (Data, EditorState) {
 	data.ActiveRow = input.ActiveRow
 	data.Edit = BuildEditView(editorState)
 	data.ValidationNotice = input.Validation.MessagesBySection
-	data.Rows = projectRows(rows, input.Validation.RowErrors)
+	data.SupportNotice = input.Support.MessagesBySection
+	data.Rows = projectRows(rows, input.Validation.RowErrors, input.Support.RowNotes)
 	if len(data.Sections) == 0 {
 		data.EmptyState = "This operation does not declare request parameters, request body, or auth requirements."
 	}
@@ -83,7 +106,7 @@ func projectPaneData(input PaneInput) (Data, EditorState) {
 }
 
 // projectRows projects internal request row descriptors into render rows with validation errors.
-func projectRows(rows []RowDescriptor, rowErrors map[string]string) []Row {
+func projectRows(rows []RowDescriptor, rowErrors map[string]string, rowNotes map[string][]SupportNote) []Row {
 	projected := make([]Row, 0, len(rows))
 	for _, row := range rows {
 		target := row.ValidationTarget
@@ -97,6 +120,7 @@ func projectRows(rows []RowDescriptor, rowErrors map[string]string) []Row {
 			Value:    row.Value,
 			Editable: row.Editable,
 			Error:    rowErrors[target],
+			Support:  append([]SupportNote(nil), rowNotes[target]...),
 		})
 	}
 

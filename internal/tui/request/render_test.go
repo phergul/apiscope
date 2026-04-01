@@ -23,8 +23,13 @@ func TestRenderShowsGroupedInputsAndAuthRows(t *testing.T) {
 			{
 				Label:    "legacy",
 				Meta:     "optional, content",
-				Value:    "<unsupported: content-based parameter>",
+				Value:    "content-based input",
 				Editable: false,
+				Support: []SupportNote{{
+					Severity: SupportSeverityUnsupported,
+					Summary:  "Content-based parameter is read-only in v1.",
+					Detail:   "This parameter uses media-type content. Pane 3 cannot edit or send it yet.",
+				}},
 			},
 		},
 		ActiveRow: 0,
@@ -33,11 +38,52 @@ func TestRenderShowsGroupedInputsAndAuthRows(t *testing.T) {
 	wantSnippets := []string{
 		"Path  Query  Body  Auth",
 		" petId (required, string) = <unset>",
-		"legacy (optional, content) = <unsupported: content-based parameter> [read-only]",
+		"legacy (optional, content) = content-based input [read-only]",
+		"unsupported: Content-based parameter is read-only in v1. This parameter uses media-type content. Pane 3 cannot edit or send it yet.",
 	}
 	for _, snippet := range wantSnippets {
 		if !strings.Contains(content, snippet) {
 			t.Fatalf("expected request pane to include %q, got %q", snippet, content)
+		}
+	}
+}
+
+func TestRenderShowsSupportSummaryAndValidationTogether(t *testing.T) {
+	t.Parallel()
+
+	content := ansi.Strip(Render(Data{
+		Sections:         []string{"Query"},
+		ActiveSection:    "Query",
+		ValidationNotice: []string{"Required value missing."},
+		SupportNotice: []SupportNote{{
+			Severity: SupportSeverityDowngraded,
+			Summary:  `Swagger collectionFormat "pipes" needs manual formatting.`,
+			Detail:   "Enter the fully formatted value yourself.",
+		}},
+		Rows: []Row{
+			{
+				Label:    "tags",
+				Meta:     "optional, array",
+				Value:    "<unset>",
+				Editable: true,
+				Error:    "Required value missing.",
+				Support: []SupportNote{{
+					Severity: SupportSeverityDowngraded,
+					Summary:  `Swagger collectionFormat "pipes" needs manual formatting.`,
+					Detail:   "Enter the fully formatted value yourself.",
+				}},
+			},
+		},
+		ActiveRow: 0,
+	}))
+
+	for _, snippet := range []string{
+		"Validation:",
+		"Support notes:",
+		`downgraded: Swagger collectionFormat "pipes" needs manual formatting. Enter the fully formatted value yourself.`,
+	} {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected mixed validation/support render to include %q, got %q", snippet, content)
 		}
 	}
 }

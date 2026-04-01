@@ -180,3 +180,48 @@ func TestProjectPaneBuildsAlternativeBlocksWithoutDeduplicatingSchemes(t *testin
 		t.Fatalf("expected duplicated scheme rows to remain distinct, got %#v", rows)
 	}
 }
+
+func TestProjectPaneBuildsSupportNotesForActiveSectionAndRows(t *testing.T) {
+	t.Parallel()
+
+	projection := ProjectPane(PaneInput{
+		Selected: &model.Operation{
+			Parameters: []model.Parameter{
+				{
+					Name:    "legacy",
+					In:      model.ParameterLocationQuery,
+					Content: []model.MediaTypeSpec{{MediaType: "application/json"}},
+				},
+			},
+		},
+		Draft:         &model.RequestDraft{},
+		ActiveSection: "Query",
+		Support: SupportState{
+			MessagesBySection: []SupportNote{{
+				Severity: SupportSeverityUnsupported,
+				Summary:  "Content-based parameter is read-only in v1.",
+				Detail:   "This parameter uses media-type content. Pane 3 cannot edit or send it yet.",
+			}},
+			RowNotes: map[string][]SupportNote{
+				"query:legacy": {{
+					Severity: SupportSeverityUnsupported,
+					Summary:  "Content-based parameter is read-only in v1.",
+					Detail:   "This parameter uses media-type content. Pane 3 cannot edit or send it yet.",
+				}},
+			},
+		},
+	})
+
+	if len(projection.Data.SupportNotice) != 1 {
+		t.Fatalf("expected section support note, got %#v", projection.Data.SupportNotice)
+	}
+	if len(projection.Data.Rows) != 1 {
+		t.Fatalf("expected one projected row, got %d", len(projection.Data.Rows))
+	}
+	if len(projection.Data.Rows[0].Support) != 1 {
+		t.Fatalf("expected row support note, got %#v", projection.Data.Rows[0].Support)
+	}
+	if projection.Data.Rows[0].Value != "content-based input" {
+		t.Fatalf("expected clearer content-based row value, got %q", projection.Data.Rows[0].Value)
+	}
+}

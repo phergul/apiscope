@@ -16,6 +16,7 @@ type Row struct {
 	Value    string
 	Editable bool
 	Error    string
+	Support  []SupportNote
 }
 
 type EditView struct {
@@ -36,6 +37,7 @@ type Data struct {
 	Edit             EditView
 	EmptyState       string
 	ValidationNotice []string
+	SupportNotice    []SupportNote
 	ContentWidth     int
 	ContentHeight    int
 }
@@ -67,6 +69,9 @@ func RenderActiveSection(data Data) string {
 		if summary := renderValidationSummary(data.ValidationNotice); summary != "" {
 			parts = append(parts, summary)
 		}
+		if summary := renderSupportSummary(data.SupportNotice); summary != "" {
+			parts = append(parts, summary)
+		}
 		base := strings.Join(append(parts, "No inputs available."), "\n\n")
 		if data.Edit.Kind == "" {
 			return base
@@ -85,9 +90,15 @@ func RenderActiveSection(data Data) string {
 		if strings.TrimSpace(row.Error) != "" {
 			lines = append(lines, "  "+widgets.RenderValidationMessage(row.Error))
 		}
+		for _, note := range row.Support {
+			lines = append(lines, "  "+renderSupportMessage(note))
+		}
 	}
 
 	if summary := renderValidationSummary(data.ValidationNotice); summary != "" {
+		parts = append(parts, summary)
+	}
+	if summary := renderSupportSummary(data.SupportNotice); summary != "" {
 		parts = append(parts, summary)
 	}
 	base := strings.Join(append(parts, strings.Join(lines, "\n")), "\n\n")
@@ -234,6 +245,35 @@ func renderValidationSummary(messages []string) string {
 	return strings.Join(lines, "\n")
 }
 
+// renderSupportSummary renders non-blocking request support notes above the active section body.
+func renderSupportSummary(notes []SupportNote) string {
+	if len(notes) == 0 {
+		return ""
+	}
+
+	lines := []string{widgets.RenderMutedHeading("Support notes:")}
+	for _, note := range notes {
+		lines = append(lines, renderSupportMessage(note))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// renderSupportMessage renders one non-blocking unsupported or downgraded support note.
+func renderSupportMessage(note SupportNote) string {
+	label := string(note.Severity)
+	if label == "" {
+		label = "note"
+	}
+
+	content := label + ": " + note.Summary
+	if strings.TrimSpace(note.Detail) != "" {
+		content += " " + note.Detail
+	}
+
+	return widgets.WarningTextStyle().Render(content)
+}
+
 // editorPopupBody renders the request editor popup body and optional context line.
 func editorPopupBody(data Data) string {
 	lines := make([]string, 0, 5)
@@ -282,6 +322,9 @@ func popupY(data Data, popup string) int {
 	summaryHeight := 0
 	if len(data.ValidationNotice) > 0 {
 		summaryHeight = lipgloss.Height(renderValidationSummary(data.ValidationNotice)) + 2
+	}
+	if len(data.SupportNotice) > 0 {
+		summaryHeight += lipgloss.Height(renderSupportSummary(data.SupportNotice)) + 2
 	}
 	target := summaryHeight + data.ActiveRow + 1
 	maxY := max(data.ContentHeight-popupHeight, 0)

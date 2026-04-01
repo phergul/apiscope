@@ -131,7 +131,7 @@ func parameterRows(parameters []model.Parameter, draft *model.RequestDraft) []Ro
 // ParameterValue returns the rendered parameter value and whether the row is editable.
 func ParameterValue(parameter model.Parameter, draft *model.RequestDraft) (string, bool) {
 	if len(parameter.Content) > 0 {
-		return "<unsupported: content-based parameter>", false
+		return "content-based input", false
 	}
 
 	value := DraftParameterValue(draft, parameter)

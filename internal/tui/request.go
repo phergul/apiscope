@@ -156,6 +156,44 @@ func (m *Model) requestValidationState(activeSection string) requestui.Validatio
 	return state
 }
 
+// requestSupportState flattens request support notes into request-pane inputs.
+func (m *Model) requestSupportState(activeSection string) requestui.SupportState {
+	selected := m.resolvedSelectedOperation()
+	notes := app.ProjectRequestSupportNotes(selected)
+	if len(notes) == 0 {
+		return requestui.SupportState{}
+	}
+
+	state := requestui.SupportState{
+		RowNotes: make(map[string][]requestui.SupportNote),
+	}
+	for _, note := range notes {
+		projected := requestui.SupportNote{
+			Severity: requestSupportSeverity(note.Severity),
+			Summary:  note.Summary,
+			Detail:   note.Detail,
+		}
+		if note.Section == activeSection {
+			state.MessagesBySection = append(state.MessagesBySection, projected)
+		}
+		if note.Target != "" {
+			state.RowNotes[note.Target] = append(state.RowNotes[note.Target], projected)
+		}
+	}
+
+	return state
+}
+
+// requestSupportSeverity maps app-layer support severity into request-pane render severity.
+func requestSupportSeverity(severity app.RequestSupportSeverity) requestui.SupportSeverity {
+	switch severity {
+	case app.RequestSupportSeverityDowngraded:
+		return requestui.SupportSeverityDowngraded
+	default:
+		return requestui.SupportSeverityUnsupported
+	}
+}
+
 // projectRequestPane returns the unwindowed request pane data for default rendering and tests.
 func (m *Model) projectRequestPane() requestui.Data {
 	return m.projectRequestPaneForSize(0, 0).Data
@@ -195,6 +233,7 @@ func (m *Model) projectRequestPaneForSize(width, height int) requestui.PaneProje
 		ActiveRow:         m.viewState.RequestActiveRow,
 		ScrollOffset:      m.viewState.RequestScrollOffset,
 		Validation:        m.requestValidationState(activeSection),
+		Support:           m.requestSupportState(activeSection),
 		Editor:            m.requestEditorInput(),
 		ContentWidth:      contentWidth,
 		ContentHeight:     contentHeight,

@@ -157,7 +157,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.session.ActiveLoadRequestID = msg.requestID
 			m.viewState.ActiveLoadRequestID = msg.requestID
 			m.viewState.LoadInFlight = false
-			m.viewState.Notice = "load failed"
+			m.viewState.Notice = "Spec load failed"
 			return m, nil
 		}
 
@@ -171,6 +171,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewState.RightPaneLayoutPreset = chooseLayoutPreset(m.shell.width)
 		m.syncVisibleOperations()
 		m.syncActivePaneSections()
+		m.viewState.Notice = "Spec loaded"
 		return m, nil
 	case executeFinishedMsg:
 		if msg.requestID != m.viewState.ActiveExecuteRequestID {
@@ -190,9 +191,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				TransportNote: msg.result.Response.TransportError,
 			})
 		}
-		m.viewState.Notice = "request completed"
+		m.viewState.Notice = "Request succeeded"
 		if msg.result.Response != nil && msg.result.Response.TransportError != "" {
-			m.viewState.Notice = "request failed"
+			m.viewState.Notice = "Request failed"
 		}
 		m.viewState.FocusedPane = model.FocusedPaneResponse
 		m.viewState.ExpandedRightPane = model.FocusedPaneResponse
@@ -223,7 +224,7 @@ func (m *Model) startLoadCmd() tea.Cmd {
 	m.session.ActiveLoadRequestID = requestID
 	m.viewState.ActiveLoadRequestID = requestID
 	m.viewState.LoadInFlight = true
-	m.viewState.Notice = "loading spec"
+	m.viewState.Notice = "Loading spec"
 	m.shell.loadErr = nil
 
 	service := m.service

@@ -229,7 +229,7 @@ func TestRenderZoomLayoutShowsOnlyFocusedPaneAndStatusBar(t *testing.T) {
 	if strings.Contains(content, "1 Operations") || strings.Contains(content, "2 Details") || strings.Contains(content, "3 Request") {
 		t.Fatalf("expected only the focused pane to render in zoom mode, got %q", content)
 	}
-	if !strings.Contains(content, "z zoom") || !strings.Contains(content, "q quit") {
+	if !strings.Contains(content, "Help - ?") {
 		t.Fatalf("expected status bar to remain visible in zoom mode, got %q", content)
 	}
 }
@@ -260,10 +260,10 @@ func TestOperationsPaneContentScrollsWithFiveRowBuffer(t *testing.T) {
 	m.ensureActiveOperationVisible()
 
 	content := stripANSI(m.operationsPaneContentForSizeAndHeight(32, 18))
-	if strings.Contains(content, "/pets/04") {
-		t.Fatalf("expected rows above the five-row buffer to scroll out, got %q", content)
+	if strings.Contains(content, "/pets/03") {
+		t.Fatalf("expected rows above the buffered window to scroll out, got %q", content)
 	}
-	for _, snippet := range []string{"/pets/05", "/pets/10", "/pets/15"} {
+	for _, snippet := range []string{"/pets/04", "/pets/10", "/pets/15"} {
 		if !strings.Contains(content, snippet) {
 			t.Fatalf("expected operations pane to keep buffered row %q visible, got %q", snippet, content)
 		}

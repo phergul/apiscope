@@ -55,7 +55,7 @@ func (m *Model) loadSelectedHistoryResponse() {
 	m.setFocusedPane(model.FocusedPaneResponse)
 	m.panes.activeResponseSection = responseui.SectionLive
 	m.viewState.ResponseScrollOffset = 0
-	m.viewState.Notice = "loaded previous response #" + formatRequestID(entry.RequestID)
+	m.viewState.Notice = "Loaded previous response #" + formatRequestID(entry.RequestID)
 }
 
 // restoreSelectedHistoryRequest restores the executed request inputs so the user can rerun it.
@@ -75,7 +75,7 @@ func (m *Model) restoreSelectedHistoryRequest() {
 	)
 	m.syncActiveRequestRow()
 	m.clearRequestValidation()
-	m.viewState.Notice = "restored request #" + formatRequestID(entry.RequestID)
+	m.viewState.Notice = "Restored request #" + formatRequestID(entry.RequestID)
 }
 
 // renderHistoryPopup overlays the centered previous-requests popup above the shell layout.

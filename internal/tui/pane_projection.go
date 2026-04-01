@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"strings"
-
 	"github.com/phergul/apiscope/internal/model"
 	detailsui "github.com/phergul/apiscope/internal/tui/details"
 	operationsui "github.com/phergul/apiscope/internal/tui/operations"
@@ -112,56 +110,8 @@ func (m *Model) projectResponsePaneForSize(width, height int) responseui.PanePro
 
 // projectStatusBar projects root state into the status bar render model.
 func (m *Model) projectStatusBar() statusbarui.Data {
-	data := statusbarui.Data{
-		Source:   m.shell.source,
-		State:    m.loadStateLabel(),
-		Focus:    focusedPaneLabel(m.viewState.FocusedPane),
-		HasSpec:  m.session.Spec != nil,
-		Notice:   m.viewState.Notice,
-		HelpHint: m.projectHelpOverlay().Hint,
-	}
-
-	if selected := m.resolvedSelectedOperation(); selected != nil {
-		data.OperationLabel = strings.ToUpper(selected.Method) + " " + selected.Path
-	}
-	if m.session.Spec != nil {
-		data.SelectedServer = m.session.SelectedServerURL
-	}
-	if m.session.Spec != nil {
-		data.OperationCount = len(m.session.Spec.Operations)
-		data.VisibleCount = len(m.viewState.VisibleOperationKeys)
-		data.WarningCount = len(m.session.Spec.Warnings)
-	}
-
-	return data
-}
-
-// loadStateLabel returns the current high-level app activity label for the status bar.
-func (m *Model) loadStateLabel() string {
-	switch {
-	case m.viewState.ExecuteInFlight:
-		return "executing"
-	case m.viewState.LoadInFlight:
-		return "loading"
-	case m.shell.loadErr != nil:
-		return "load failed"
-	case m.session.Spec != nil:
-		return "loaded"
-	default:
-		return "idle"
-	}
-}
-
-// focusedPaneLabel formats a focused pane identifier for the status bar.
-func focusedPaneLabel(pane model.FocusedPane) string {
-	switch pane {
-	case model.FocusedPaneDetails:
-		return "details"
-	case model.FocusedPaneRequest:
-		return "request"
-	case model.FocusedPaneResponse:
-		return "response"
-	default:
-		return "operations"
+	return statusbarui.Data{
+		Status:   m.viewState.Notice,
+		HelpHint: "Help - ?",
 	}
 }

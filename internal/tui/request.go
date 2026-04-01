@@ -480,7 +480,7 @@ func (m *Model) executeCurrentRequest() tea.Cmd {
 		}
 		m.viewState.FocusedPane = model.FocusedPaneRequest
 		m.viewState.ExpandedRightPane = model.FocusedPaneRequest
-		m.viewState.Notice = "request validation failed"
+		m.viewState.Notice = "Request validation failed"
 		return nil
 	}
 
@@ -489,7 +489,7 @@ func (m *Model) executeCurrentRequest() tea.Cmd {
 	m.session.ActiveExecRequestID = requestID
 	m.viewState.ActiveExecuteRequestID = requestID
 	m.viewState.ExecuteInFlight = true
-	m.viewState.Notice = "executing request"
+	m.viewState.Notice = "Sending request"
 
 	service := m.service
 	session := app.CloneExecutionSession(m.session)

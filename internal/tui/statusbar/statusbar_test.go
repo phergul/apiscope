@@ -7,35 +7,20 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-func TestRenderIncludesOperationIdentityAndCount(t *testing.T) {
+func TestRenderShowsOnlyStatusAndHelpHint(t *testing.T) {
 	t.Parallel()
 
 	content := ansi.Strip(Render(Data{
-		Source:         "demo.yaml",
-		State:          "loaded",
-		Focus:          "operations",
-		OperationLabel: "GET /pets",
-		SelectedServer: "https://api.example.com",
-		HasSpec:        true,
-		OperationCount: 2,
-		VisibleCount:   2,
-		WarningCount:   2,
+		Status:   "Request succeeded",
+		HelpHint: "Help - ?",
 	}, 160))
 
-	wantSnippets := []string{
-		"Source: demo.yaml",
-		"State: loaded",
-		"Focus: operations",
-		"Operation: GET /pets",
-		"Server: https://api.example.com",
-		"Count: 2",
-		"Visible: 2",
-		"Warnings: 2",
-		"Keys: 1-4 switch Tab cycle z zoom q quit",
+	if !strings.Contains(content, "Request succeeded") {
+		t.Fatalf("expected status content to remain, got %q", content)
 	}
-	for _, snippet := range wantSnippets {
-		if !strings.Contains(content, snippet) {
-			t.Fatalf("expected status bar to include %q, got %q", snippet, content)
+	for _, snippet := range []string{"Source:", "State:", "Focus:", "Operation:", "Server:", "Count:", "Visible:", "Warnings:", "Keys:"} {
+		if strings.Contains(content, snippet) {
+			t.Fatalf("expected debug snippet %q to be removed, got %q", snippet, content)
 		}
 	}
 }
@@ -44,16 +29,30 @@ func TestRenderAlignsHelpHintToRightSide(t *testing.T) {
 	t.Parallel()
 
 	content := ansi.Strip(Render(Data{
-		Source:   "demo.yaml",
-		State:    "loaded",
-		Focus:    "request",
+		Status:   "Loading spec",
 		HelpHint: "Help - ?",
 	}, 80))
 
 	if !strings.HasSuffix(content, "Help - ?") {
 		t.Fatalf("expected help hint to align to the far right, got %q", content)
 	}
-	if !strings.Contains(content, "Source: demo.yaml") {
-		t.Fatalf("expected normal status content to remain, got %q", content)
+	if !strings.Contains(content, "Loading spec") {
+		t.Fatalf("expected status content to remain, got %q", content)
+	}
+}
+
+func TestRenderStaysSingleLineWhenStatusIsLong(t *testing.T) {
+	t.Parallel()
+
+	content := ansi.Strip(Render(Data{
+		Status:   "Restored request #123 with a very long message that should not wrap onto a second line",
+		HelpHint: "Help - ?",
+	}, 36))
+
+	if strings.Contains(content, "\n") {
+		t.Fatalf("expected single-line status bar output, got %q", content)
+	}
+	if !strings.Contains(content, "Help - ?") {
+		t.Fatalf("expected help hint to remain visible, got %q", content)
 	}
 }

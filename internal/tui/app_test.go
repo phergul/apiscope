@@ -77,6 +77,9 @@ func TestModelInitLoadsSpecAsynchronously(t *testing.T) {
 	if updated.viewState.LoadInFlight {
 		t.Fatal("expected loading state to clear after success")
 	}
+	if updated.viewState.Notice != "Spec loaded" {
+		t.Fatalf("expected success notice, got %q", updated.viewState.Notice)
+	}
 	if updated.viewState.ExpandedRightPane != model.FocusedPaneRequest {
 		t.Fatalf("expected request pane to start expanded, got %q", updated.viewState.ExpandedRightPane)
 	}
@@ -267,6 +270,9 @@ func TestModelRendersLoadFailureWithoutCrashing(t *testing.T) {
 		err:       errors.New("unable to parse spec"),
 	})
 	updated := updatedModel.(*Model)
+	if updated.viewState.Notice != "Spec load failed" {
+		t.Fatalf("expected load failure notice, got %q", updated.viewState.Notice)
+	}
 	view := updated.View()
 	view = stripANSI(view)
 
@@ -1255,7 +1261,7 @@ func TestModelPreviousRequestsPopupEnterLoadsHistoricalResponse(t *testing.T) {
 	if updated.session.LastResponse == nil || updated.session.LastResponse.PrettyBody != "historical" {
 		t.Fatalf("expected historical response to load, got %#v", updated.session.LastResponse)
 	}
-	if updated.viewState.Notice != "loaded previous response #7" {
+	if updated.viewState.Notice != "Loaded previous response #7" {
 		t.Fatalf("expected response recall notice, got %q", updated.viewState.Notice)
 	}
 }
@@ -1322,7 +1328,7 @@ func TestModelPreviousRequestsPopupRestoreRequestFocusesPaneThree(t *testing.T) 
 	if got := updated.session.AuthState["api_key"].APIKey; got != "restored" {
 		t.Fatalf("expected auth state restore, got %q", got)
 	}
-	if updated.viewState.Notice != "restored request #9" {
+	if updated.viewState.Notice != "Restored request #9" {
 		t.Fatalf("expected request restore notice, got %q", updated.viewState.Notice)
 	}
 }
@@ -1416,6 +1422,53 @@ func TestModelIgnoresStaleExecuteResults(t *testing.T) {
 	}
 	if !updated.viewState.ExecuteInFlight {
 		t.Fatal("expected execute state to remain unchanged for stale result")
+	}
+}
+
+func TestModelExecuteFinishedSetsSuccessNotice(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.ExecuteInFlight = true
+	m.viewState.ActiveExecuteRequestID = 1
+
+	updatedModel, _ := m.Update(executeFinishedMsg{
+		requestID: 1,
+		result: app.ExecuteResult{
+			OperationKey: model.NewOperationKey("GET", "/pets"),
+			Response: &model.HTTPResponse{
+				OperationKey: model.NewOperationKey("GET", "/pets"),
+				StatusCode:   200,
+				Status:       "200 OK",
+			},
+		},
+	})
+	updated := updatedModel.(*Model)
+	if updated.viewState.Notice != "Request succeeded" {
+		t.Fatalf("expected success notice, got %q", updated.viewState.Notice)
+	}
+}
+
+func TestModelExecuteFinishedSetsFailureNotice(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.ExecuteInFlight = true
+	m.viewState.ActiveExecuteRequestID = 1
+
+	updatedModel, _ := m.Update(executeFinishedMsg{
+		requestID: 1,
+		result: app.ExecuteResult{
+			OperationKey: model.NewOperationKey("GET", "/pets"),
+			Response: &model.HTTPResponse{
+				OperationKey:   model.NewOperationKey("GET", "/pets"),
+				TransportError: "dial tcp: connection refused",
+			},
+		},
+	})
+	updated := updatedModel.(*Model)
+	if updated.viewState.Notice != "Request failed" {
+		t.Fatalf("expected failure notice, got %q", updated.viewState.Notice)
 	}
 }
 
@@ -1911,8 +1964,8 @@ func TestModelOperationsScrollingKeepsFiveRowsBelowCursorWhenMovingDown(t *testi
 	if m.viewState.OperationsCursor != 10 {
 		t.Fatalf("expected cursor to move to row 10, got %d", m.viewState.OperationsCursor)
 	}
-	if m.viewState.OperationsScrollOffset != 5 {
-		t.Fatalf("expected scroll offset 5 to preserve five-row scrolloff at the bottom edge, got %d", m.viewState.OperationsScrollOffset)
+	if m.viewState.OperationsScrollOffset != 4 {
+		t.Fatalf("expected scroll offset 4 with the fixed single-line status bar, got %d", m.viewState.OperationsScrollOffset)
 	}
 }
 

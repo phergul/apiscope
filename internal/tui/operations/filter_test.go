@@ -35,12 +35,13 @@ func TestRenderFooterUsesEditorViewOnlyWhileEditing(t *testing.T) {
 		Editing:    true,
 		FilterText: "pets",
 		EditorView: "editor view",
+		Width:      24,
 	})
 	if !strings.Contains(footer, "editor view") {
 		t.Fatalf("expected editing footer to render editor view, got %q", footer)
 	}
 
-	footer = RenderFooter(FilterFooterInput{FilterText: "pets"})
+	footer = RenderFooter(FilterFooterInput{FilterText: "pets", Width: 24})
 	if !strings.Contains(footer, "Filter: pets") {
 		t.Fatalf("expected idle footer to render filter summary, got %q", footer)
 	}

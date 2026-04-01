@@ -163,11 +163,23 @@ func (m *Model) paneOuterFocused(pane model.FocusedPane) bool {
 // operationsPaneFooter renders the filter footer shown below the operations pane when needed.
 func (m *Model) operationsPaneFooter() string {
 	m.ensureWidgetDefaults()
+	m.widgets.filterInput.SetWidth(m.operationsFooterWidth())
 	return operationsui.RenderFooter(operationsui.FilterFooterInput{
 		Editing:    m.viewState.ActiveEditorMode == model.EditorModeFilter,
 		FilterText: m.viewState.FilterText,
 		EditorView: m.widgets.filterInput.BareFilledView(),
+		Width:      m.operationsFooterWidth(),
 	})
+}
+
+// operationsFooterWidth returns the current full footer width for the operations pane content area.
+func (m *Model) operationsFooterWidth() int {
+	width, _ := m.resolvedDimensions()
+	if m.viewState.RightPaneLayoutPreset == layoutPresetWide {
+		width, _ = m.wideColumnWidths(width)
+	}
+
+	return max(width-4, 1)
 }
 
 // requestPaneTitleRight returns the contextual title-right hint for the request pane.

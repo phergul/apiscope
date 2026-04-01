@@ -15,6 +15,7 @@ type FilterFooterInput struct {
 	Editing    bool
 	FilterText string
 	EditorView string
+	Width      int
 }
 
 // FilterEditorUpdate describes the result of handling a filter-editor keypress.
@@ -48,7 +49,8 @@ func RenderFooter(input FilterFooterInput) string {
 		return input.EditorView
 	}
 
-	return widgets.InputTextStyle().Render("Filter: " + input.FilterText)
+	summary := widgets.InputTextStyle().Render("Filter: " + input.FilterText)
+	return widgets.RenderFilledInputArea(summary, max(input.Width, utf8.RuneCountInString("Filter: "+input.FilterText)), 1)
 }
 
 // UpdateFilterEditor handles one keypress in the operations filter editor.

@@ -9,6 +9,8 @@ import (
 	"github.com/phergul/apiscope/internal/model"
 	detailsui "github.com/phergul/apiscope/internal/tui/details"
 	"github.com/phergul/apiscope/internal/tui/widgets"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 func TestOperationsPaneContentFallsBackToFirstVisibleWhenSelectionMissing(t *testing.T) {
@@ -137,6 +139,50 @@ func TestRenderShowsOperationsFilterInPaneFooterOnly(t *testing.T) {
 	}
 	if strings.Contains(m.operationsPaneContent(), "Filter:") {
 		t.Fatalf("expected operations body to omit inline filter text, got %q", stripANSI(m.operationsPaneContent()))
+	}
+}
+
+func TestRenderOperationsFilterFooterFillsAvailableWidth(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForRendering()
+	m.shell.width = 80
+	m.shell.height = 20
+	m.viewState.ActiveEditorMode = model.EditorModeFilter
+	m.widgets.filterInput.SetValue("test")
+
+	footer := stripANSI(m.operationsPaneFooter())
+	lines := strings.Split(footer, "\n")
+	if len(lines) == 0 {
+		t.Fatal("expected footer output")
+	}
+
+	lastLine := lines[len(lines)-1]
+	if lipgloss.Width(lastLine) != m.operationsFooterWidth() {
+		t.Fatalf("expected footer width %d, got %d in %q", m.operationsFooterWidth(), lipgloss.Width(lastLine), lastLine)
+	}
+}
+
+func TestRenderOperationsFilterSummaryFillsAvailableWidth(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForRendering()
+	m.shell.width = 80
+	m.shell.height = 20
+	m.viewState.FilterText = "do the best"
+
+	footer := stripANSI(m.operationsPaneFooter())
+	lines := strings.Split(footer, "\n")
+	if len(lines) == 0 {
+		t.Fatal("expected footer output")
+	}
+
+	lastLine := lines[len(lines)-1]
+	if lipgloss.Width(lastLine) != m.operationsFooterWidth() {
+		t.Fatalf("expected footer width %d, got %d in %q", m.operationsFooterWidth(), lipgloss.Width(lastLine), lastLine)
+	}
+	if !strings.Contains(lastLine, "Filter: do the best") {
+		t.Fatalf("expected filter summary text, got %q", lastLine)
 	}
 }
 

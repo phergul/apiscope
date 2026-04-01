@@ -84,9 +84,27 @@ func RenderFilledInputArea(content string, width, height int) string {
 		base.WriteString(baseLine)
 	}
 
-	return Overlay(base.String(), content, 0, 0)
+	return Overlay(base.String(), fitFilledInputContent(content, width, height), 0, 0)
 }
 
+// fitFilledInputContent fits the content to the given width and height, truncating lines if necessary.
+func fitFilledInputContent(content string, width, height int) string {
+	if width <= 0 || height <= 0 {
+		return content
+	}
+
+	lines := strings.Split(content, "\n")
+	if len(lines) > height {
+		lines = lines[:height]
+	}
+	for index, line := range lines {
+		lines[index] = InputAreaStyle(width, 1).Render(line)
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// InputFrameStyle returns the style for the input frame, with optional focus styling.
 func InputFrameStyle(focused bool) lipgloss.Style {
 	theme := CurrentTheme()
 	borderColor := theme.Palette.Border
@@ -100,6 +118,7 @@ func InputFrameStyle(focused bool) lipgloss.Style {
 		Padding(0, 1)
 }
 
+// PaneBodyStyle returns the style for the pane body, with width and height constraints.
 func PaneBodyStyle(width, height int) lipgloss.Style {
 	return BodyTextStyle().
 		Width(width).
@@ -108,6 +127,7 @@ func PaneBodyStyle(width, height int) lipgloss.Style {
 		MaxHeight(height)
 }
 
+// PaneFooterStyle returns the style for the pane footer, with a border and width constraints.
 func PaneFooterStyle(width int) lipgloss.Style {
 	theme := CurrentTheme()
 	return BodyTextStyle().
@@ -117,11 +137,13 @@ func PaneFooterStyle(width int) lipgloss.Style {
 		Width(width)
 }
 
+// StatusBarStyle returns the style for the status bar, with width constraints.
 func StatusBarStyle(width int) lipgloss.Style {
 	return BodyTextStyle().
 		Width(width)
 }
 
+// ModalStyle returns the style for the modal, with width constraints and a focused border.
 func ModalStyle(width int) lipgloss.Style {
 	theme := CurrentTheme()
 	return BodyTextStyle().
@@ -131,10 +153,12 @@ func ModalStyle(width int) lipgloss.Style {
 		Padding(1, 2)
 }
 
+// ViewportStyle returns the style for the viewport, with body text styling.
 func ViewportStyle() lipgloss.Style {
 	return BodyTextStyle()
 }
 
+// PopupFrameStyle returns the style for the popup frame, with width constraints and a focused border.
 func PopupFrameStyle(width int, focused bool) lipgloss.Style {
 	theme := CurrentTheme()
 	borderColor := theme.Palette.Border

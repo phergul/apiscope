@@ -67,7 +67,8 @@ func TestRequestAndResponsePaneContentFallbackToFirstVisibleWhenSelectionMissing
 		"Description: OK",
 		"Headers:",
 		"- none",
-		"Media types: application/json",
+		"Body:",
+		"│ application/json",
 	}
 	for _, snippet := range responseSnippets {
 		if !strings.Contains(responseContent, snippet) {
@@ -434,7 +435,7 @@ func newLoadedModelForRendering() *Model {
 		Warnings: []model.SpecWarning{
 			{
 				Code:    model.SpecWarningUnsupportedFeature,
-				Message: "callbacks are not supported in v1",
+				Message: "callbacks are not supported",
 				Path:    "#/paths/~1pets/get/callbacks",
 			},
 			{

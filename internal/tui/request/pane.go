@@ -86,13 +86,17 @@ func projectPaneData(input PaneInput) (Data, EditorState) {
 func projectRows(rows []RowDescriptor, rowErrors map[string]string) []Row {
 	projected := make([]Row, 0, len(rows))
 	for _, row := range rows {
+		target := row.ValidationTarget
+		if target == "" {
+			target = row.ID
+		}
 		projected = append(projected, Row{
 			Kind:     row.Kind,
 			Label:    row.Label,
 			Meta:     row.Meta,
 			Value:    row.Value,
 			Editable: row.Editable,
-			Error:    rowErrors[row.ID],
+			Error:    rowErrors[target],
 		})
 	}
 

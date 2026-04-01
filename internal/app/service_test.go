@@ -272,7 +272,7 @@ func TestServiceExecuteCurrentReturnsAuthValidationIssuesBeforeTransport(t *test
 	if !result.Validation.HasIssues() {
 		t.Fatal("expected auth validation errors before execution")
 	}
-	if _, ok := result.Validation.IssueForTarget(AuthFieldTarget("bearer_auth", AuthFieldBearerToken)); !ok {
+	if _, ok := result.Validation.IssueForTarget(AuthAlternativeFieldTarget(0, "bearer_auth", AuthFieldBearerToken)); !ok {
 		t.Fatalf("expected missing bearer token issue, got %#v", result.Validation.Issues)
 	}
 	if result.Response != nil {

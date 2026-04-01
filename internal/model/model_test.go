@@ -56,7 +56,7 @@ func TestAPISpecPreservesSourceMetadataCapabilitiesAndWarnings(t *testing.T) {
 		Warnings: []SpecWarning{
 			{
 				Code:    SpecWarningUnsupportedFeature,
-				Message: "callbacks are not supported in v1",
+				Message: "callbacks are not supported",
 				Path:    "#/paths/~1pets/get/callbacks",
 			},
 		},

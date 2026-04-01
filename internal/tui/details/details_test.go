@@ -61,7 +61,7 @@ func TestRenderShowsWarningsSectionWhenActive(t *testing.T) {
 
 	wantSnippets := []string{
 		"Summary  Security  Warnings",
-		"- unsupported_feature: callbacks are not supported in v1",
+		"- unsupported_feature: callbacks are not supported",
 		"  path: #/paths/~1pets/get/callbacks",
 		"- downgraded_feature: collectionFormat was simplified during normalisation",
 	}
@@ -160,7 +160,7 @@ func newTestData() Data {
 		Warnings: []model.SpecWarning{
 			{
 				Code:    model.SpecWarningUnsupportedFeature,
-				Message: "callbacks are not supported in v1",
+				Message: "callbacks are not supported",
 				Path:    "#/paths/~1pets/get/callbacks",
 			},
 			{

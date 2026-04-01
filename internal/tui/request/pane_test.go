@@ -87,14 +87,17 @@ func TestProjectPaneBuildsEditableAuthRows(t *testing.T) {
 	if projection.Data.ActiveSection != SectionAuth {
 		t.Fatalf("expected auth section, got %q", projection.Data.ActiveSection)
 	}
-	if len(projection.Data.Rows) != 1 {
-		t.Fatalf("expected one auth row, got %d", len(projection.Data.Rows))
+	if len(projection.Data.Rows) != 2 {
+		t.Fatalf("expected option header plus auth row, got %d", len(projection.Data.Rows))
 	}
-	if !projection.Data.Rows[0].Editable {
+	if projection.Data.Rows[0].Kind != RowKindAuthOption {
+		t.Fatalf("expected option header row first, got %#v", projection.Data.Rows[0])
+	}
+	if !projection.Data.Rows[1].Editable {
 		t.Fatal("expected auth row to be editable")
 	}
-	if projection.Data.Rows[0].Value != "token set" {
-		t.Fatalf("expected masked auth summary, got %q", projection.Data.Rows[0].Value)
+	if projection.Data.Rows[1].Value != "token set" {
+		t.Fatalf("expected masked auth summary, got %q", projection.Data.Rows[1].Value)
 	}
 }
 
@@ -122,5 +125,58 @@ func TestProjectPaneBuildsServerSwitchRow(t *testing.T) {
 	}
 	if projection.Data.Rows[0].Value != "https://staging.example.com" {
 		t.Fatalf("expected selected server url to render, got %q", projection.Data.Rows[0].Value)
+	}
+}
+
+func TestProjectPaneBuildsAlternativeBlocksWithoutDeduplicatingSchemes(t *testing.T) {
+	t.Parallel()
+
+	projection := ProjectPane(PaneInput{
+		Selected: &model.Operation{},
+		Security: &model.SecurityRequirement{
+			Alternatives: []model.SecurityAlternative{
+				{Schemes: []model.SecurityRequirementRef{{Name: "bearer_auth"}}},
+				{Schemes: []model.SecurityRequirementRef{{Name: "bearer_auth"}}},
+			},
+		},
+		SecuritySchemes: map[string]model.SecurityScheme{
+			"bearer_auth": {
+				Name:   "bearer_auth",
+				Type:   model.SecuritySchemeTypeHTTP,
+				Scheme: model.HTTPAuthSchemeBearer,
+			},
+		},
+		ActiveSection: SectionAuth,
+	})
+
+	if len(projection.Data.Rows) != 4 {
+		t.Fatalf("expected two option blocks with one field each, got %d", len(projection.Data.Rows))
+	}
+	if projection.Data.Rows[1].Kind != RowKindAuthField || projection.Data.Rows[3].Kind != RowKindAuthField {
+		t.Fatalf("expected auth field rows under each option, got %#v", projection.Data.Rows)
+	}
+	rows := ActiveRows(
+		&model.Operation{},
+		nil,
+		SectionAuth,
+		&model.SecurityRequirement{
+			Alternatives: []model.SecurityAlternative{
+				{Schemes: []model.SecurityRequirementRef{{Name: "bearer_auth"}}},
+				{Schemes: []model.SecurityRequirementRef{{Name: "bearer_auth"}}},
+			},
+		},
+		nil,
+		"",
+		map[string]model.SecurityScheme{
+			"bearer_auth": {
+				Name:   "bearer_auth",
+				Type:   model.SecuritySchemeTypeHTTP,
+				Scheme: model.HTTPAuthSchemeBearer,
+			},
+		},
+		nil,
+	)
+	if rows[1].ID == rows[3].ID || rows[1].ValidationTarget == rows[3].ValidationTarget {
+		t.Fatalf("expected duplicated scheme rows to remain distinct, got %#v", rows)
 	}
 }

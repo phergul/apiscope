@@ -109,17 +109,19 @@ func ActiveSectionBody(sections []widgets.Section, active string) string {
 // sectionBody renders a declared response section body.
 func sectionBody(response model.ResponseSpec) string {
 	lines := []string{
-		"Description: " + describe.NormaliseInlineText(util.FallbackText(response.Description, "None")),
-		"Headers:",
+		renderMetaLine("Description", describe.NormaliseInlineText(util.FallbackText(response.Description, "None"))),
 	}
+
+	lines = append(lines, "", "Headers:")
 	if len(response.Headers) == 0 {
 		lines = append(lines, "- none")
 	} else {
-		for _, header := range response.Headers {
-			lines = append(lines, "- "+header.Name+" ("+describe.ParameterTypeHint(header)+")")
-		}
+		lines = append(lines, renderDeclaredHeaders(response.Headers)...)
 	}
-	lines = append(lines, "Media types: "+strings.Join(describe.DefaultStrings(describe.MediaTypesForContent(response.Content), "none"), ", "))
+
+	lines = append(lines, "", "Body:")
+	mediaTypes := describe.DefaultStrings(describe.MediaTypesForContent(response.Content), "none")
+	lines = append(lines, renderBodyBlock(strings.Join(mediaTypes, "\n"))...)
 
 	return strings.Join(lines, "\n")
 }
@@ -203,6 +205,19 @@ func renderWrappedHeader(name, value string, contentWidth int) []string {
 	lines := []string{headerLine}
 	for _, line := range valueLines {
 		lines = append(lines, "  "+line)
+	}
+
+	return lines
+}
+
+// renderDeclaredHeaders renders declared response headers.
+func renderDeclaredHeaders(headers []model.Parameter) []string {
+	lines := make([]string, 0, len(headers)*2)
+	for _, header := range headers {
+		lines = append(lines,
+			widgets.MutedTextStyle().Render("- "+header.Name+":"),
+			"  "+describe.ParameterTypeHint(header),
+		)
 	}
 
 	return lines

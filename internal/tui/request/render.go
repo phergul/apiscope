@@ -106,7 +106,7 @@ func renderRequestRow(row Row, selected bool) string {
 	}
 
 	value := row.Value
-	if !row.Editable && value != "" {
+	if !row.Editable && value != "" && row.Kind != RowKindAuthOption {
 		value += " [read-only]"
 	}
 

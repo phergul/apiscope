@@ -1,6 +1,7 @@
 package request
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/phergul/apiscope/internal/app"
@@ -12,6 +13,7 @@ type RowKind string
 
 const (
 	RowKindServer        RowKind = "server"
+	RowKindAuthOption    RowKind = "auth_option"
 	RowKindParameter     RowKind = "parameter"
 	RowKindBodyMediaType RowKind = "body_media_type"
 	RowKindBodyText      RowKind = "body_text"
@@ -20,16 +22,17 @@ const (
 )
 
 type RowDescriptor struct {
-	ID             string
-	Kind           RowKind
-	Parameter      *model.Parameter
-	ServerURL      string
-	AuthSchemeName string
-	AuthField      app.AuthField
-	Label          string
-	Meta           string
-	Value          string
-	Editable       bool
+	ID               string
+	Kind             RowKind
+	Parameter        *model.Parameter
+	ServerURL        string
+	AuthSchemeName   string
+	AuthField        app.AuthField
+	ValidationTarget string
+	Label            string
+	Meta             string
+	Value            string
+	Editable         bool
 }
 
 // ActiveRows returns the request rows for the currently active request-pane section.
@@ -93,13 +96,14 @@ func serverRows(servers []model.Server, selectedServerURL string) []RowDescripto
 	}
 
 	return []RowDescriptor{{
-		ID:        "server:url",
-		Kind:      RowKindServer,
-		ServerURL: selected,
-		Label:     "Base URL",
-		Meta:      meta,
-		Value:     selected,
-		Editable:  true,
+		ID:               "server:url",
+		Kind:             RowKindServer,
+		ServerURL:        selected,
+		ValidationTarget: "server:url",
+		Label:            "Base URL",
+		Meta:             meta,
+		Value:            selected,
+		Editable:         true,
 	}}
 }
 
@@ -110,13 +114,14 @@ func parameterRows(parameters []model.Parameter, draft *model.RequestDraft) []Ro
 		parameter := &parameters[index]
 		value, editable := ParameterValue(*parameter, draft)
 		rows = append(rows, RowDescriptor{
-			ID:        string(parameter.In) + ":" + parameter.Name,
-			Kind:      RowKindParameter,
-			Parameter: parameter,
-			Label:     parameter.Name,
-			Meta:      describe.BooleanRequirementLabel(parameter.Required) + ", " + describe.ParameterTypeHint(*parameter),
-			Value:     value,
-			Editable:  editable,
+			ID:               string(parameter.In) + ":" + parameter.Name,
+			Kind:             RowKindParameter,
+			Parameter:        parameter,
+			ValidationTarget: string(parameter.In) + ":" + parameter.Name,
+			Label:            parameter.Name,
+			Meta:             describe.BooleanRequirementLabel(parameter.Required) + ", " + describe.ParameterTypeHint(*parameter),
+			Value:            value,
+			Editable:         editable,
 		})
 	}
 
@@ -167,18 +172,20 @@ func bodyRows(body *model.RequestBodySpec, draft *model.RequestDraft) []RowDescr
 
 	return []RowDescriptor{
 		{
-			ID:       "body:media_type",
-			Kind:     RowKindBodyMediaType,
-			Label:    "Media type",
-			Value:    mediaType,
-			Editable: len(body.Content) > 0,
+			ID:               "body:media_type",
+			Kind:             RowKindBodyMediaType,
+			ValidationTarget: app.ValidationTargetBodyMediaType,
+			Label:            "Media type",
+			Value:            mediaType,
+			Editable:         len(body.Content) > 0,
 		},
 		{
-			ID:       "body:raw",
-			Kind:     RowKindBodyText,
-			Label:    "Body",
-			Value:    BodyPreview(draft),
-			Editable: true,
+			ID:               "body:raw",
+			Kind:             RowKindBodyText,
+			ValidationTarget: app.ValidationTargetBodyRaw,
+			Label:            "Body",
+			Value:            BodyPreview(draft),
+			Editable:         true,
 		},
 	}
 }
@@ -205,62 +212,99 @@ func BodyPreview(draft *model.RequestDraft) string {
 
 // authRows builds editable auth rows for the effective security requirement.
 func authRows(requirement *model.SecurityRequirement, securitySchemes map[string]model.SecurityScheme, authState map[string]model.AuthValue) []RowDescriptor {
-	if requirement == nil || len(requirement.Alternatives) == 0 {
+	projections := app.ProjectAuthAlternatives(requirement, securitySchemes, authState)
+	if len(projections) == 0 {
 		return nil
 	}
 
-	seen := make(map[string]bool)
-	rows := make([]RowDescriptor, 0, len(requirement.Alternatives)*2)
-	for _, alternative := range requirement.Alternatives {
-		for _, ref := range alternative.Schemes {
-			if seen[ref.Name] {
-				continue
-			}
-			seen[ref.Name] = true
+	rows := make([]RowDescriptor, 0, len(projections)*3)
+	for _, alternative := range projections {
+		rows = append(rows, RowDescriptor{
+			ID:       fmt.Sprintf("auth:option:%d", alternative.Index),
+			Kind:     RowKindAuthOption,
+			Label:    fmt.Sprintf("Option %d", alternative.Index+1),
+			Meta:     alternativeStatusMeta(alternative),
+			Value:    alternativeSummary(alternative),
+			Editable: false,
+		})
 
-			scheme, ok := securitySchemes[ref.Name]
-			if !ok {
+		for _, scheme := range alternative.Schemes {
+			if !scheme.Found {
 				rows = append(rows, RowDescriptor{
-					ID:             app.AuthFieldTarget(ref.Name, ""),
-					Kind:           RowKindAuthInfo,
-					AuthSchemeName: ref.Name,
-					Label:          ref.Name,
-					Meta:           "missing security scheme",
-					Value:          "<missing from spec>",
-					Editable:       false,
+					ID:               scheme.ValidationTarget,
+					Kind:             RowKindAuthInfo,
+					AuthSchemeName:   scheme.Ref.Name,
+					ValidationTarget: scheme.ValidationTarget,
+					Label:            scheme.Ref.Name,
+					Meta:             "missing from spec",
+					Value:            "Defined in the security requirement but missing from the normalized spec.",
+					Editable:         false,
 				})
 				continue
 			}
 
-			fields := app.SupportedAuthFields(scheme)
-			if len(fields) == 0 {
+			if scheme.UnsupportedReason != "" {
 				rows = append(rows, RowDescriptor{
-					ID:             app.AuthFieldTarget(ref.Name, ""),
-					Kind:           RowKindAuthInfo,
-					AuthSchemeName: ref.Name,
-					Label:          ref.Name,
-					Meta:           "unsupported auth",
-					Value:          "<unsupported auth type>",
-					Editable:       false,
+					ID:               scheme.ValidationTarget,
+					Kind:             RowKindAuthInfo,
+					AuthSchemeName:   scheme.Ref.Name,
+					ValidationTarget: scheme.ValidationTarget,
+					Label:            scheme.Ref.Name,
+					Meta:             "unsupported auth",
+					Value:            scheme.UnsupportedReason,
+					Editable:         false,
 				})
 				continue
 			}
 
-			value := authState[ref.Name]
-			for _, field := range fields {
+			for _, field := range scheme.Fields {
 				rows = append(rows, RowDescriptor{
-					ID:             app.AuthFieldTarget(ref.Name, field),
-					Kind:           RowKindAuthField,
-					AuthSchemeName: ref.Name,
-					AuthField:      field,
-					Label:          app.AuthFieldLabel(scheme, field),
-					Meta:           app.AuthFieldMeta(scheme, field),
-					Value:          app.AuthFieldSummary(value, field),
-					Editable:       true,
+					ID:               field.ValidationTarget,
+					Kind:             RowKindAuthField,
+					AuthSchemeName:   scheme.Ref.Name,
+					AuthField:        field.Field,
+					ValidationTarget: field.ValidationTarget,
+					Label:            field.Label,
+					Meta:             field.Meta,
+					Value:            field.Summary,
+					Editable:         true,
 				})
 			}
 		}
 	}
 
 	return rows
+}
+
+func alternativeStatusMeta(alternative app.AuthAlternativeProjection) string {
+	switch alternative.Status {
+	case app.AuthAlternativeStatusReady:
+		return "ready"
+	case app.AuthAlternativeStatusUnsupported:
+		return "unsupported"
+	case app.AuthAlternativeStatusMissingScheme:
+		return "missing scheme"
+	default:
+		if alternative.MissingFieldCount == 1 {
+			return "missing 1 field"
+		}
+		return fmt.Sprintf("missing %d fields", alternative.MissingFieldCount)
+	}
+}
+
+func alternativeSummary(alternative app.AuthAlternativeProjection) string {
+	if len(alternative.Schemes) == 0 {
+		return "No auth required"
+	}
+
+	parts := make([]string, 0, len(alternative.Schemes))
+	for _, scheme := range alternative.Schemes {
+		part := scheme.Ref.Name
+		if len(scheme.Ref.Scopes) > 0 {
+			part += " (" + strings.Join(scheme.Ref.Scopes, ", ") + ")"
+		}
+		parts = append(parts, part)
+	}
+
+	return strings.Join(parts, " AND ")
 }

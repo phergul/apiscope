@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/phergul/apiscope/internal/model"
@@ -145,19 +146,8 @@ func AuthFieldSummary(value model.AuthValue, field AuthField) string {
 
 // SupportedAuthFields returns the editable auth fields for the provided scheme.
 func SupportedAuthFields(scheme model.SecurityScheme) []AuthField {
-	switch scheme.Type {
-	case model.SecuritySchemeTypeAPIKey:
-		return []AuthField{AuthFieldAPIKey}
-	case model.SecuritySchemeTypeHTTP:
-		switch scheme.Scheme {
-		case model.HTTPAuthSchemeBearer:
-			return []AuthField{AuthFieldBearerToken}
-		case model.HTTPAuthSchemeBasic:
-			return []AuthField{AuthFieldUsername, AuthFieldPassword}
-		}
-	}
-
-	return nil
+	fields, _ := supportedAuthFieldsWithReason(scheme)
+	return fields
 }
 
 // AuthFieldLabel returns the request-pane row label for the auth field.
@@ -199,51 +189,63 @@ func AuthFieldTarget(schemeName string, field AuthField) string {
 	return "auth:" + schemeName + ":" + string(field)
 }
 
+// AuthAlternativeSchemeTarget builds the validation target for one scheme inside one auth alternative.
+func AuthAlternativeSchemeTarget(alternativeIndex int, schemeName string) string {
+	return fmt.Sprintf("auth:alt:%d:%s", alternativeIndex, schemeName)
+}
+
+// AuthAlternativeFieldTarget builds the validation target for one auth field inside one auth alternative.
+func AuthAlternativeFieldTarget(alternativeIndex int, schemeName string, field AuthField) string {
+	if field == "" {
+		return AuthAlternativeSchemeTarget(alternativeIndex, schemeName)
+	}
+
+	return AuthAlternativeSchemeTarget(alternativeIndex, schemeName) + ":" + string(field)
+}
+
 // ValidateAuth checks whether one declared auth alternative is fully satisfied.
 func ValidateAuth(requirement *model.SecurityRequirement, securitySchemes map[string]model.SecurityScheme, authState map[string]model.AuthValue) RequestValidationResult {
-	if requirement == nil || len(requirement.Alternatives) == 0 {
+	projections := ProjectAuthAlternatives(requirement, securitySchemes, authState)
+	if len(projections) == 0 {
 		return RequestValidationResult{}
 	}
 
-	for _, alternative := range requirement.Alternatives {
-		if authAlternativeSatisfied(alternative, securitySchemes, authState) {
+	for _, alternative := range projections {
+		if alternative.Status == AuthAlternativeStatusReady {
 			return RequestValidationResult{}
 		}
 	}
 
-	alternative := authAlternativeForValidation(requirement.Alternatives, securitySchemes, authState)
+	alternative := bestAuthAlternativeProjection(projections)
 	result := RequestValidationResult{}
-	for _, ref := range alternative.Schemes {
-		scheme, ok := securitySchemes[ref.Name]
-		if !ok {
+	for _, scheme := range alternative.Schemes {
+		if !scheme.Found {
 			result.Issues = append(result.Issues, RequestValidationIssue{
 				Section: ValidationSectionAuth,
-				Target:  AuthFieldTarget(ref.Name, ""),
+				Target:  scheme.ValidationTarget,
 				Message: "Security scheme is missing from the spec.",
 			})
 			continue
 		}
 
-		fields := SupportedAuthFields(scheme)
-		if len(fields) == 0 {
+		if scheme.UnsupportedReason != "" {
 			result.Issues = append(result.Issues, RequestValidationIssue{
 				Section: ValidationSectionAuth,
-				Target:  AuthFieldTarget(ref.Name, ""),
-				Message: "Unsupported auth scheme type.",
+				Target:  scheme.ValidationTarget,
+				Message: scheme.UnsupportedReason,
 			})
 			continue
 		}
 
-		value := authState[ref.Name]
-		for _, field := range fields {
-			if AuthFieldSatisfied(value, field) {
+		for _, field := range scheme.Fields {
+			if field.Satisfied {
 				continue
 			}
 
 			result.Issues = append(result.Issues, RequestValidationIssue{
 				Section: ValidationSectionAuth,
-				Target:  AuthFieldTarget(ref.Name, field),
-				Message: authFieldMissingMessage(field),
+				Target:  field.ValidationTarget,
+				Message: authFieldMissingMessage(field.Field),
 			})
 		}
 	}

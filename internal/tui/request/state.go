@@ -87,10 +87,10 @@ func BoundaryRowState(rows []RowDescriptor, state RowState, last bool, editKind 
 	return SyncRowState(rows, state, editKind, visibleLines)
 }
 
-// RowIndexByID returns the matching request row index for the given row identifier.
+// RowIndexByID returns the matching request row index for the given row or validation target.
 func RowIndexByID(rows []RowDescriptor, id string) int {
 	for index, row := range rows {
-		if row.ID == id {
+		if row.ValidationTarget == id || row.ID == id {
 			return index
 		}
 	}

@@ -65,7 +65,7 @@ func TestProjectPaneRendersWarningsSection(t *testing.T) {
 		Warnings: []model.SpecWarning{
 			{
 				Code:    model.SpecWarningUnsupportedFeature,
-				Message: "callbacks are not supported in v1",
+				Message: "callbacks are not supported",
 				Path:    "#/paths/~1pets/get/callbacks",
 			},
 		},
@@ -74,7 +74,7 @@ func TestProjectPaneRendersWarningsSection(t *testing.T) {
 	})
 
 	content := ansi.Strip(Render(projected.Data))
-	if !strings.Contains(content, "- unsupported_feature: callbacks are not supported in v1") {
+	if !strings.Contains(content, "- unsupported_feature: callbacks are not supported") {
 		t.Fatalf("expected warnings section to render, got %q", content)
 	}
 }

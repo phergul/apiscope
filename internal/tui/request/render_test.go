@@ -42,13 +42,19 @@ func TestRenderShowsGroupedInputsAndAuthRows(t *testing.T) {
 	}
 }
 
-func TestRenderShowsEditableAuthRow(t *testing.T) {
+func TestRenderShowsGroupedAuthAlternativeRows(t *testing.T) {
 	t.Parallel()
 
 	content := ansi.Strip(Render(Data{
 		Sections:      []string{"Auth"},
 		ActiveSection: "Auth",
 		Rows: []Row{
+			{
+				Kind:  RowKindAuthOption,
+				Label: "Option 1",
+				Meta:  "missing 1 field",
+				Value: "bearer_auth",
+			},
 			{
 				Kind:     RowKindAuthField,
 				Label:    "bearer_auth",
@@ -60,8 +66,40 @@ func TestRenderShowsEditableAuthRow(t *testing.T) {
 		ActiveRow: 0,
 	}))
 
-	if !strings.Contains(content, "bearer_auth (Bearer token) = token set") {
-		t.Fatalf("expected auth row content, got %q", content)
+	for _, snippet := range []string{"Option 1 (missing 1 field) = bearer_auth", "bearer_auth (Bearer token) = token set"} {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected grouped auth content to include %q, got %q", snippet, content)
+		}
+	}
+}
+
+func TestRenderShowsUnsupportedAuthInfoRow(t *testing.T) {
+	t.Parallel()
+
+	content := ansi.Strip(Render(Data{
+		Sections:      []string{"Auth"},
+		ActiveSection: "Auth",
+		Rows: []Row{
+			{
+				Kind:  RowKindAuthOption,
+				Label: "Option 1",
+				Meta:  "unsupported",
+				Value: "digest_auth",
+			},
+			{
+				Kind:     RowKindAuthInfo,
+				Label:    "digest_auth",
+				Meta:     "unsupported auth",
+				Value:    `HTTP auth scheme "digest" is not supported.`,
+				Editable: false,
+			},
+		},
+	}))
+
+	for _, snippet := range []string{"Option 1 (unsupported) = digest_auth", `digest_auth (unsupported auth) = HTTP auth scheme "digest" is not supported. [read-only]`} {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected unsupported auth content to include %q, got %q", snippet, content)
+		}
 	}
 }
 

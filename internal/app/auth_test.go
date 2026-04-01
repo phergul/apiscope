@@ -57,8 +57,182 @@ func TestValidateAuthReportsMissingFieldsForBestAlternative(t *testing.T) {
 	if !result.HasIssues() {
 		t.Fatal("expected auth validation issues")
 	}
-	if issue, ok := result.IssueForTarget(AuthFieldTarget("basic_auth", AuthFieldPassword)); !ok || issue.Message != "Password is required." {
+	if issue, ok := result.IssueForTarget(AuthAlternativeFieldTarget(0, "basic_auth", AuthFieldPassword)); !ok || issue.Message != "Password is required." {
 		t.Fatalf("expected missing password issue, got %#v ok=%v", issue, ok)
+	}
+}
+
+func TestValidateAuthPassesWhenLaterAlternativeIsReady(t *testing.T) {
+	t.Parallel()
+
+	requirement := &model.SecurityRequirement{
+		Alternatives: []model.SecurityAlternative{
+			{Schemes: []model.SecurityRequirementRef{{Name: "bearer_auth"}}},
+			{Schemes: []model.SecurityRequirementRef{{Name: "api_key"}}},
+		},
+	}
+	schemes := map[string]model.SecurityScheme{
+		"bearer_auth": {
+			Name:   "bearer_auth",
+			Type:   model.SecuritySchemeTypeHTTP,
+			Scheme: model.HTTPAuthSchemeBearer,
+		},
+		"api_key": {
+			Name:          "api_key",
+			Type:          model.SecuritySchemeTypeAPIKey,
+			In:            model.ParameterLocationHeader,
+			ParameterName: "X-API-Key",
+		},
+	}
+	authState := map[string]model.AuthValue{
+		"api_key": {Type: model.AuthSchemeValueTypeAPIKey, APIKey: "secret"},
+	}
+
+	result := ValidateAuth(requirement, schemes, authState)
+	if result.HasIssues() {
+		t.Fatalf("expected later ready alternative to satisfy auth, got %#v", result.Issues)
+	}
+}
+
+func TestValidateAuthReportsMissingSchemeWithAlternativeAwareTarget(t *testing.T) {
+	t.Parallel()
+
+	requirement := &model.SecurityRequirement{
+		Alternatives: []model.SecurityAlternative{
+			{Schemes: []model.SecurityRequirementRef{{Name: "oauth"}}},
+		},
+	}
+
+	result := ValidateAuth(requirement, nil, nil)
+	if !result.HasIssues() {
+		t.Fatal("expected missing scheme validation issue")
+	}
+	if issue, ok := result.IssueForTarget(AuthAlternativeSchemeTarget(0, "oauth")); !ok || issue.Message != "Security scheme is missing from the spec." {
+		t.Fatalf("expected missing scheme issue, got %#v ok=%v", issue, ok)
+	}
+}
+
+func TestValidateAuthReportsUnsupportedHTTPAuthVariant(t *testing.T) {
+	t.Parallel()
+
+	requirement := &model.SecurityRequirement{
+		Alternatives: []model.SecurityAlternative{
+			{Schemes: []model.SecurityRequirementRef{{Name: "digest_auth"}}},
+		},
+	}
+	schemes := map[string]model.SecurityScheme{
+		"digest_auth": {
+			Name:   "digest_auth",
+			Type:   model.SecuritySchemeTypeHTTP,
+			Scheme: model.HTTPAuthScheme("digest"),
+		},
+	}
+
+	result := ValidateAuth(requirement, schemes, nil)
+	if !result.HasIssues() {
+		t.Fatal("expected unsupported auth validation issue")
+	}
+	if issue, ok := result.IssueForTarget(AuthAlternativeSchemeTarget(0, "digest_auth")); !ok || issue.Message != `HTTP auth scheme "digest" is not supported.` {
+		t.Fatalf("expected unsupported auth issue, got %#v ok=%v", issue, ok)
+	}
+}
+
+func TestValidateAuthReportsUnsupportedAuthSchemeType(t *testing.T) {
+	t.Parallel()
+
+	requirement := &model.SecurityRequirement{
+		Alternatives: []model.SecurityAlternative{
+			{Schemes: []model.SecurityRequirementRef{{Name: "oauth"}}},
+		},
+	}
+	schemes := map[string]model.SecurityScheme{
+		"oauth": {
+			Name: "oauth",
+		},
+	}
+
+	result := ValidateAuth(requirement, schemes, nil)
+	if !result.HasIssues() {
+		t.Fatal("expected unsupported auth scheme type issue")
+	}
+	if issue, ok := result.IssueForTarget(AuthAlternativeSchemeTarget(0, "oauth")); !ok || issue.Message != "Auth scheme type is not supported." {
+		t.Fatalf("expected unsupported auth scheme type issue, got %#v ok=%v", issue, ok)
+	}
+}
+
+func TestValidateAuthBreaksEqualIncompleteTieBySpecOrder(t *testing.T) {
+	t.Parallel()
+
+	requirement := &model.SecurityRequirement{
+		Alternatives: []model.SecurityAlternative{
+			{Schemes: []model.SecurityRequirementRef{{Name: "basic_auth"}}},
+			{Schemes: []model.SecurityRequirementRef{{Name: "secondary_basic"}}},
+		},
+	}
+	schemes := map[string]model.SecurityScheme{
+		"basic_auth": {
+			Name:   "basic_auth",
+			Type:   model.SecuritySchemeTypeHTTP,
+			Scheme: model.HTTPAuthSchemeBasic,
+		},
+		"secondary_basic": {
+			Name:   "secondary_basic",
+			Type:   model.SecuritySchemeTypeHTTP,
+			Scheme: model.HTTPAuthSchemeBasic,
+		},
+	}
+	authState := map[string]model.AuthValue{
+		"basic_auth":      {Type: model.AuthSchemeValueTypeBasic, Username: "alice"},
+		"secondary_basic": {Type: model.AuthSchemeValueTypeBasic, Username: "bob"},
+	}
+
+	result := ValidateAuth(requirement, schemes, authState)
+	if !result.HasIssues() {
+		t.Fatal("expected incomplete auth validation issues")
+	}
+	if _, ok := result.IssueForTarget(AuthAlternativeFieldTarget(0, "basic_auth", AuthFieldPassword)); !ok {
+		t.Fatalf("expected spec-order tie to choose first alternative, got %#v", result.Issues)
+	}
+}
+
+func TestProjectAuthAlternativesPreservesGroupedAlternativeState(t *testing.T) {
+	t.Parallel()
+
+	requirement := &model.SecurityRequirement{
+		Alternatives: []model.SecurityAlternative{
+			{Schemes: []model.SecurityRequirementRef{{Name: "api_key"}, {Name: "digest_auth"}}},
+			{Schemes: []model.SecurityRequirementRef{{Name: "missing_scheme"}}},
+		},
+	}
+	schemes := map[string]model.SecurityScheme{
+		"api_key": {
+			Name:          "api_key",
+			Type:          model.SecuritySchemeTypeAPIKey,
+			In:            model.ParameterLocationHeader,
+			ParameterName: "X-API-Key",
+		},
+		"digest_auth": {
+			Name:   "digest_auth",
+			Type:   model.SecuritySchemeTypeHTTP,
+			Scheme: model.HTTPAuthScheme("digest"),
+		},
+	}
+	authState := map[string]model.AuthValue{
+		"api_key": {Type: model.AuthSchemeValueTypeAPIKey, APIKey: "secret"},
+	}
+
+	projections := ProjectAuthAlternatives(requirement, schemes, authState)
+	if len(projections) != 2 {
+		t.Fatalf("expected two auth alternatives, got %d", len(projections))
+	}
+	if projections[0].Status != AuthAlternativeStatusUnsupported {
+		t.Fatalf("expected first alternative to be unsupported, got %q", projections[0].Status)
+	}
+	if projections[0].Schemes[0].Fields[0].Satisfied != true {
+		t.Fatalf("expected api_key field to be satisfied, got %#v", projections[0].Schemes[0].Fields)
+	}
+	if projections[1].Status != AuthAlternativeStatusMissingScheme {
+		t.Fatalf("expected second alternative to report missing scheme, got %q", projections[1].Status)
 	}
 }
 

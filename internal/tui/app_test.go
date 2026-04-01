@@ -767,8 +767,96 @@ func TestModelCtrlRShowsAuthValidationInAuthSection(t *testing.T) {
 		t.Fatal("expected auth validation issues to be stored")
 	}
 	data := updated.projectRequestPane()
-	if len(data.Rows) == 0 || data.Rows[0].Error == "" {
+	if len(data.Rows) < 2 || data.Rows[1].Error == "" {
 		t.Fatalf("expected auth row to show inline validation error, got %#v", data.Rows)
+	}
+}
+
+func TestModelCtrlRFocusesFirstMissingFieldInBestAuthAlternative(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.session.Spec.Operations[0].Security = &model.SecurityRequirement{
+		Alternatives: []model.SecurityAlternative{
+			{Schemes: []model.SecurityRequirementRef{{Name: "basic_auth"}}},
+			{Schemes: []model.SecurityRequirementRef{{Name: "api_key"}}},
+		},
+	}
+	m.session.Spec.SecuritySchemes["basic_auth"] = model.SecurityScheme{
+		Name:   "basic_auth",
+		Type:   model.SecuritySchemeTypeHTTP,
+		Scheme: model.HTTPAuthSchemeBasic,
+	}
+	m.session.AuthState = map[string]model.AuthValue{
+		"basic_auth": {Type: model.AuthSchemeValueTypeBasic, Username: "alice"},
+	}
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	draft := m.ensureSelectedRequestDraft()
+	draft.PathParams["petId"] = "abc"
+	draft.BodyRaw = `{"name":"fido"}`
+	draft.BodyMediaType = "application/json"
+
+	updatedModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlR})
+	updated := updatedModel.(*Model)
+	if cmd != nil {
+		t.Fatal("expected ctrl+r to stop on auth validation")
+	}
+	if updated.panes.activeRequestSection != requestui.SectionAuth {
+		t.Fatalf("expected auth section to stay active, got %q", updated.panes.activeRequestSection)
+	}
+	if updated.viewState.RequestActiveRow != 2 {
+		t.Fatalf("expected cursor to focus first missing field row, got %d", updated.viewState.RequestActiveRow)
+	}
+}
+
+func TestModelCtrlRExecutesWhenLaterAuthAlternativeIsSatisfied(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("X-API-Key"); got != "secret" {
+			t.Fatalf("expected api key from later auth alternative, got %q", got)
+		}
+		_, _ = w.Write([]byte(`ok`))
+	}))
+	defer server.Close()
+
+	m := newLoadedModelForNavigation()
+	m.service = app.NewService(nil)
+	m.session.SelectedServerURL = server.URL
+	m.session.Spec.Operations[0].Security = &model.SecurityRequirement{
+		Alternatives: []model.SecurityAlternative{
+			{Schemes: []model.SecurityRequirementRef{{Name: "bearer_auth"}}},
+			{Schemes: []model.SecurityRequirementRef{{Name: "api_key"}}},
+		},
+	}
+	m.session.Spec.SecuritySchemes["bearer_auth"] = model.SecurityScheme{
+		Name:   "bearer_auth",
+		Type:   model.SecuritySchemeTypeHTTP,
+		Scheme: model.HTTPAuthSchemeBearer,
+	}
+	m.session.AuthState = map[string]model.AuthValue{
+		"api_key": {Type: model.AuthSchemeValueTypeAPIKey, APIKey: "secret"},
+	}
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	draft := m.ensureSelectedRequestDraft()
+	draft.PathParams["petId"] = "abc"
+	draft.BodyRaw = `{"name":"fido"}`
+	draft.BodyMediaType = "application/json"
+
+	updatedModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlR})
+	updated := updatedModel.(*Model)
+	if cmd == nil {
+		t.Fatal("expected ctrl+r to execute when later auth alternative is ready")
+	}
+
+	msg := cmd()
+	updatedModel, _ = updated.Update(msg)
+	updated = updatedModel.(*Model)
+	if updated.session.LastResponse == nil {
+		t.Fatal("expected response after execution")
+	}
+	if updated.session.LastResponse.TransportError != "" {
+		t.Fatalf("expected successful execution, got %q", updated.session.LastResponse.TransportError)
 	}
 }
 

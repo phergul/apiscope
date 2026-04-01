@@ -23,9 +23,12 @@ func TestRenderShowsDeclaredResponses(t *testing.T) {
 				Body: strings.Join([]string{
 					"Description: OK",
 					"Headers:",
-					"- X-Rate-Limit (integer)",
-					"- X-Trace-ID (string)",
-					"Media types: application/json",
+					"- X-Rate-Limit:",
+					"  integer",
+					"- X-Trace-ID:",
+					"  string",
+					"Body:",
+					"│ application/json",
 				}, "\n"),
 			},
 			{
@@ -34,7 +37,8 @@ func TestRenderShowsDeclaredResponses(t *testing.T) {
 					"Description: Unexpected error",
 					"Headers:",
 					"- none",
-					"Media types: application/problem+json",
+					"Body:",
+					"│ application/problem+json",
 				}, "\n"),
 			},
 		},
@@ -45,9 +49,12 @@ func TestRenderShowsDeclaredResponses(t *testing.T) {
 		"Live  200  default",
 		"Description: OK",
 		"Headers:",
-		"- X-Rate-Limit (integer)",
-		"- X-Trace-ID (string)",
-		"Media types: application/json",
+		"- X-Rate-Limit:",
+		"  integer",
+		"- X-Trace-ID:",
+		"  string",
+		"Body:",
+		"│ application/json",
 	}
 	for _, snippet := range wantSnippets {
 		if !strings.Contains(content, snippet) {
@@ -132,7 +139,8 @@ func TestRenderNormalisesEmbeddedDescriptionLineBreaks(t *testing.T) {
 					"Description: Bad or expired token. This can happen if the user revoked a token or the access token has expired. You should re-authenticate the user.",
 					"Headers:",
 					"- none",
-					"Media types: application/json",
+					"Body:",
+					"│ application/json",
 				}, "\n"),
 			},
 		},
@@ -141,5 +149,30 @@ func TestRenderNormalisesEmbeddedDescriptionLineBreaks(t *testing.T) {
 
 	if strings.Contains(content, "token or\nthe access token") {
 		t.Fatalf("expected response description to collapse embedded line breaks, got %q", content)
+	}
+}
+
+func TestSectionBodyUsesLiveStyleLayoutForDeclaredResponses(t *testing.T) {
+	t.Parallel()
+
+	content := ansi.Strip(sectionBody(model.ResponseSpec{
+		Description: "OK",
+		Headers: []model.Parameter{
+			{Name: "X-Trace-ID", Schema: &model.Schema{Type: "string"}},
+		},
+		Content: []model.MediaTypeSpec{{MediaType: "application/json"}},
+	}))
+
+	for _, snippet := range []string{
+		"Description: OK",
+		"Headers:",
+		"- X-Trace-ID:",
+		"  string",
+		"Body:",
+		"│ application/json",
+	} {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected declared response layout to include %q, got %q", snippet, content)
+		}
 	}
 }

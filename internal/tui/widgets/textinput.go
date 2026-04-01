@@ -29,6 +29,7 @@ func applyTextInputTheme(model *bubbletextinput.Model) {
 	model.TextStyle = InputTextStyle()
 	model.PlaceholderStyle = InputPlaceholderStyle()
 	model.Cursor.Style = InputCursorStyle()
+	model.Cursor.TextStyle = InputCursorStyle()
 }
 
 func (i *TextInput) Focus() {

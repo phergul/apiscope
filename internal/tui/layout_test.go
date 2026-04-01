@@ -371,6 +371,26 @@ func TestRequestPaneLosesOuterFocusWhileEditing(t *testing.T) {
 	}
 }
 
+func TestPanesLoseOuterFocusWhileHistoryPopupIsActive(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForRendering()
+	m.viewState.FocusedPane = model.FocusedPaneOperations
+	m.openHistoryPopup()
+
+	for _, pane := range []model.FocusedPane{
+		model.FocusedPaneOperations,
+		model.FocusedPaneDetails,
+		model.FocusedPaneRequest,
+		model.FocusedPaneResponse,
+	} {
+		view := m.paneView(pane)
+		if view.Focused {
+			t.Fatalf("expected pane %q outer focus to be suppressed while history popup is active", pane)
+		}
+	}
+}
+
 func TestRenderAnchorsRequestHelpPopupAboveStatusBarHint(t *testing.T) {
 	t.Parallel()
 

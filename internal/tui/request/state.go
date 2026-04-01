@@ -7,6 +7,11 @@ type RowState struct {
 	ScrollOffset int
 }
 
+// RowSelectable reports whether the request row can receive the active cursor.
+func RowSelectable(row RowDescriptor) bool {
+	return row.Editable
+}
+
 // ClampActiveRow clamps a request row index into the available row count.
 func ClampActiveRow(activeRow, rowCount int) int {
 	if rowCount <= 0 || activeRow < 0 {
@@ -19,9 +24,42 @@ func ClampActiveRow(activeRow, rowCount int) int {
 	return activeRow
 }
 
+// ClampSelectableRow clamps the active row into the nearest selectable row.
+func ClampSelectableRow(rows []RowDescriptor, activeRow int) int {
+	if len(rows) == 0 {
+		return 0
+	}
+
+	if index, ok := selectableRowIndex(rows, ClampActiveRow(activeRow, len(rows)), 1); ok {
+		return index
+	}
+	if index, ok := selectableRowIndex(rows, ClampActiveRow(activeRow, len(rows)), -1); ok {
+		return index
+	}
+
+	return 0
+}
+
 // MoveActiveRow moves the active request row by the given delta.
 func MoveActiveRow(activeRow, rowCount, direction int) int {
 	return ClampActiveRow(activeRow+direction, rowCount)
+}
+
+// MoveSelectableRow moves to the next selectable row in the given direction.
+func MoveSelectableRow(rows []RowDescriptor, activeRow, direction int) int {
+	if len(rows) == 0 {
+		return 0
+	}
+	if direction == 0 {
+		return ClampSelectableRow(rows, activeRow)
+	}
+
+	start := ClampSelectableRow(rows, activeRow) + direction
+	if index, ok := selectableRowIndex(rows, start, direction); ok {
+		return index
+	}
+
+	return ClampSelectableRow(rows, activeRow)
 }
 
 // BoundaryActiveRow returns the first or last selectable request row.
@@ -31,6 +69,26 @@ func BoundaryActiveRow(rowCount int, last bool) int {
 	}
 
 	return rowCount - 1
+}
+
+// BoundarySelectableRow returns the first or last selectable request row.
+func BoundarySelectableRow(rows []RowDescriptor, last bool) int {
+	if len(rows) == 0 {
+		return 0
+	}
+
+	direction := 1
+	start := 0
+	if last {
+		direction = -1
+		start = len(rows) - 1
+	}
+
+	if index, ok := selectableRowIndex(rows, start, direction); ok {
+		return index
+	}
+
+	return 0
 }
 
 // EnsureVisibleOffset adjusts the scroll offset so the active request row remains visible.
@@ -59,7 +117,7 @@ func SyncRowState(rows []RowDescriptor, state RowState, editKind model.RequestEd
 		return ResetRowState()
 	}
 
-	state.ActiveRow = ClampActiveRow(state.ActiveRow, len(rows))
+	state.ActiveRow = ClampSelectableRow(rows, state.ActiveRow)
 	if editKind != model.RequestEditKindBody {
 		state.ScrollOffset = EnsureVisibleOffset(state.ActiveRow, state.ScrollOffset, visibleLines)
 	}
@@ -73,7 +131,7 @@ func MoveRowState(rows []RowDescriptor, state RowState, direction int, editKind 
 		return ResetRowState()
 	}
 
-	state.ActiveRow = MoveActiveRow(state.ActiveRow, len(rows), direction)
+	state.ActiveRow = MoveSelectableRow(rows, state.ActiveRow, direction)
 	return SyncRowState(rows, state, editKind, visibleLines)
 }
 
@@ -83,7 +141,7 @@ func BoundaryRowState(rows []RowDescriptor, state RowState, last bool, editKind 
 		return ResetRowState()
 	}
 
-	state.ActiveRow = BoundaryActiveRow(len(rows), last)
+	state.ActiveRow = BoundarySelectableRow(rows, last)
 	return SyncRowState(rows, state, editKind, visibleLines)
 }
 
@@ -96,4 +154,28 @@ func RowIndexByID(rows []RowDescriptor, id string) int {
 	}
 
 	return -1
+}
+
+func selectableRowIndex(rows []RowDescriptor, start, direction int) (int, bool) {
+	if len(rows) == 0 {
+		return 0, false
+	}
+
+	start = ClampActiveRow(start, len(rows))
+	if direction >= 0 {
+		for index := start; index < len(rows); index++ {
+			if RowSelectable(rows[index]) {
+				return index, true
+			}
+		}
+		return 0, false
+	}
+
+	for index := start; index >= 0; index-- {
+		if RowSelectable(rows[index]) {
+			return index, true
+		}
+	}
+
+	return 0, false
 }

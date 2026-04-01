@@ -208,17 +208,30 @@ func renderEditorOverlay(base string, data Data) string {
 
 // requestActiveRowIndex clamps the rendered request row selection into the visible row list.
 func requestActiveRowIndex(rows []Row, activeRow int) int {
-	if len(rows) == 0 {
-		return 0
+	if len(rows) == 0 || activeRow < 0 {
+		return -1
 	}
 	if activeRow < 0 {
-		return 0
+		return -1
 	}
 	if activeRow >= len(rows) {
-		return len(rows) - 1
+		activeRow = len(rows) - 1
+	}
+	if rows[activeRow].Editable {
+		return activeRow
+	}
+	for index := activeRow + 1; index < len(rows); index++ {
+		if rows[index].Editable {
+			return index
+		}
+	}
+	for index := activeRow - 1; index >= 0; index-- {
+		if rows[index].Editable {
+			return index
+		}
 	}
 
-	return activeRow
+	return -1
 }
 
 // fallbackText returns the trimmed value or the provided fallback when the value is blank.

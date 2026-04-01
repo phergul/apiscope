@@ -25,7 +25,9 @@ func WindowVisibleRows(data Data, scrollOffset, visibleLines int) Data {
 		end = len(data.Rows)
 	}
 
-	data.ActiveRow = ClampActiveRow(data.ActiveRow, len(data.Rows)) - offset
+	if data.ActiveRow >= 0 {
+		data.ActiveRow = ClampActiveRow(data.ActiveRow, len(data.Rows)) - offset
+	}
 	data.Rows = data.Rows[offset:end]
 	return data
 }

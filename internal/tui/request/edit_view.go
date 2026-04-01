@@ -88,7 +88,7 @@ func editorView(input EditorInput) string {
 
 // activeEditorRow resolves the current row descriptor for field editing metadata.
 func activeEditorRow(rows []RowDescriptor, activeRow int) *RowDescriptor {
-	if len(rows) == 0 {
+	if len(rows) == 0 || activeRow < 0 {
 		return nil
 	}
 

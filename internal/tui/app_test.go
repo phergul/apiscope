@@ -597,6 +597,25 @@ func TestModelRequestRowNavigationMovesWithinActiveSection(t *testing.T) {
 	}
 }
 
+func TestModelRequestCursorSkipsAuthOptionHeaderRows(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.panes.activeRequestSection = requestui.SectionAuth
+	m.syncActiveRequestRow()
+
+	if m.viewState.RequestActiveRow != 1 {
+		t.Fatalf("expected auth section to start on first editable field row, got %d", m.viewState.RequestActiveRow)
+	}
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyHome})
+	updated := updatedModel.(*Model)
+	if updated.viewState.RequestActiveRow != 1 {
+		t.Fatalf("expected home to stay on first editable auth row, got %d", updated.viewState.RequestActiveRow)
+	}
+}
+
 func TestModelRequestAndResponseSectionsResetToFirstOnOperationChange(t *testing.T) {
 	t.Parallel()
 

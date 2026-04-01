@@ -58,10 +58,8 @@ func InputPlaceholderStyle() lipgloss.Style {
 func InputCursorStyle() lipgloss.Style {
 	theme := CurrentTheme()
 	return lipgloss.NewStyle().
-		Foreground(theme.Palette.InputBorder).
-		Background(theme.Palette.InputBackground).
-		Underline(true).
-		Bold(true)
+		Foreground(theme.Palette.InputText).
+		Background(theme.Palette.InputBackground)
 }
 
 // InputAreaStyle returns the filled background style for an input area of the requested size.

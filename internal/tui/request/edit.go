@@ -26,7 +26,7 @@ func StartEdit(
 	securitySchemes map[string]model.SecurityScheme,
 	authState map[string]model.AuthValue,
 ) EditStart {
-	if selected == nil || len(rows) == 0 {
+	if selected == nil || len(rows) == 0 || activeRow < 0 {
 		return EditStart{}
 	}
 
@@ -84,7 +84,7 @@ func SaveEdit(
 	buffer string,
 	securitySchemes map[string]model.SecurityScheme,
 ) bool {
-	if session == nil || selected == nil || len(rows) == 0 {
+	if session == nil || selected == nil || len(rows) == 0 || activeRow < 0 {
 		return false
 	}
 

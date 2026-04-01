@@ -125,29 +125,39 @@ func (m *Model) paneView(pane model.FocusedPane) paneView {
 		return paneView{
 			Title:   "2 Details",
 			Body:    m.detailsPaneContent(),
-			Focused: m.viewState.FocusedPane == pane,
+			Focused: m.paneOuterFocused(pane),
 		}
 	case model.FocusedPaneRequest:
 		return paneView{
 			Title:      "3 Request",
 			TitleRight: m.requestPaneTitleRight(),
 			Body:       m.requestPaneContent(),
-			Focused:    m.viewState.FocusedPane == pane && !m.requestEditActive(),
+			Focused:    m.paneOuterFocused(pane) && !m.requestEditActive(),
 		}
 	case model.FocusedPaneResponse:
 		return paneView{
 			Title:   "4 Response",
 			Body:    m.responsePaneContent(),
-			Focused: m.viewState.FocusedPane == pane,
+			Focused: m.paneOuterFocused(pane),
 		}
 	default:
 		return paneView{
 			Title:   "1 Operations",
 			Body:    m.operationsPaneContent(),
 			Footer:  m.operationsPaneFooter(),
-			Focused: m.viewState.FocusedPane == pane,
+			Focused: m.paneOuterFocused(pane),
 		}
 	}
+}
+
+// paneOuterFocused reports whether a shell pane should render its focused border state.
+func (m *Model) paneOuterFocused(pane model.FocusedPane) bool {
+	// Shell-level popups take the only visible focus ring while they are open.
+	if m.historyPopupOpen() {
+		return false
+	}
+
+	return m.viewState.FocusedPane == pane
 }
 
 // operationsPaneFooter renders the filter footer shown below the operations pane when needed.

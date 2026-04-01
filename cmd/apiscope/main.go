@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/phergul/apiscope/internal/app"
+	"github.com/phergul/apiscope/internal/logging"
 	"github.com/phergul/apiscope/internal/spec"
 	"github.com/phergul/apiscope/internal/tui"
 )
@@ -18,6 +19,8 @@ var newProgram = func(service *app.Service, source string, input io.Reader, outp
 	return tui.NewProgram(service, source, input, output)
 }
 
+var newDiagnosticsLogger = logging.NewDefaultLogger
+
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
@@ -28,7 +31,15 @@ func run(args []string, input io.Reader, output, errOutput io.Writer) int {
 		return 2
 	}
 
-	service := app.NewService(spec.NewLoader(nil))
+	logger, closer, err := newDiagnosticsLogger()
+	if err != nil {
+		fmt.Fprintf(errOutput, "apiscope: diagnostics logging disabled: %v\n", err)
+		logger = logging.NopLogger()
+	} else if closer != nil {
+		defer closer.Close()
+	}
+
+	service := app.NewService(spec.NewLoader(nil, logger), logger)
 	program := newProgram(service, args[0], input, output)
 	if err := program.Run(); err != nil {
 		fmt.Fprintf(errOutput, "apiscope: %v\n", err)

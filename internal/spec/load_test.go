@@ -20,7 +20,7 @@ func TestLoadDocumentFromFileJSON(t *testing.T) {
 
 	path := writeTempSpecFile(t, "spec.json", `{"openapi":"3.0.3"}`)
 
-	doc, err := NewLoader(nil).loadDocument(context.Background(), Source{Value: path})
+	doc, err := NewLoader(nil, nil).loadDocument(context.Background(), Source{Value: path})
 	if err != nil {
 		t.Fatalf("loadDocument returned error: %v", err)
 	}
@@ -38,7 +38,7 @@ func TestLoadDocumentFromFileYAML(t *testing.T) {
 
 	path := writeTempSpecFile(t, "spec.yaml", "openapi: 3.0.3\ninfo:\n  title: Demo\n")
 
-	doc, err := NewLoader(nil).loadDocument(context.Background(), Source{Value: path})
+	doc, err := NewLoader(nil, nil).loadDocument(context.Background(), Source{Value: path})
 	if err != nil {
 		t.Fatalf("loadDocument returned error: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestLoadDocumentCanonicalizesRelativeFilePath(t *testing.T) {
 		t.Fatalf("filepath.Rel: %v", err)
 	}
 
-	doc, err := NewLoader(nil).loadDocument(context.Background(), Source{Value: relativePath})
+	doc, err := NewLoader(nil, nil).loadDocument(context.Background(), Source{Value: relativePath})
 	if err != nil {
 		t.Fatalf("loadDocument returned error: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestLoadDocumentCanonicalizesRelativeFilePath(t *testing.T) {
 func TestLoadDocumentRejectsMissingFile(t *testing.T) {
 	t.Parallel()
 
-	_, err := NewLoader(nil).loadDocument(context.Background(), Source{Value: filepath.Join(t.TempDir(), "missing.yaml")})
+	_, err := NewLoader(nil, nil).loadDocument(context.Background(), Source{Value: filepath.Join(t.TempDir(), "missing.yaml")})
 	if !IsErrorKind(err, ErrorKindFileReadFailure) {
 		t.Fatalf("expected file read failure, got %v", err)
 	}
@@ -85,7 +85,7 @@ func TestLoadDocumentRejectsEmptyFile(t *testing.T) {
 
 	path := writeTempSpecFile(t, "empty.yaml", "")
 
-	_, err := NewLoader(nil).loadDocument(context.Background(), Source{Value: path})
+	_, err := NewLoader(nil, nil).loadDocument(context.Background(), Source{Value: path})
 	if !IsErrorKind(err, ErrorKindEmptyDocument) {
 		t.Fatalf("expected empty document error, got %v", err)
 	}
@@ -94,7 +94,7 @@ func TestLoadDocumentRejectsEmptyFile(t *testing.T) {
 func TestLoadDocumentRejectsUnsupportedScheme(t *testing.T) {
 	t.Parallel()
 
-	_, err := NewLoader(nil).loadDocument(context.Background(), Source{Value: "ftp://example.com/openapi.yaml"})
+	_, err := NewLoader(nil, nil).loadDocument(context.Background(), Source{Value: "ftp://example.com/openapi.yaml"})
 	if !IsErrorKind(err, ErrorKindUnsupportedScheme) {
 		t.Fatalf("expected unsupported scheme error, got %v", err)
 	}
@@ -119,7 +119,7 @@ paths:
           description: ok
 `)
 
-	_, err := NewLoader(nil).Load(context.Background(), Source{Value: path})
+	_, err := NewLoader(nil, nil).Load(context.Background(), Source{Value: path})
 	if !IsErrorKind(err, ErrorKindUnsupportedSwaggerConstruct) {
 		t.Fatalf("expected unsupported swagger construct error, got %v", err)
 	}
@@ -132,7 +132,7 @@ func TestLoadDocumentFromURLJSON(t *testing.T) {
 		return stringResponse(req, http.StatusOK, "application/json", `{"openapi":"3.0.3"}`), nil
 	})
 
-	doc, err := NewLoader(client).loadDocument(context.Background(), Source{Value: "https://example.com/spec"})
+	doc, err := NewLoader(client, nil).loadDocument(context.Background(), Source{Value: "https://example.com/spec"})
 	if err != nil {
 		t.Fatalf("loadDocument returned error: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestLoadDocumentFromURLYAMLByContentType(t *testing.T) {
 		return stringResponse(req, http.StatusOK, "application/yaml", "openapi: 3.0.3\n"), nil
 	})
 
-	doc, err := NewLoader(client).loadDocument(context.Background(), Source{Value: "https://example.com/spec"})
+	doc, err := NewLoader(client, nil).loadDocument(context.Background(), Source{Value: "https://example.com/spec"})
 	if err != nil {
 		t.Fatalf("loadDocument returned error: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestLoadDocumentPreservesFinalURLAfterRedirect(t *testing.T) {
 		return resp, nil
 	})
 
-	doc, err := NewLoader(client).loadDocument(context.Background(), Source{Value: "https://example.com/start"})
+	doc, err := NewLoader(client, nil).loadDocument(context.Background(), Source{Value: "https://example.com/start"})
 	if err != nil {
 		t.Fatalf("loadDocument returned error: %v", err)
 	}
@@ -194,7 +194,7 @@ func TestLoadDocumentRejectsNon2xxResponses(t *testing.T) {
 		return stringResponse(req, http.StatusBadGateway, "text/plain", "boom"), nil
 	})
 
-	_, err := NewLoader(client).loadDocument(context.Background(), Source{Value: "https://example.com/spec"})
+	_, err := NewLoader(client, nil).loadDocument(context.Background(), Source{Value: "https://example.com/spec"})
 	if !IsErrorKind(err, ErrorKindURLFetchFailure) {
 		t.Fatalf("expected url fetch failure, got %v", err)
 	}
@@ -215,7 +215,7 @@ func TestLoadDocumentHandlesNetworkFailure(t *testing.T) {
 		return nil, errors.New("dial tcp: connection refused")
 	})
 
-	_, err := NewLoader(client).loadDocument(context.Background(), Source{Value: "https://example.com/spec"})
+	_, err := NewLoader(client, nil).loadDocument(context.Background(), Source{Value: "https://example.com/spec"})
 	if !IsErrorKind(err, ErrorKindURLFetchFailure) {
 		t.Fatalf("expected url fetch failure, got %v", err)
 	}
@@ -224,7 +224,7 @@ func TestLoadDocumentHandlesNetworkFailure(t *testing.T) {
 func TestPublicFacadeExposesConcreteLoaderAndAliases(t *testing.T) {
 	t.Parallel()
 
-	loader := NewLoader(nil)
+	loader := NewLoader(nil, nil)
 	if loader == nil {
 		t.Fatal("expected concrete loader")
 	}

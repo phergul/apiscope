@@ -47,7 +47,7 @@ func TestModelInitLoadsSpecAsynchronously(t *testing.T) {
 				{Key: model.NewOperationKey("GET", "/pets"), Method: "GET", Path: "/pets"},
 			},
 		},
-	})
+	}, nil)
 
 	m := NewModel(service, "demo.yaml")
 	cmd := m.Init()
@@ -91,7 +91,7 @@ func TestModelInitLoadsSpecAsynchronously(t *testing.T) {
 func TestModelUpdatesFocusFromNumberKeys(t *testing.T) {
 	t.Parallel()
 
-	m := NewModel(app.NewService(&stubLoader{}), "demo.yaml")
+	m := NewModel(app.NewService(&stubLoader{}, nil), "demo.yaml")
 
 	testCases := []struct {
 		key  string
@@ -115,7 +115,7 @@ func TestModelUpdatesFocusFromNumberKeys(t *testing.T) {
 func TestModelRightPaneExpansionTracksFocusChanges(t *testing.T) {
 	t.Parallel()
 
-	m := NewModel(app.NewService(&stubLoader{}), "demo.yaml")
+	m := NewModel(app.NewService(&stubLoader{}, nil), "demo.yaml")
 	if m.viewState.ExpandedRightPane != model.FocusedPaneRequest {
 		t.Fatalf("expected request pane to be expanded by default, got %q", m.viewState.ExpandedRightPane)
 	}
@@ -142,7 +142,7 @@ func TestModelRightPaneExpansionTracksFocusChanges(t *testing.T) {
 func TestModelRotatesFocusWithTabAndShiftTab(t *testing.T) {
 	t.Parallel()
 
-	m := NewModel(app.NewService(&stubLoader{}), "demo.yaml")
+	m := NewModel(app.NewService(&stubLoader{}, nil), "demo.yaml")
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	updated := updatedModel.(*Model)
@@ -183,7 +183,7 @@ func TestModelRotatesFocusWithTabAndShiftTab(t *testing.T) {
 func TestModelZoomToggleAndFocusChangesFollowWhileZoomed(t *testing.T) {
 	t.Parallel()
 
-	m := NewModel(app.NewService(&stubLoader{}), "demo.yaml")
+	m := NewModel(app.NewService(&stubLoader{}, nil), "demo.yaml")
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'z'}})
 	updated := updatedModel.(*Model)
@@ -213,7 +213,7 @@ func TestModelZoomToggleAndFocusChangesFollowWhileZoomed(t *testing.T) {
 func TestModelIgnoresStaleLoadResults(t *testing.T) {
 	t.Parallel()
 
-	m := NewModel(app.NewService(&stubLoader{}), "demo.yaml")
+	m := NewModel(app.NewService(&stubLoader{}, nil), "demo.yaml")
 	m.viewState.LoadInFlight = true
 	m.viewState.ActiveLoadRequestID = 2
 
@@ -238,7 +238,7 @@ func TestModelIgnoresStaleLoadResults(t *testing.T) {
 func TestModelSelectsLayoutPresetFromWindowSize(t *testing.T) {
 	t.Parallel()
 
-	m := NewModel(app.NewService(&stubLoader{}), "demo.yaml")
+	m := NewModel(app.NewService(&stubLoader{}, nil), "demo.yaml")
 
 	updatedModel, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	updated := updatedModel.(*Model)
@@ -256,7 +256,7 @@ func TestModelSelectsLayoutPresetFromWindowSize(t *testing.T) {
 func TestModelRendersLoadFailureWithoutCrashing(t *testing.T) {
 	t.Parallel()
 
-	m := NewModel(app.NewService(&stubLoader{}), "broken.yaml")
+	m := NewModel(app.NewService(&stubLoader{}, nil), "broken.yaml")
 	m.shell.width = 120
 	m.shell.height = 30
 	m.viewState.LoadInFlight = true
@@ -287,7 +287,7 @@ func TestModelRendersLoadFailureWithoutCrashing(t *testing.T) {
 func TestModelBlockingLoadErrorOnlyAllowsQuitKeys(t *testing.T) {
 	t.Parallel()
 
-	m := NewModel(app.NewService(&stubLoader{}), "broken.yaml")
+	m := NewModel(app.NewService(&stubLoader{}, nil), "broken.yaml")
 	m.shell.loadErr = errors.New("boom")
 
 	updatedModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
@@ -761,7 +761,7 @@ func TestModelCtrlRExecutesAndSelectsLiveResponse(t *testing.T) {
 	defer server.Close()
 
 	m := newLoadedModelForNavigation()
-	m.service = app.NewService(nil)
+	m.service = app.NewService(nil, nil)
 	m.viewState.FocusedPane = model.FocusedPaneRequest
 	m.session.SelectedServerURL = server.URL
 	m.session.AuthState = map[string]model.AuthValue{
@@ -810,7 +810,7 @@ func TestModelCtrlRStillExecutesWhenOperationShowsSupportNotes(t *testing.T) {
 	defer server.Close()
 
 	m := newLoadedModelForNavigation()
-	m.service = app.NewService(nil)
+	m.service = app.NewService(nil, nil)
 	m.viewState.FocusedPane = model.FocusedPaneRequest
 	m.session.SelectedServerURL = server.URL
 	m.session.AuthState = map[string]model.AuthValue{
@@ -867,7 +867,7 @@ func TestModelCtrlRExecutesUrlencodedFormOperation(t *testing.T) {
 	defer server.Close()
 
 	m := newLoadedModelForNavigation()
-	m.service = app.NewService(nil)
+	m.service = app.NewService(nil, nil)
 	m.viewState.FocusedPane = model.FocusedPaneRequest
 	m.session.SelectedOperationKey = model.NewOperationKey("POST", "/pets")
 	m.session.SelectedServerURL = server.URL
@@ -930,7 +930,7 @@ func TestModelCtrlRExecutesMultipartFormOperation(t *testing.T) {
 	defer server.Close()
 
 	m := newLoadedModelForNavigation()
-	m.service = app.NewService(nil)
+	m.service = app.NewService(nil, nil)
 	m.viewState.FocusedPane = model.FocusedPaneRequest
 	m.session.SelectedOperationKey = model.NewOperationKey("POST", "/pets")
 	m.session.SelectedServerURL = server.URL
@@ -1011,7 +1011,7 @@ func TestModelCtrlRExecutesMultipartFileUploadOperation(t *testing.T) {
 	defer server.Close()
 
 	m := newLoadedModelForNavigation()
-	m.service = app.NewService(nil)
+	m.service = app.NewService(nil, nil)
 	m.viewState.FocusedPane = model.FocusedPaneRequest
 	m.session.SelectedOperationKey = model.NewOperationKey("POST", "/pets")
 	m.session.SelectedServerURL = server.URL
@@ -1124,7 +1124,7 @@ func TestModelCtrlRExecutesWhenLaterAuthAlternativeIsSatisfied(t *testing.T) {
 	defer server.Close()
 
 	m := newLoadedModelForNavigation()
-	m.service = app.NewService(nil)
+	m.service = app.NewService(nil, nil)
 	m.session.SelectedServerURL = server.URL
 	m.session.Spec.Operations[0].Security = &model.SecurityRequirement{
 		Alternatives: []model.SecurityAlternative{
@@ -1359,7 +1359,7 @@ func TestModelPreviousRequestsPopupShowsNewExecutionHistory(t *testing.T) {
 	defer server.Close()
 
 	m := newLoadedModelForNavigation()
-	m.service = app.NewService(nil)
+	m.service = app.NewService(nil, nil)
 	m.session.SelectedServerURL = server.URL
 	m.session.AuthState = map[string]model.AuthValue{
 		"api_key": {Type: model.AuthSchemeValueTypeAPIKey, APIKey: "secret"},
@@ -1491,7 +1491,7 @@ func TestModelRequestServerCyclesOnEnterAndExecutionUsesNewSelection(t *testing.
 	defer staging.Close()
 
 	m := &Model{
-		service: app.NewService(nil),
+		service: app.NewService(nil, nil),
 		session: model.SessionState{
 			Spec: &model.APISpec{
 				Servers: []model.Server{

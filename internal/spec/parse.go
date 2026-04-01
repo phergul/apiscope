@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
+	"github.com/phergul/apiscope/internal/logging"
 	"github.com/phergul/apiscope/internal/model"
 	"github.com/phergul/apiscope/internal/spec/internal/pipeline"
 
@@ -15,15 +17,27 @@ import (
 
 // parseDocument decodes a loaded document and identifies its source family.
 func (l *Loader) parseDocument(document *pipeline.LoadedDocument) (*pipeline.ParsedDocument, error) {
+	source := logging.SafeSource(document.CanonicalLocation)
+	l.logger.Info("decoding document", "event", "decode_start", "source", source, "format", document.Format)
 	decoded, err := decodeDocument(document)
 	if err != nil {
+		l.logError("decode_failed", "document decode failed", err, slog.String("source", source))
 		return nil, err
 	}
 
+	l.logger.Info("detecting spec family", "event", "family_detect_start", "source", source)
 	family, version, err := detectSpecFamilyVersion(document, decoded)
 	if err != nil {
+		l.logError("family_detect_failed", "spec family detection failed", err, slog.String("source", source))
 		return nil, err
 	}
+	l.logger.Info(
+		"spec family detected",
+		"event", "family_detect_complete",
+		"source", source,
+		"source_family", family,
+		"source_version", version,
+	)
 
 	parsed := &pipeline.ParsedDocument{
 		BaseDocument: pipeline.BaseDocument{
@@ -35,8 +49,10 @@ func (l *Loader) parseDocument(document *pipeline.LoadedDocument) (*pipeline.Par
 
 	switch family {
 	case model.SourceFamilyOpenAPI3:
+		l.logger.Info("parsing openapi document", "event", "openapi_parse_start", "source", source)
 		openapiDoc, err := parseOpenAPI3Document(document, decoded)
 		if err != nil {
+			l.logError("openapi_parse_failed", "openapi parse failed", err, slog.String("source", source))
 			return nil, err
 		}
 		parsed.OpenAPI3Doc = openapiDoc

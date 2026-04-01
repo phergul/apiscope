@@ -17,7 +17,7 @@ func TestParseDocumentDecodesJSONOpenAPI3(t *testing.T) {
 		Raw:               []byte(`{"openapi":"3.0.3","info":{"title":"Demo","version":"1.0.0"},"paths":{}}`),
 	}
 
-	parsed, err := NewLoader(nil).parseDocument(document)
+	parsed, err := NewLoader(nil, nil).parseDocument(document)
 	if err != nil {
 		t.Fatalf("parseDocument returned error: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestParseDocumentDecodesYAMLSwagger2(t *testing.T) {
 		Raw:               []byte("swagger: '2.0'\ninfo:\n  title: Demo\n  version: 1.0.0\npaths: {}\n"),
 	}
 
-	parsed, err := NewLoader(nil).parseDocument(document)
+	parsed, err := NewLoader(nil, nil).parseDocument(document)
 	if err != nil {
 		t.Fatalf("parseDocument returned error: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestParseDocumentRejectsUnknownSpecFamily(t *testing.T) {
 		Raw:               []byte("info:\n  title: Demo\npaths: {}\n"),
 	}
 
-	_, err := NewLoader(nil).parseDocument(document)
+	_, err := NewLoader(nil, nil).parseDocument(document)
 	if !IsErrorKind(err, ErrorKindUnsupportedFamily) {
 		t.Fatalf("expected unsupported family error, got %v", err)
 	}
@@ -82,7 +82,7 @@ func TestParseDocumentRejectsUnsupportedOpenAPIVersion(t *testing.T) {
 		Raw:               []byte("openapi: 2.1.0\ninfo:\n  title: Demo\npaths: {}\n"),
 	}
 
-	_, err := NewLoader(nil).parseDocument(document)
+	_, err := NewLoader(nil, nil).parseDocument(document)
 	if !IsErrorKind(err, ErrorKindUnsupportedVersion) {
 		t.Fatalf("expected unsupported version error, got %v", err)
 	}
@@ -97,7 +97,7 @@ func TestParseDocumentRejectsMalformedOpenAPI3(t *testing.T) {
 		Raw:               []byte("openapi: 3.0.3\ninfo: broken\npaths: {}\n"),
 	}
 
-	_, err := NewLoader(nil).parseDocument(document)
+	_, err := NewLoader(nil, nil).parseDocument(document)
 	if !IsErrorKind(err, ErrorKindOpenAPIParseFailure) {
 		t.Fatalf("expected openapi parse failure, got %v", err)
 	}
@@ -108,7 +108,7 @@ func TestLoadReturnsDecodeErrorForInvalidSyntax(t *testing.T) {
 
 	path := writeTempSpecFile(t, "invalid.yaml", "openapi: 3.0.3\ninfo: [broken\n")
 
-	_, err := NewLoader(nil).Load(context.Background(), Source{Value: path})
+	_, err := NewLoader(nil, nil).Load(context.Background(), Source{Value: path})
 	if !IsErrorKind(err, ErrorKindDecodeFailure) {
 		t.Fatalf("expected decode failure, got %v", err)
 	}

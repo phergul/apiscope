@@ -18,7 +18,7 @@ import (
 func TestPrepareRequestBuildsPathQueryHeadersCookiesAndBody(t *testing.T) {
 	t.Parallel()
 
-	executor := NewExecutor(nil)
+	executor := NewExecutor(nil, nil)
 	operation := &model.Operation{
 		Method: "POST",
 		Path:   "/pets/{petId}",
@@ -57,7 +57,7 @@ func TestPrepareRequestBuildsPathQueryHeadersCookiesAndBody(t *testing.T) {
 func TestPrepareRequestSerializesUrlencodedFormParams(t *testing.T) {
 	t.Parallel()
 
-	executor := NewExecutor(nil)
+	executor := NewExecutor(nil, nil)
 	operation := &model.Operation{
 		Method:            "POST",
 		Path:              "/pets",
@@ -102,7 +102,7 @@ func TestPrepareRequestSerializesUrlencodedFormParams(t *testing.T) {
 func TestPrepareRequestSerializesMultipartFormParams(t *testing.T) {
 	t.Parallel()
 
-	executor := NewExecutor(nil)
+	executor := NewExecutor(nil, nil)
 	operation := &model.Operation{
 		Method:            "POST",
 		Path:              "/pets",
@@ -152,7 +152,7 @@ func TestPrepareRequestSerializesMultipartFileUpload(t *testing.T) {
 		t.Fatalf("WriteFile returned error: %v", err)
 	}
 
-	executor := NewExecutor(nil)
+	executor := NewExecutor(nil, nil)
 	operation := &model.Operation{
 		Method:            "POST",
 		Path:              "/upload",
@@ -207,7 +207,7 @@ func TestPrepareRequestSerializesMultipartFileUpload(t *testing.T) {
 func TestPrepareRequestReturnsClearErrorForUnreadableMultipartFilePath(t *testing.T) {
 	t.Parallel()
 
-	executor := NewExecutor(nil)
+	executor := NewExecutor(nil, nil)
 	operation := &model.Operation{
 		Method:            "POST",
 		Path:              "/upload",
@@ -229,7 +229,7 @@ func TestPrepareRequestReturnsClearErrorForUnreadableMultipartFilePath(t *testin
 func TestPrepareRequestAppliesSupportedAuth(t *testing.T) {
 	t.Parallel()
 
-	executor := NewExecutor(nil)
+	executor := NewExecutor(nil, nil)
 	operation := &model.Operation{Method: "GET", Path: "/me"}
 	requirement := &model.SecurityRequirement{
 		Alternatives: []model.SecurityAlternative{
@@ -263,7 +263,7 @@ func TestPrepareRequestAppliesSupportedAuth(t *testing.T) {
 func TestPrepareRequestAppliesBasicAuth(t *testing.T) {
 	t.Parallel()
 
-	executor := NewExecutor(nil)
+	executor := NewExecutor(nil, nil)
 	request, err := executor.PrepareRequest(
 		&model.Operation{Method: "GET", Path: "/me"},
 		&model.RequestDraft{},
@@ -295,7 +295,7 @@ func TestPrepareRequestAppliesBasicAuth(t *testing.T) {
 func TestPrepareRequestAppliesQueryAPIKey(t *testing.T) {
 	t.Parallel()
 
-	executor := NewExecutor(nil)
+	executor := NewExecutor(nil, nil)
 	request, err := executor.PrepareRequest(
 		&model.Operation{Method: "GET", Path: "/me"},
 		&model.RequestDraft{},
@@ -334,7 +334,7 @@ func TestExecuteCapturesHTTPResponseAndPrettyPrintsJSON(t *testing.T) {
 	}))
 	defer server.Close()
 
-	executor := NewExecutor(server.Client())
+	executor := NewExecutor(server.Client(), nil)
 	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, nil)
 	if err != nil {
 		t.Fatalf("NewRequestWithContext returned error: %v", err)
@@ -355,7 +355,7 @@ func TestExecuteCapturesHTTPResponseAndPrettyPrintsJSON(t *testing.T) {
 func TestExecuteReturnsTransportErrorOnNetworkFailure(t *testing.T) {
 	t.Parallel()
 
-	executor := NewExecutor(&http.Client{})
+	executor := NewExecutor(&http.Client{}, nil)
 	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://127.0.0.1:1", nil)
 	if err != nil {
 		t.Fatalf("NewRequestWithContext returned error: %v", err)

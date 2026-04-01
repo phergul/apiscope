@@ -94,7 +94,7 @@ func (p *Program) Run() error {
 // NewModel builds the root TUI model with default shell and pane state.
 func NewModel(service *app.Service, source string) *Model {
 	if service == nil {
-		service = app.NewService(nil)
+		service = app.NewService(nil, nil)
 	}
 
 	filterInput := widgets.NewTextInput()

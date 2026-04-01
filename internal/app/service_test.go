@@ -44,7 +44,7 @@ func TestServiceLoadSourceInitializesSessionAndView(t *testing.T) {
 		},
 	}
 
-	result, err := NewService(loader).LoadSource(context.Background(), "spec.yaml")
+	result, err := NewService(loader, nil).LoadSource(context.Background(), "spec.yaml")
 	if err != nil {
 		t.Fatalf("LoadSource returned error: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestServiceLoadSourceAllowsSpecsWithNoOperations(t *testing.T) {
 		},
 	}
 
-	result, err := NewService(loader).LoadSource(context.Background(), "empty.yaml")
+	result, err := NewService(loader, nil).LoadSource(context.Background(), "empty.yaml")
 	if err != nil {
 		t.Fatalf("LoadSource returned error: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestServiceLoadSourceReturnsLoaderErrors(t *testing.T) {
 	wantErr := errors.New("boom")
 	loader := &stubLoader{err: wantErr}
 
-	_, err := NewService(loader).LoadSource(context.Background(), "broken.yaml")
+	_, err := NewService(loader, nil).LoadSource(context.Background(), "broken.yaml")
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("expected error %v, got %v", wantErr, err)
 	}
@@ -150,7 +150,7 @@ func TestServiceExecuteCurrentReturnsValidationIssuesBeforeTransport(t *testing.
 		RequestDrafts: map[model.DraftKey]*model.RequestDraft{},
 	}
 
-	result := NewService(nil).ExecuteCurrent(context.Background(), session)
+	result := NewService(nil, nil).ExecuteCurrent(context.Background(), session)
 	if !result.Validation.HasIssues() {
 		t.Fatal("expected validation errors before execution")
 	}
@@ -223,7 +223,7 @@ func TestServiceExecuteCurrentBuildsAndExecutesRequest(t *testing.T) {
 	draft.BodyMediaType = "application/json"
 	draft.BodyRaw = `{"name":"fido"}`
 
-	service := NewServiceWithExecutor(nil, transport.NewExecutor(server.Client()))
+	service := NewServiceWithExecutor(nil, transport.NewExecutor(server.Client(), nil), nil)
 	result := service.ExecuteCurrent(context.Background(), session)
 	if result.Validation.HasIssues() {
 		t.Fatalf("expected execution without validation issues, got %#v", result.Validation.Issues)
@@ -268,7 +268,7 @@ func TestServiceExecuteCurrentReturnsAuthValidationIssuesBeforeTransport(t *test
 		RequestDrafts: map[model.DraftKey]*model.RequestDraft{},
 	}
 
-	result := NewService(nil).ExecuteCurrent(context.Background(), session)
+	result := NewService(nil, nil).ExecuteCurrent(context.Background(), session)
 	if !result.Validation.HasIssues() {
 		t.Fatal("expected auth validation errors before execution")
 	}

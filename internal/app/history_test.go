@@ -104,7 +104,7 @@ func TestServiceExecuteCurrentCapturesExecutedRequestSnapshot(t *testing.T) {
 	draft.BodyMediaType = "application/json"
 	draft.BodyRaw = `{"name":"fido"}`
 
-	result := NewService(nil).ExecuteCurrent(context.Background(), CloneExecutionSession(session))
+	result := NewService(nil, nil).ExecuteCurrent(context.Background(), CloneExecutionSession(session))
 	if got := result.Snapshot.ServerURL; got != server.URL {
 		t.Fatalf("expected snapshot server url, got %q", got)
 	}

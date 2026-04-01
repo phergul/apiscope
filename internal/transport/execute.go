@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/phergul/apiscope/internal/logging"
 	"github.com/phergul/apiscope/internal/model"
 )
 
@@ -21,15 +22,39 @@ func (e *Executor) Execute(ctx context.Context, operationKey model.OperationKey,
 
 	if request == nil {
 		response.TransportError = "request was not prepared"
+		e.logger.Error(
+			"request execution skipped",
+			"event", "execute_skipped",
+			"operation_key", operationKey,
+			"error", response.TransportError,
+		)
 		return response
 	}
 
 	start := time.Now()
 	httpRequest := request.Clone(ctx)
+	e.logger.Info(
+		"sending request",
+		"event", "execute_start",
+		"operation_key", operationKey,
+		"method", httpRequest.Method,
+		"url", logging.SafeURL(httpRequest.URL.String()),
+		"query_keys", logging.QueryKeys(httpRequest.URL.String()),
+		"header_names", logging.HeaderNames(httpRequest.Header),
+	)
 	httpResponse, err := e.client.Do(httpRequest)
 	if err != nil {
 		response.Duration = time.Since(start)
 		response.TransportError = err.Error()
+		e.logger.Error(
+			"request execution failed",
+			"event", "execute_failed",
+			"operation_key", operationKey,
+			"method", httpRequest.Method,
+			"url", logging.SafeURL(httpRequest.URL.String()),
+			"duration_ms", response.Duration.Milliseconds(),
+			"error", response.TransportError,
+		)
 		return response
 	}
 	defer httpResponse.Body.Close()
@@ -48,7 +73,31 @@ func (e *Executor) Execute(ctx context.Context, operationKey model.OperationKey,
 	response.PrettyBody = prettyBody(response.ContentType, body)
 	if readErr != nil {
 		response.TransportError = readErr.Error()
+		e.logger.Error(
+			"response body read failed",
+			"event", "response_read_failed",
+			"operation_key", operationKey,
+			"method", httpRequest.Method,
+			"url", logging.SafeURL(httpRequest.URL.String()),
+			"status_code", response.StatusCode,
+			"duration_ms", response.Duration.Milliseconds(),
+			"error", response.TransportError,
+		)
+		return response
 	}
+
+	e.logger.Info(
+		"request execution completed",
+		"event", "execute_complete",
+		"operation_key", operationKey,
+		"method", httpRequest.Method,
+		"url", logging.SafeURL(httpRequest.URL.String()),
+		"status_code", response.StatusCode,
+		"duration_ms", response.Duration.Milliseconds(),
+		"content_type", response.ContentType,
+		"content_length", response.ContentLength,
+		"header_names", logging.HeaderNames(response.Headers),
+	)
 
 	return response
 }

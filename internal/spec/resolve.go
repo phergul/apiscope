@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"path/filepath"
 
+	"github.com/phergul/apiscope/internal/logging"
 	"github.com/phergul/apiscope/internal/spec/internal/pipeline"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -15,8 +17,17 @@ import (
 
 // resolveDocument resolves internal and external references in the converted OpenAPI document.
 func (l *Loader) resolveDocument(ctx context.Context, converted *pipeline.ConvertedDocument) (*pipeline.ResolvedDocument, error) {
+	source := logging.SafeSource(converted.Document.CanonicalLocation)
+	l.logger.Info(
+		"resolving references",
+		"event", "resolve_start",
+		"source", source,
+		"source_family", converted.SourceFamily,
+		"source_version", converted.SourceVersion,
+	)
 	baseURI, err := resolveBaseURI(converted.Document)
 	if err != nil {
+		l.logError("resolve_failed", "reference resolution failed", err, slog.String("source", source))
 		return nil, &Error{
 			Kind:   ErrorKindRefResolutionFailure,
 			Op:     "resolve refs",
@@ -35,6 +46,15 @@ func (l *Loader) resolveDocument(ctx context.Context, converted *pipeline.Conver
 		if errors.Is(err, openapi3.ErrURINotSupported) {
 			kind = ErrorKindUnsupportedExternalRef
 		}
+		l.logger.Error(
+			"reference resolution failed",
+			"event", "resolve_failed",
+			"source", source,
+			"source_family", converted.SourceFamily,
+			"source_version", converted.SourceVersion,
+			"error_kind", kind,
+			"error", err.Error(),
+		)
 		return nil, &Error{
 			Kind:   kind,
 			Op:     "resolve refs",
@@ -42,6 +62,13 @@ func (l *Loader) resolveDocument(ctx context.Context, converted *pipeline.Conver
 			Err:    err,
 		}
 	}
+	l.logger.Info(
+		"references resolved",
+		"event", "resolve_complete",
+		"source", source,
+		"source_family", converted.SourceFamily,
+		"source_version", converted.SourceVersion,
+	)
 
 	return &pipeline.ResolvedDocument{
 		BaseDocument: pipeline.BaseDocument{

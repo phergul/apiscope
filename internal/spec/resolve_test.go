@@ -36,7 +36,7 @@ components:
           type: string
 `)
 
-	resolved, err := NewLoader(nil).resolveDocument(context.Background(), converted)
+	resolved, err := NewLoader(nil, nil).resolveDocument(context.Background(), converted)
 	if err != nil {
 		t.Fatalf("resolveDocument returned error: %v", err)
 	}
@@ -74,7 +74,7 @@ definitions:
         type: string
 `)
 
-	resolved, err := NewLoader(nil).resolveDocument(context.Background(), converted)
+	resolved, err := NewLoader(nil, nil).resolveDocument(context.Background(), converted)
 	if err != nil {
 		t.Fatalf("resolveDocument returned error: %v", err)
 	}
@@ -112,7 +112,7 @@ components:
       type: object
 `)
 
-	_, err := NewLoader(nil).resolveDocument(context.Background(), converted)
+	_, err := NewLoader(nil, nil).resolveDocument(context.Background(), converted)
 	if !IsErrorKind(err, ErrorKindRefResolutionFailure) {
 		t.Fatalf("expected ref resolution failure, got %v", err)
 	}
@@ -150,13 +150,13 @@ components:
           type: string
 `)
 
-	document, err := NewLoader(nil).loadDocument(context.Background(), Source{Value: rootPath})
+	document, err := NewLoader(nil, nil).loadDocument(context.Background(), Source{Value: rootPath})
 	if err != nil {
 		t.Fatalf("loadDocument returned error: %v", err)
 	}
 	converted := mustConvertLoadedDocument(t, document)
 
-	resolved, err := NewLoader(nil).resolveDocument(context.Background(), converted)
+	resolved, err := NewLoader(nil, nil).resolveDocument(context.Background(), converted)
 	if err != nil {
 		t.Fatalf("resolveDocument returned error: %v", err)
 	}
@@ -212,7 +212,7 @@ components:
 		}
 	})
 
-	resolved, err := NewLoader(client).resolveDocument(context.Background(), converted)
+	resolved, err := NewLoader(client, nil).resolveDocument(context.Background(), converted)
 	if err != nil {
 		t.Fatalf("resolveDocument returned error: %v", err)
 	}
@@ -265,7 +265,7 @@ components:
 		}
 	})
 
-	resolved, err := NewLoader(client).resolveDocument(context.Background(), converted)
+	resolved, err := NewLoader(client, nil).resolveDocument(context.Background(), converted)
 	if err != nil {
 		t.Fatalf("resolveDocument returned error: %v", err)
 	}
@@ -299,7 +299,7 @@ paths:
 `),
 	})
 
-	_, err := NewLoader(nil).resolveDocument(context.Background(), converted)
+	_, err := NewLoader(nil, nil).resolveDocument(context.Background(), converted)
 	if !IsErrorKind(err, ErrorKindUnsupportedExternalRef) {
 		t.Fatalf("expected unsupported external ref, got %v", err)
 	}
@@ -334,7 +334,7 @@ paths:
 		return stringResponse(req, http.StatusNotFound, "text/plain", "missing"), nil
 	})
 
-	_, err := NewLoader(client).resolveDocument(context.Background(), converted)
+	_, err := NewLoader(client, nil).resolveDocument(context.Background(), converted)
 	if !IsErrorKind(err, ErrorKindRefResolutionFailure) {
 		t.Fatalf("expected ref resolution failure, got %v", err)
 	}
@@ -363,7 +363,7 @@ components:
       type: object
 `)
 
-	_, err := NewLoader(nil).Load(context.Background(), Source{Value: path})
+	_, err := NewLoader(nil, nil).Load(context.Background(), Source{Value: path})
 	if !IsErrorKind(err, ErrorKindRefResolutionFailure) {
 		t.Fatalf("expected ref resolution failure, got %v", err)
 	}
@@ -395,7 +395,7 @@ components:
           type: string
 `)
 
-	spec, err := NewLoader(nil).Load(context.Background(), Source{Value: path})
+	spec, err := NewLoader(nil, nil).Load(context.Background(), Source{Value: path})
 	if err != nil {
 		t.Fatalf("expected successful normalised load, got %v", err)
 	}
@@ -417,7 +417,7 @@ func mustConvertDocument(t *testing.T, raw string) *pipeline.ConvertedDocument {
 func mustConvertLoadedDocument(t *testing.T, document *pipeline.LoadedDocument) *pipeline.ConvertedDocument {
 	t.Helper()
 
-	parsed, err := NewLoader(nil).parseDocument(document)
+	parsed, err := NewLoader(nil, nil).parseDocument(document)
 	if err != nil {
 		t.Fatalf("parseDocument returned error: %v", err)
 	}

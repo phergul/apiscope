@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -12,20 +13,25 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/phergul/apiscope/internal/logging"
 	"github.com/phergul/apiscope/internal/model"
 )
 
 type Executor struct {
 	client *http.Client
+	logger *slog.Logger
 }
 
 // NewExecutor builds a transport executor with the provided HTTP client.
-func NewExecutor(client *http.Client) *Executor {
+func NewExecutor(client *http.Client, logger *slog.Logger) *Executor {
 	if client == nil {
 		client = http.DefaultClient
 	}
 
-	return &Executor{client: client}
+	return &Executor{
+		client: client,
+		logger: logging.OrNop(logger).With("component", "transport"),
+	}
 }
 
 // PrepareRequest builds an HTTP request from the selected operation and draft inputs.

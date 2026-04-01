@@ -41,9 +41,10 @@ func TestProjectPopupRendersHistoryRowsAndSelectedRequestDetails(t *testing.T) {
 				Request: model.ExecutedRequestSnapshot{
 					ServerURL: "https://staging.example.com",
 					Draft: model.RequestDraft{
-						PathParams:    map[string]string{"petId": "abc"},
-						BodyMediaType: "application/json",
-						BodyRaw:       "{\n  \"name\": \"fido\"\n}",
+						PathParams:     map[string]string{"petId": "abc"},
+						FormFileParams: map[string]string{"file": "/tmp/demo.txt"},
+						BodyMediaType:  "application/json",
+						BodyRaw:        "{\n  \"name\": \"fido\"\n}",
 					},
 					AuthState: map[string]model.AuthValue{
 						"api_key": {Type: model.AuthSchemeValueTypeAPIKey, APIKey: "secret"},
@@ -71,6 +72,7 @@ func TestProjectPopupRendersHistoryRowsAndSelectedRequestDetails(t *testing.T) {
 		"Selected request",
 		"Server: https://staging.example.com",
 		"Path: petId=abc",
+		"Files: file=/tmp/demo.txt",
 		"Body media type: application/json",
 		"Body preview:",
 		"Auth: api_key key set",

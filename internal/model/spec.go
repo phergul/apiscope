@@ -22,6 +22,13 @@ const (
 	ParameterLocationForm   ParameterLocation = "form"
 )
 
+type FormInputKind string
+
+const (
+	FormInputKindValue FormInputKind = ""
+	FormInputKindFile  FormInputKind = "file"
+)
+
 type SecuritySchemeType string
 
 const (
@@ -120,6 +127,7 @@ type Operation struct {
 type Parameter struct {
 	Name                string
 	In                  ParameterLocation
+	FormInputKind       FormInputKind
 	Description         string
 	Required            bool
 	Deprecated          bool

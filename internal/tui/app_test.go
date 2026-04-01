@@ -4,8 +4,12 @@ import (
 	"context"
 	"errors"
 	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -892,6 +896,155 @@ func TestModelCtrlRExecutesUrlencodedFormOperation(t *testing.T) {
 	}
 	if updated.session.LastResponse.TransportError != "" {
 		t.Fatalf("expected successful execution, got %q", updated.session.LastResponse.TransportError)
+	}
+}
+
+func TestModelCtrlRExecutesMultipartFormOperation(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mediaType, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		if err != nil {
+			t.Fatalf("ParseMediaType returned error: %v", err)
+		}
+		if mediaType != "multipart/form-data" {
+			t.Fatalf("expected multipart form content type, got %q", mediaType)
+		}
+		reader := multipart.NewReader(r.Body, params["boundary"])
+		part, err := reader.NextPart()
+		if err != nil {
+			t.Fatalf("NextPart returned error: %v", err)
+		}
+		body, err := io.ReadAll(part)
+		if err != nil {
+			t.Fatalf("ReadAll returned error: %v", err)
+		}
+		if got := part.FormName(); got != "name" {
+			t.Fatalf("expected multipart field name, got %q", got)
+		}
+		if got := string(body); got != "fido" {
+			t.Fatalf("expected multipart field value, got %q", got)
+		}
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	m := newLoadedModelForNavigation()
+	m.service = app.NewService(nil)
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.session.SelectedOperationKey = model.NewOperationKey("POST", "/pets")
+	m.session.SelectedServerURL = server.URL
+	m.session.Spec.Security = nil
+	m.session.Spec.Operations[1].Parameters = []model.Parameter{
+		{Name: "name", In: model.ParameterLocationForm, Required: true, Schema: &model.Schema{Type: "string"}},
+	}
+	m.session.Spec.Operations[1].FormBodyMediaType = "multipart/form-data"
+	m.session.Spec.Operations[1].Security = nil
+	m.panes.activeRequestSection = requestui.SectionForm
+
+	draft := m.ensureSelectedRequestDraft()
+	draft.FormParams["name"] = "fido"
+
+	updatedModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlR})
+	updated := updatedModel.(*Model)
+	if cmd == nil {
+		t.Fatal("expected ctrl+r to execute multipart form request")
+	}
+
+	msg := cmd()
+	updatedModel, _ = updated.Update(msg)
+	updated = updatedModel.(*Model)
+	if updated.session.LastResponse == nil {
+		t.Fatal("expected response after execution")
+	}
+	if updated.session.LastResponse.TransportError != "" {
+		t.Fatalf("expected successful execution, got %q", updated.session.LastResponse.TransportError)
+	}
+}
+
+func TestModelCtrlRExecutesMultipartFileUploadOperation(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	uploadPath := filepath.Join(tempDir, "avatar.txt")
+	if err := os.WriteFile(uploadPath, []byte("hello file"), 0o600); err != nil {
+		t.Fatalf("WriteFile returned error: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mediaType, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		if err != nil {
+			t.Fatalf("ParseMediaType returned error: %v", err)
+		}
+		if mediaType != "multipart/form-data" {
+			t.Fatalf("expected multipart form content type, got %q", mediaType)
+		}
+		reader := multipart.NewReader(r.Body, params["boundary"])
+		seen := map[string]string{}
+		names := map[string]string{}
+		for {
+			part, err := reader.NextPart()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				t.Fatalf("NextPart returned error: %v", err)
+			}
+			body, err := io.ReadAll(part)
+			if err != nil {
+				t.Fatalf("ReadAll returned error: %v", err)
+			}
+			seen[part.FormName()] = string(body)
+			names[part.FormName()] = part.FileName()
+		}
+		if got := seen["description"]; got != "avatar" {
+			t.Fatalf("expected multipart scalar field, got %q", got)
+		}
+		if got := seen["file"]; got != "hello file" {
+			t.Fatalf("expected multipart file body, got %q", got)
+		}
+		if got := names["file"]; got != "avatar.txt" {
+			t.Fatalf("expected multipart filename, got %q", got)
+		}
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	m := newLoadedModelForNavigation()
+	m.service = app.NewService(nil)
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.session.SelectedOperationKey = model.NewOperationKey("POST", "/pets")
+	m.session.SelectedServerURL = server.URL
+	m.session.Spec.Security = nil
+	m.session.Spec.Operations[1].Parameters = []model.Parameter{
+		{Name: "description", In: model.ParameterLocationForm, Schema: &model.Schema{Type: "string"}},
+		{Name: "file", In: model.ParameterLocationForm, FormInputKind: model.FormInputKindFile, Required: true},
+	}
+	m.session.Spec.Operations[1].FormBodyMediaType = "multipart/form-data"
+	m.session.Spec.Operations[1].Security = nil
+	m.panes.activeRequestSection = requestui.SectionForm
+
+	draft := m.ensureSelectedRequestDraft()
+	draft.FormParams["description"] = "avatar"
+	draft.FormFileParams["file"] = uploadPath
+
+	updatedModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlR})
+	updated := updatedModel.(*Model)
+	if cmd == nil {
+		t.Fatal("expected ctrl+r to execute multipart file request")
+	}
+
+	msg := cmd()
+	updatedModel, _ = updated.Update(msg)
+	updated = updatedModel.(*Model)
+	if updated.session.LastResponse == nil {
+		t.Fatal("expected response after execution")
+	}
+	if updated.session.LastResponse.TransportError != "" {
+		t.Fatalf("expected successful execution, got %q", updated.session.LastResponse.TransportError)
+	}
+	if got := updated.session.RequestHistory[len(updated.session.RequestHistory)-1].Request.Draft.FormFileParams["file"]; got != uploadPath {
+		t.Fatalf("expected request history snapshot to preserve file path, got %q", got)
 	}
 }
 

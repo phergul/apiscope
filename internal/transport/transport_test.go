@@ -3,8 +3,12 @@ package transport
 import (
 	"context"
 	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -92,6 +96,133 @@ func TestPrepareRequestSerializesUrlencodedFormParams(t *testing.T) {
 	}
 	if cookie.Value != "cookie-1" {
 		t.Fatalf("expected cookie value cookie-1, got %q", cookie.Value)
+	}
+}
+
+func TestPrepareRequestSerializesMultipartFormParams(t *testing.T) {
+	t.Parallel()
+
+	executor := NewExecutor(nil)
+	operation := &model.Operation{
+		Method:            "POST",
+		Path:              "/pets",
+		FormBodyMediaType: "multipart/form-data",
+	}
+	draft := &model.RequestDraft{
+		FormParams: map[string]string{"name": "fido", "skip": "   "},
+	}
+
+	request, err := executor.PrepareRequest(operation, draft, "https://api.example.com", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("PrepareRequest returned error: %v", err)
+	}
+	mediaType, params, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+	if err != nil {
+		t.Fatalf("ParseMediaType returned error: %v", err)
+	}
+	if mediaType != "multipart/form-data" {
+		t.Fatalf("expected multipart form content type, got %q", mediaType)
+	}
+	reader := multipart.NewReader(request.Body, params["boundary"])
+	part, err := reader.NextPart()
+	if err != nil {
+		t.Fatalf("NextPart returned error: %v", err)
+	}
+	if got := part.FormName(); got != "name" {
+		t.Fatalf("expected form field part, got %q", got)
+	}
+	body, err := io.ReadAll(part)
+	if err != nil {
+		t.Fatalf("ReadAll returned error: %v", err)
+	}
+	if got := string(body); got != "fido" {
+		t.Fatalf("expected multipart form value, got %q", got)
+	}
+	if _, err := reader.NextPart(); err != io.EOF {
+		t.Fatalf("expected one multipart field part, got %v", err)
+	}
+}
+
+func TestPrepareRequestSerializesMultipartFileUpload(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	uploadPath := filepath.Join(tempDir, "avatar.txt")
+	if err := os.WriteFile(uploadPath, []byte("hello file"), 0o600); err != nil {
+		t.Fatalf("WriteFile returned error: %v", err)
+	}
+
+	executor := NewExecutor(nil)
+	operation := &model.Operation{
+		Method:            "POST",
+		Path:              "/upload",
+		FormBodyMediaType: "multipart/form-data",
+	}
+	draft := &model.RequestDraft{
+		FormParams:     map[string]string{"description": "avatar"},
+		FormFileParams: map[string]string{"file": uploadPath},
+	}
+
+	request, err := executor.PrepareRequest(operation, draft, "https://api.example.com", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("PrepareRequest returned error: %v", err)
+	}
+	mediaType, params, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+	if err != nil {
+		t.Fatalf("ParseMediaType returned error: %v", err)
+	}
+	if mediaType != "multipart/form-data" {
+		t.Fatalf("expected multipart form content type, got %q", mediaType)
+	}
+
+	reader := multipart.NewReader(request.Body, params["boundary"])
+	parts := map[string]string{}
+	filenames := map[string]string{}
+	for {
+		part, err := reader.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("NextPart returned error: %v", err)
+		}
+		body, err := io.ReadAll(part)
+		if err != nil {
+			t.Fatalf("ReadAll returned error: %v", err)
+		}
+		parts[part.FormName()] = string(body)
+		filenames[part.FormName()] = part.FileName()
+	}
+	if got := parts["description"]; got != "avatar" {
+		t.Fatalf("expected multipart scalar field, got %q", got)
+	}
+	if got := parts["file"]; got != "hello file" {
+		t.Fatalf("expected multipart file part, got %q", got)
+	}
+	if got := filenames["file"]; got != "avatar.txt" {
+		t.Fatalf("expected multipart filename avatar.txt, got %q", got)
+	}
+}
+
+func TestPrepareRequestReturnsClearErrorForUnreadableMultipartFilePath(t *testing.T) {
+	t.Parallel()
+
+	executor := NewExecutor(nil)
+	operation := &model.Operation{
+		Method:            "POST",
+		Path:              "/upload",
+		FormBodyMediaType: "multipart/form-data",
+	}
+	draft := &model.RequestDraft{
+		FormFileParams: map[string]string{"file": filepath.Join(t.TempDir(), "missing.txt")},
+	}
+
+	_, err := executor.PrepareRequest(operation, draft, "https://api.example.com", nil, nil, nil)
+	if err == nil {
+		t.Fatal("expected unreadable file path error")
+	}
+	if !strings.Contains(err.Error(), `file form parameter "file" path "`) {
+		t.Fatalf("expected file-path error message, got %v", err)
 	}
 }
 

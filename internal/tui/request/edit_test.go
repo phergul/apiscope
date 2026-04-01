@@ -170,6 +170,39 @@ func TestSaveEditWritesFormFieldToDraft(t *testing.T) {
 	}
 }
 
+func TestSaveEditWritesFormFilePathToDraft(t *testing.T) {
+	t.Parallel()
+
+	session := model.SessionState{
+		RequestDrafts: map[model.DraftKey]*model.RequestDraft{},
+	}
+	selected := &model.Operation{Key: model.NewOperationKey("POST", "/upload")}
+	parameter := model.Parameter{Name: "file", In: model.ParameterLocationForm, FormInputKind: model.FormInputKindFile}
+
+	ok := SaveEdit(
+		&session,
+		selected,
+		[]RowDescriptor{{
+			ID:        "form:file",
+			Kind:      RowKindParameter,
+			Parameter: &parameter,
+			Editable:  true,
+		}},
+		0,
+		model.RequestEditKindField,
+		"/tmp/demo.txt",
+		nil,
+	)
+	if !ok {
+		t.Fatal("expected save to succeed")
+	}
+
+	draft := app.EnsureRequestDraft(&session, selected)
+	if got := draft.FormFileParams["file"]; got != "/tmp/demo.txt" {
+		t.Fatalf("expected form file draft to be saved, got %q", got)
+	}
+}
+
 func TestStartEditSeedsAuthFieldBufferFromSessionAuthState(t *testing.T) {
 	t.Parallel()
 

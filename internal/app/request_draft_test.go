@@ -119,6 +119,27 @@ func TestSetDraftParameterStoresFormValues(t *testing.T) {
 	}
 }
 
+func TestSetDraftParameterStoresFormFilePaths(t *testing.T) {
+	t.Parallel()
+
+	session := model.SessionState{
+		SpecFingerprint: "spec-123",
+		RequestDrafts:   make(map[model.DraftKey]*model.RequestDraft),
+	}
+	operation := &model.Operation{Key: model.NewOperationKey("POST", "/upload")}
+	parameter := model.Parameter{Name: "file", In: model.ParameterLocationForm, FormInputKind: model.FormInputKindFile}
+
+	draft := SetDraftParameter(&session, operation, parameter, "/tmp/demo.txt")
+	if got := draft.FormFileParams["file"]; got != "/tmp/demo.txt" {
+		t.Fatalf("expected file form param to be stored, got %q", got)
+	}
+
+	draft = SetDraftParameter(&session, operation, parameter, "")
+	if _, ok := draft.FormFileParams["file"]; ok {
+		t.Fatalf("expected cleared file form param to be removed, got %#v", draft.FormFileParams)
+	}
+}
+
 func TestSetDraftBodyRawPreservesEmptyString(t *testing.T) {
 	t.Parallel()
 

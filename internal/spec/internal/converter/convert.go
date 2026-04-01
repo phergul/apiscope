@@ -97,8 +97,9 @@ func convertSwaggerDocument(parsed *pipeline.ParsedDocument) (*openapi3.T, error
 
 	globalConsumes := getStringSlice(parsed.SwaggerDoc, "consumes")
 	globalProduces := getStringSlice(parsed.SwaggerDoc, "produces")
+	rawParameterDefinitions, _ := getMap(parsed.SwaggerDoc, "parameters")
 
-	paths, err := convertSwaggerPaths(parsed.Document.CanonicalLocation, parsed.SwaggerDoc, globalConsumes, globalProduces)
+	paths, err := convertSwaggerPaths(parsed.Document.CanonicalLocation, parsed.SwaggerDoc, globalConsumes, globalProduces, rawParameterDefinitions)
 	if err != nil {
 		return nil, err
 	}

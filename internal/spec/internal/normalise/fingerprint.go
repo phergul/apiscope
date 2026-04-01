@@ -62,6 +62,7 @@ type fingerprintOperation struct {
 type fingerprintParameter struct {
 	Name                string                  `json:"name"`
 	In                  model.ParameterLocation `json:"in"`
+	FormInputKind       model.FormInputKind     `json:"form_input_kind,omitempty"`
 	Description         string                  `json:"description"`
 	Required            bool                    `json:"required"`
 	Deprecated          bool                    `json:"deprecated"`
@@ -225,6 +226,7 @@ func canonicalParameters(parameters []model.Parameter) []fingerprintParameter {
 		result = append(result, fingerprintParameter{
 			Name:                parameter.Name,
 			In:                  parameter.In,
+			FormInputKind:       parameter.FormInputKind,
 			Description:         parameter.Description,
 			Required:            parameter.Required,
 			Deprecated:          parameter.Deprecated,

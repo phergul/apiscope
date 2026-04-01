@@ -9,7 +9,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
-func convertSwaggerPaths(source string, swaggerDoc map[string]any, globalConsumes, globalProduces []string) (*openapi3.Paths, error) {
+func convertSwaggerPaths(source string, swaggerDoc map[string]any, globalConsumes, globalProduces []string, parameterDefinitions map[string]any) (*openapi3.Paths, error) {
 	rawPaths, _ := getMap(swaggerDoc, "paths")
 	converted := &openapi3.Paths{}
 
@@ -24,7 +24,7 @@ func convertSwaggerPaths(source string, swaggerDoc map[string]any, globalConsume
 			}
 		}
 
-		pathItem, err := convertSwaggerPathItem(source, pathName, pathMap, globalConsumes, globalProduces)
+		pathItem, err := convertSwaggerPathItem(source, pathName, pathMap, globalConsumes, globalProduces, parameterDefinitions)
 		if err != nil {
 			return nil, err
 		}
@@ -35,7 +35,7 @@ func convertSwaggerPaths(source string, swaggerDoc map[string]any, globalConsume
 	return converted, nil
 }
 
-func convertSwaggerPathItem(source, pathName string, pathMap map[string]any, globalConsumes, globalProduces []string) (*openapi3.PathItem, error) {
+func convertSwaggerPathItem(source, pathName string, pathMap map[string]any, globalConsumes, globalProduces []string, parameterDefinitions map[string]any) (*openapi3.PathItem, error) {
 	if ref, ok := pathMap["$ref"]; ok {
 		return &openapi3.PathItem{
 			Ref: convertSwaggerRef(fmt.Sprint(ref)),
@@ -67,7 +67,7 @@ func convertSwaggerPathItem(source, pathName string, pathMap map[string]any, glo
 			}
 		}
 
-		operation, err := convertSwaggerOperation(source, pathName, method, operationMap, globalConsumes, globalProduces)
+		operation, err := convertSwaggerOperation(source, pathName, method, operationMap, globalConsumes, globalProduces, parameterDefinitions)
 		if err != nil {
 			return nil, err
 		}
@@ -93,8 +93,8 @@ func convertSwaggerPathItem(source, pathName string, pathMap map[string]any, glo
 	return item, nil
 }
 
-func convertSwaggerOperation(source, pathName, method string, operationMap map[string]any, globalConsumes, globalProduces []string) (*openapi3.Operation, error) {
-	parameters, requestBody, extensions, err := convertSwaggerOperationInputs(source, pathName, method, operationMap, globalConsumes)
+func convertSwaggerOperation(source, pathName, method string, operationMap map[string]any, globalConsumes, globalProduces []string, parameterDefinitions map[string]any) (*openapi3.Operation, error) {
+	parameters, requestBody, extensions, err := convertSwaggerOperationInputs(source, pathName, method, operationMap, globalConsumes, parameterDefinitions)
 	if err != nil {
 		return nil, err
 	}

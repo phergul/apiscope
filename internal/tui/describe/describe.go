@@ -27,6 +27,9 @@ func ParametersInLocation(parameters []model.Parameter, location model.Parameter
 }
 
 func ParameterTypeHint(parameter model.Parameter) string {
+	if parameter.FormInputKind == model.FormInputKindFile {
+		return "file path"
+	}
 	if parameter.Schema != nil {
 		return SchemaTypeHint(parameter.Schema)
 	}

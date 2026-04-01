@@ -26,6 +26,7 @@ func EnsureRequestDraft(session *model.SessionState, operation *model.Operation)
 		HeaderParams:     make(map[string]string),
 		CookieParams:     make(map[string]string),
 		FormParams:       make(map[string]string),
+		FormFileParams:   make(map[string]string),
 		SelectedExamples: make(map[string]string),
 	}
 	if operation.RequestBody != nil && len(operation.RequestBody.Content) > 0 {
@@ -43,7 +44,7 @@ func SetDraftParameter(session *model.SessionState, operation *model.Operation, 
 		return nil
 	}
 
-	target := parameterValueMap(draft, parameter.In)
+	target := parameterValueMap(draft, parameter)
 	if target == nil {
 		return draft
 	}
@@ -78,13 +79,13 @@ func SetDraftBodyRaw(session *model.SessionState, operation *model.Operation, va
 	return draft
 }
 
-// parameterValueMap returns the parameter map for the requested parameter location.
-func parameterValueMap(draft *model.RequestDraft, location model.ParameterLocation) map[string]string {
+// parameterValueMap returns the parameter map for the requested parameter.
+func parameterValueMap(draft *model.RequestDraft, parameter model.Parameter) map[string]string {
 	if draft == nil {
 		return nil
 	}
 
-	switch location {
+	switch parameter.In {
 	case model.ParameterLocationPath:
 		if draft.PathParams == nil {
 			draft.PathParams = make(map[string]string)
@@ -106,6 +107,12 @@ func parameterValueMap(draft *model.RequestDraft, location model.ParameterLocati
 		}
 		return draft.CookieParams
 	case model.ParameterLocationForm:
+		if parameter.FormInputKind == model.FormInputKindFile {
+			if draft.FormFileParams == nil {
+				draft.FormFileParams = make(map[string]string)
+			}
+			return draft.FormFileParams
+		}
 		if draft.FormParams == nil {
 			draft.FormParams = make(map[string]string)
 		}

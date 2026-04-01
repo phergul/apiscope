@@ -209,7 +209,81 @@ paths:
 	}
 }
 
-func TestConvertRejectsMultipartSwaggerFormData(t *testing.T) {
+func TestConvertSupportsReusableSwaggerFormDataParameterRef(t *testing.T) {
+	t.Parallel()
+
+	raw := `swagger: "2.0"
+info:
+  title: Demo
+  version: 1.0.0
+parameters:
+  PetName:
+    name: name
+    in: formData
+    required: true
+    type: string
+paths:
+  /pets:
+    post:
+      consumes: [application/x-www-form-urlencoded]
+      parameters:
+        - $ref: "#/parameters/PetName"
+      responses:
+        "200":
+          description: ok
+`
+
+	converted, err := Convert(mustParsedSwagger(t, raw))
+	if err != nil {
+		t.Fatalf("Convert returned error: %v", err)
+	}
+
+	component := converted.OpenAPI3Doc.Components.Parameters["PetName"]
+	if component == nil || component.Value == nil {
+		t.Fatal("expected converted reusable form parameter")
+	}
+	if got := component.Value.Extensions[pipeline.SwaggerParameterLocationExtension]; got != "formData" {
+		t.Fatalf("expected reusable form parameter extension, got %#v", got)
+	}
+	pathItem := converted.OpenAPI3Doc.Paths.Value("/pets")
+	if pathItem == nil || pathItem.Post == nil {
+		t.Fatal("expected converted post operation")
+	}
+	if got := pathItem.Post.Parameters[0].Ref; got != "#/components/parameters/PetName" {
+		t.Fatalf("expected reusable parameter ref rewrite, got %q", got)
+	}
+	if got := pathItem.Post.Extensions[pipeline.SwaggerFormBodyMediaTypeExtension]; got != "application/x-www-form-urlencoded" {
+		t.Fatalf("expected form body media type extension for reusable form ref, got %#v", got)
+	}
+}
+
+func TestConvertRejectsUnsupportedReusableSwaggerParameterDefinition(t *testing.T) {
+	t.Parallel()
+
+	raw := `swagger: "2.0"
+info:
+  title: Demo
+  version: 1.0.0
+parameters:
+  CookieToken:
+    name: token
+    in: cookie
+    type: string
+paths:
+  /pets:
+    get:
+      responses:
+        "200":
+          description: ok
+`
+
+	_, err := Convert(mustParsedSwagger(t, raw))
+	if !isPipelineErrorKind(err, pipeline.ErrorKindUnsupportedSwaggerConstruct) {
+		t.Fatalf("expected unsupported swagger construct error, got %v", err)
+	}
+}
+
+func TestConvertSupportsMultipartSwaggerFormData(t *testing.T) {
 	t.Parallel()
 
 	raw := `swagger: "2.0"
@@ -229,9 +303,14 @@ paths:
           description: ok
 `
 
-	_, err := Convert(mustParsedSwagger(t, raw))
-	if !isPipelineErrorKind(err, pipeline.ErrorKindUnsupportedSwaggerConstruct) {
-		t.Fatalf("expected unsupported swagger construct error, got %v", err)
+	converted, err := Convert(mustParsedSwagger(t, raw))
+	if err != nil {
+		t.Fatalf("Convert returned error: %v", err)
+	}
+
+	pathItem := converted.OpenAPI3Doc.Paths.Value("/pets")
+	if got := pathItem.Post.Extensions[pipeline.SwaggerFormBodyMediaTypeExtension]; got != "multipart/form-data" {
+		t.Fatalf("expected multipart form body media type extension, got %#v", got)
 	}
 }
 
@@ -254,6 +333,76 @@ paths:
         - name: name
           in: formData
           type: string
+      responses:
+        "200":
+          description: ok
+`
+
+	_, err := Convert(mustParsedSwagger(t, raw))
+	if !isPipelineErrorKind(err, pipeline.ErrorKindUnsupportedSwaggerConstruct) {
+		t.Fatalf("expected unsupported swagger construct error, got %v", err)
+	}
+}
+
+func TestConvertSupportsMultipartSwaggerFileUpload(t *testing.T) {
+	t.Parallel()
+
+	raw := `swagger: "2.0"
+info:
+  title: Demo
+  version: 1.0.0
+paths:
+  /upload:
+    post:
+      consumes: [multipart/form-data]
+      parameters:
+        - name: description
+          in: formData
+          type: string
+        - name: file
+          in: formData
+          type: file
+      responses:
+        "200":
+          description: ok
+`
+
+	converted, err := Convert(mustParsedSwagger(t, raw))
+	if err != nil {
+		t.Fatalf("Convert returned error: %v", err)
+	}
+
+	pathItem := converted.OpenAPI3Doc.Paths.Value("/upload")
+	if pathItem == nil || pathItem.Post == nil {
+		t.Fatal("expected converted upload operation")
+	}
+	if got := pathItem.Post.Extensions[pipeline.SwaggerFormBodyMediaTypeExtension]; got != "multipart/form-data" {
+		t.Fatalf("expected multipart form body media type extension, got %#v", got)
+	}
+	fileParam := pathItem.Post.Parameters[1].Value
+	if fileParam == nil {
+		t.Fatal("expected file form parameter")
+	}
+	if got := fileParam.Extensions[pipeline.SwaggerFormFileParameterExtension]; got != true {
+		t.Fatalf("expected file form extension, got %#v", got)
+	}
+}
+
+func TestConvertRejectsUrlencodedSwaggerFileUpload(t *testing.T) {
+	t.Parallel()
+
+	raw := `swagger: "2.0"
+info:
+  title: Demo
+  version: 1.0.0
+paths:
+  /upload:
+    post:
+      consumes: [application/x-www-form-urlencoded]
+      parameters:
+        - name: file
+          in: formData
+          type: file
       responses:
         "200":
           description: ok

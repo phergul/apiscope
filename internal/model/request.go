@@ -16,6 +16,7 @@ type RequestDraft struct {
 	HeaderParams     map[string]string
 	CookieParams     map[string]string
 	FormParams       map[string]string
+	FormFileParams   map[string]string
 	BodyMediaType    string
 	BodyRaw          string
 	SelectedExamples map[string]string

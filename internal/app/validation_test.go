@@ -14,6 +14,7 @@ func TestValidateRequestReportsRequiredParamAndBodyIssues(t *testing.T) {
 			{Name: "petId", In: model.ParameterLocationPath, Required: true},
 			{Name: "market", In: model.ParameterLocationQuery, Required: true},
 			{Name: "name", In: model.ParameterLocationForm, Required: true},
+			{Name: "file", In: model.ParameterLocationForm, FormInputKind: model.FormInputKindFile, Required: true},
 		},
 		RequestBody: &model.RequestBodySpec{
 			Required: true,
@@ -31,8 +32,8 @@ func TestValidateRequestReportsRequiredParamAndBodyIssues(t *testing.T) {
 	if len(result.MessagesForSection("Query")) != 1 {
 		t.Fatalf("expected one query validation issue, got %d", len(result.MessagesForSection("Query")))
 	}
-	if len(result.MessagesForSection("Form")) != 1 {
-		t.Fatalf("expected one form validation issue, got %d", len(result.MessagesForSection("Form")))
+	if len(result.MessagesForSection("Form")) != 2 {
+		t.Fatalf("expected two form validation issues, got %d", len(result.MessagesForSection("Form")))
 	}
 	if len(result.MessagesForSection("Body")) != 2 {
 		t.Fatalf("expected two body validation issues, got %d", len(result.MessagesForSection("Body")))
@@ -46,16 +47,18 @@ func TestValidateRequestPassesWhenRequiredInputsArePresent(t *testing.T) {
 		Parameters: []model.Parameter{
 			{Name: "petId", In: model.ParameterLocationPath, Required: true},
 			{Name: "name", In: model.ParameterLocationForm, Required: true},
+			{Name: "file", In: model.ParameterLocationForm, FormInputKind: model.FormInputKindFile, Required: true},
 		},
 		RequestBody: &model.RequestBodySpec{
 			Required: true,
 		},
 	}
 	draft := &model.RequestDraft{
-		PathParams:    map[string]string{"petId": "abc"},
-		FormParams:    map[string]string{"name": "fido"},
-		BodyMediaType: "application/json",
-		BodyRaw:       "{}",
+		PathParams:     map[string]string{"petId": "abc"},
+		FormParams:     map[string]string{"name": "fido"},
+		FormFileParams: map[string]string{"file": "/tmp/demo.txt"},
+		BodyMediaType:  "application/json",
+		BodyRaw:        "{}",
 	}
 
 	result := ValidateRequest(operation, draft)

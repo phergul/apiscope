@@ -309,6 +309,7 @@ func normaliseParameterModel(name string, in model.ParameterLocation, parameter 
 	normalised := model.Parameter{
 		Name:                name,
 		In:                  in,
+		FormInputKind:       swaggerFormInputKindFromExtensions(parameter.Extensions),
 		Description:         parameter.Description,
 		Required:            parameter.Required,
 		Deprecated:          parameter.Deprecated,
@@ -452,6 +453,23 @@ func swaggerFormBodyMediaTypeFromExtensions(extensions map[string]any) (string, 
 	}
 
 	return value, true
+}
+
+func swaggerFormInputKindFromExtensions(extensions map[string]any) model.FormInputKind {
+	if len(extensions) == 0 {
+		return model.FormInputKindValue
+	}
+	raw, ok := extensions[pipeline.SwaggerFormFileParameterExtension]
+	if !ok || raw == nil {
+		return model.FormInputKindValue
+	}
+
+	file, ok := raw.(bool)
+	if ok && file {
+		return model.FormInputKindFile
+	}
+
+	return model.FormInputKindValue
 }
 
 func swaggerAssumedFormEncodingFromExtensions(extensions map[string]any) bool {

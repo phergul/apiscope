@@ -181,6 +181,42 @@ paths:
 	}
 }
 
+func TestDocumentNormalisesReusableSwaggerFormDataParameterRef(t *testing.T) {
+	t.Parallel()
+
+	spec, err := Document(mustResolvedSwagger(t, `swagger: "2.0"
+info:
+  title: Swagger Demo
+  version: 1.0.0
+parameters:
+  PetName:
+    name: name
+    in: formData
+    required: true
+    type: string
+paths:
+  /pets:
+    post:
+      consumes: [application/x-www-form-urlencoded]
+      parameters:
+        - $ref: "#/parameters/PetName"
+      responses:
+        "200":
+          description: ok
+`))
+	if err != nil {
+		t.Fatalf("Document returned error: %v", err)
+	}
+
+	op := spec.Operations[0]
+	if op.FormBodyMediaType != "application/x-www-form-urlencoded" {
+		t.Fatalf("expected form body media type marker, got %q", op.FormBodyMediaType)
+	}
+	if len(op.Parameters) != 1 || op.Parameters[0].In != model.ParameterLocationForm {
+		t.Fatalf("expected reusable form parameter to normalize, got %#v", op.Parameters)
+	}
+}
+
 func TestDocumentWarnsWhenSwaggerFormDataAssumesUrlencodedConsumes(t *testing.T) {
 	t.Parallel()
 
@@ -208,6 +244,71 @@ paths:
 	}
 	if !hasWarningContaining(spec.Warnings, "assumed application/x-www-form-urlencoded") {
 		t.Fatalf("expected consumes assumption warning, got %#v", spec.Warnings)
+	}
+}
+
+func TestDocumentNormalisesMultipartSwaggerFormData(t *testing.T) {
+	t.Parallel()
+
+	spec, err := Document(mustResolvedSwagger(t, `swagger: "2.0"
+info:
+  title: Swagger Demo
+  version: 1.0.0
+paths:
+  /pets:
+    post:
+      consumes: [multipart/form-data]
+      parameters:
+        - name: name
+          in: formData
+          type: string
+      responses:
+        "200":
+          description: ok
+`))
+	if err != nil {
+		t.Fatalf("Document returned error: %v", err)
+	}
+
+	op := spec.Operations[0]
+	if op.FormBodyMediaType != "multipart/form-data" {
+		t.Fatalf("expected multipart form body media type, got %q", op.FormBodyMediaType)
+	}
+	if len(op.Parameters) != 1 || op.Parameters[0].In != model.ParameterLocationForm {
+		t.Fatalf("expected multipart form parameter, got %#v", op.Parameters)
+	}
+}
+
+func TestDocumentNormalisesSwaggerFileUploadParameter(t *testing.T) {
+	t.Parallel()
+
+	spec, err := Document(mustResolvedSwagger(t, `swagger: "2.0"
+info:
+  title: Swagger Demo
+  version: 1.0.0
+paths:
+  /upload:
+    post:
+      consumes: [multipart/form-data]
+      parameters:
+        - name: file
+          in: formData
+          required: true
+          type: file
+      responses:
+        "200":
+          description: ok
+`))
+	if err != nil {
+		t.Fatalf("Document returned error: %v", err)
+	}
+
+	op := spec.Operations[0]
+	if op.FormBodyMediaType != "multipart/form-data" {
+		t.Fatalf("expected multipart form body media type, got %q", op.FormBodyMediaType)
+	}
+	if len(op.Parameters) != 1 || op.Parameters[0].FormInputKind != model.FormInputKindFile {
+		t.Fatalf("expected file upload parameter to normalize, got %#v", op.Parameters)
 	}
 }
 
@@ -256,6 +357,44 @@ paths:
 	}
 	if oasSpec.Servers[0].URL != swaggerSpec.Servers[0].URL {
 		t.Fatalf("expected matching normalised server urls, got %q and %q", oasSpec.Servers[0].URL, swaggerSpec.Servers[0].URL)
+	}
+}
+
+func TestDocumentMergesPathLevelReusableParameterRefsWithOperationOverrides(t *testing.T) {
+	t.Parallel()
+
+	spec, err := Document(mustResolvedSwagger(t, `swagger: "2.0"
+info:
+  title: Swagger Demo
+  version: 1.0.0
+parameters:
+  Limit:
+    name: limit
+    in: query
+    type: string
+paths:
+  /pets:
+    parameters:
+      - $ref: "#/parameters/Limit"
+    get:
+      parameters:
+        - name: limit
+          in: query
+          type: integer
+      responses:
+        "200":
+          description: ok
+`))
+	if err != nil {
+		t.Fatalf("Document returned error: %v", err)
+	}
+
+	op := spec.Operations[0]
+	if len(op.Parameters) != 1 {
+		t.Fatalf("expected merged parameter list, got %#v", op.Parameters)
+	}
+	if got := op.Parameters[0].Schema.Type; got != "integer" {
+		t.Fatalf("expected operation-level parameter override to win, got %#v", op.Parameters[0])
 	}
 }
 
@@ -855,6 +994,11 @@ func mustResolvedSwagger(t *testing.T, raw string) *pipeline.ResolvedDocument {
 	converted, err := converter.Convert(parsed)
 	if err != nil {
 		t.Fatalf("converter.Convert: %v", err)
+	}
+	loader := openapi3.NewLoader()
+	loader.IsExternalRefsAllowed = true
+	if err := loader.ResolveRefsIn(converted.OpenAPI3Doc, nil); err != nil {
+		t.Fatalf("loader.ResolveRefsIn: %v", err)
 	}
 
 	return &pipeline.ResolvedDocument{BaseDocument: converted.BaseDocument}

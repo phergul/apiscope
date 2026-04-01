@@ -263,3 +263,35 @@ func TestProjectPaneBuildsEditableFormRows(t *testing.T) {
 		t.Fatal("expected form row to be editable")
 	}
 }
+
+func TestProjectPaneBuildsEditableFileUploadRows(t *testing.T) {
+	t.Parallel()
+
+	projection := ProjectPane(PaneInput{
+		Selected: &model.Operation{
+			Parameters: []model.Parameter{
+				{
+					Name:          "file",
+					In:            model.ParameterLocationForm,
+					FormInputKind: model.FormInputKindFile,
+					Required:      true,
+				},
+			},
+			FormBodyMediaType: "multipart/form-data",
+		},
+		Draft: &model.RequestDraft{
+			FormFileParams: map[string]string{"file": "/tmp/demo.txt"},
+		},
+		ActiveSection: SectionForm,
+	})
+
+	if len(projection.Data.Rows) != 1 {
+		t.Fatalf("expected one file upload row, got %d", len(projection.Data.Rows))
+	}
+	if projection.Data.Rows[0].Meta != "required, file path" {
+		t.Fatalf("expected file path row meta, got %q", projection.Data.Rows[0].Meta)
+	}
+	if projection.Data.Rows[0].Value != "/tmp/demo.txt" {
+		t.Fatalf("expected file path row value, got %q", projection.Data.Rows[0].Value)
+	}
+}

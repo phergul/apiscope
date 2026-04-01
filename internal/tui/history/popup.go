@@ -205,7 +205,7 @@ func renderEntryDetails(entry model.HistoryEntry, contentWidth int) string {
 		lines = append(lines, "Auth: "+authLine)
 	}
 
-	return joinClippedLines(lines, width, 8)
+	return joinClippedLines(lines, width, 10)
 }
 
 func requestSections(draft model.RequestDraft) [][]string {
@@ -223,6 +223,9 @@ func requestSections(draft model.RequestDraft) [][]string {
 		sections = append(sections, []string{line})
 	}
 	if line := formatParamLine("Form", draft.FormParams); line != "" {
+		sections = append(sections, []string{line})
+	}
+	if line := formatParamLine("Files", draft.FormFileParams); line != "" {
 		sections = append(sections, []string{line})
 	}
 	if strings.TrimSpace(draft.BodyMediaType) != "" {

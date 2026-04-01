@@ -160,6 +160,9 @@ func DraftParameterValue(draft *model.RequestDraft, parameter model.Parameter) s
 	case model.ParameterLocationCookie:
 		return draft.CookieParams[parameter.Name]
 	case model.ParameterLocationForm:
+		if parameter.FormInputKind == model.FormInputKindFile {
+			return draft.FormFileParams[parameter.Name]
+		}
 		return draft.FormParams[parameter.Name]
 	default:
 		return ""

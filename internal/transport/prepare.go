@@ -1,10 +1,15 @@
 package transport
 
 import (
+	"bytes"
 	"errors"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/phergul/apiscope/internal/model"
@@ -61,13 +66,9 @@ func (e *Executor) PrepareRequest(
 	}
 	targetURL.RawQuery = queryValues.Encode()
 
-	var body io.Reader
-	formBody := ""
-	if operation.FormBodyMediaType == "application/x-www-form-urlencoded" {
-		formBody = encodeFormParams(draft)
-		body = strings.NewReader(formBody)
-	} else if draft != nil && draft.BodyRaw != "" {
-		body = strings.NewReader(draft.BodyRaw)
+	body, contentType, err := prepareRequestBody(operation, draft)
+	if err != nil {
+		return nil, err
 	}
 
 	request, err := http.NewRequest(strings.ToUpper(operation.Method), targetURL.String(), body)
@@ -88,10 +89,8 @@ func (e *Executor) PrepareRequest(
 			}
 			request.AddCookie(&http.Cookie{Name: key, Value: value})
 		}
-		if operation.FormBodyMediaType == "application/x-www-form-urlencoded" {
-			request.Header.Set("Content-Type", operation.FormBodyMediaType)
-		} else if draft.BodyRaw != "" && strings.TrimSpace(draft.BodyMediaType) != "" {
-			request.Header.Set("Content-Type", draft.BodyMediaType)
+		if strings.TrimSpace(contentType) != "" {
+			request.Header.Set("Content-Type", contentType)
 		}
 	}
 	if err := applyAuth(request, requirement, securitySchemes, authState); err != nil {
@@ -99,6 +98,25 @@ func (e *Executor) PrepareRequest(
 	}
 
 	return request, nil
+}
+
+// prepareRequestBody builds the outbound request body for the active operation.
+func prepareRequestBody(operation *model.Operation, draft *model.RequestDraft) (io.Reader, string, error) {
+	if operation == nil {
+		return nil, "", nil
+	}
+
+	switch operation.FormBodyMediaType {
+	case "application/x-www-form-urlencoded":
+		return strings.NewReader(encodeFormParams(draft)), operation.FormBodyMediaType, nil
+	case "multipart/form-data":
+		return encodeMultipartForm(draft)
+	default:
+		if draft != nil && draft.BodyRaw != "" {
+			return strings.NewReader(draft.BodyRaw), strings.TrimSpace(draft.BodyMediaType), nil
+		}
+		return nil, "", nil
+	}
 }
 
 // encodeFormParams serializes non-empty form values for urlencoded request bodies.
@@ -116,6 +134,93 @@ func encodeFormParams(draft *model.RequestDraft) string {
 	}
 
 	return values.Encode()
+}
+
+// encodeMultipartForm serializes scalar and file form inputs into a multipart request body.
+func encodeMultipartForm(draft *model.RequestDraft) (io.Reader, string, error) {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+
+	for _, key := range sortedKeys(draftFormValues(draft)) {
+		value := strings.TrimSpace(draft.FormParams[key])
+		if value == "" {
+			continue
+		}
+		if err := writer.WriteField(key, value); err != nil {
+			return nil, "", err
+		}
+	}
+
+	for _, key := range sortedKeys(draftFileValues(draft)) {
+		path := strings.TrimSpace(draft.FormFileParams[key])
+		if path == "" {
+			continue
+		}
+		if err := writeMultipartFile(writer, key, path); err != nil {
+			return nil, "", err
+		}
+	}
+
+	if err := writer.Close(); err != nil {
+		return nil, "", err
+	}
+
+	return &body, writer.FormDataContentType(), nil
+}
+
+func writeMultipartFile(writer *multipart.Writer, fieldName, path string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return errors.New(`file form parameter "` + fieldName + `" path "` + path + `": ` + err.Error())
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
+		return errors.New(`file form parameter "` + fieldName + `" path "` + path + `": ` + err.Error())
+	}
+	if info.IsDir() {
+		return errors.New(`file form parameter "` + fieldName + `" path "` + path + `": must be a file`)
+	}
+
+	part, err := writer.CreateFormFile(fieldName, filepath.Base(path))
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(part, file); err != nil {
+		return errors.New(`file form parameter "` + fieldName + `" path "` + path + `": ` + err.Error())
+	}
+
+	return nil
+}
+
+func draftFormValues(draft *model.RequestDraft) map[string]string {
+	if draft == nil {
+		return nil
+	}
+
+	return draft.FormParams
+}
+
+func draftFileValues(draft *model.RequestDraft) map[string]string {
+	if draft == nil {
+		return nil
+	}
+
+	return draft.FormFileParams
+}
+
+func sortedKeys(values map[string]string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // resolvePath substitutes draft path parameters into an operation path template.

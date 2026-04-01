@@ -25,6 +25,7 @@ func TestCloneExecutionSessionCopiesMutableInputs(t *testing.T) {
 				ServerURL:       "https://api.example.com",
 				PathParams:      map[string]string{"petId": "abc"},
 				FormParams:      map[string]string{"name": "fido"},
+				FormFileParams:  map[string]string{"file": "/tmp/demo.txt"},
 			},
 		},
 		AuthState: map[string]model.AuthValue{
@@ -35,6 +36,7 @@ func TestCloneExecutionSessionCopiesMutableInputs(t *testing.T) {
 	cloned := CloneExecutionSession(original)
 	cloned.RequestDrafts[draftKey].PathParams["petId"] = "changed"
 	cloned.RequestDrafts[draftKey].FormParams["name"] = "spot"
+	cloned.RequestDrafts[draftKey].FormFileParams["file"] = "/tmp/other.txt"
 	cloned.AuthState["api_key"] = model.AuthValue{Type: model.AuthSchemeValueTypeAPIKey, APIKey: "other"}
 
 	if got := original.RequestDrafts[draftKey].PathParams["petId"]; got != "abc" {
@@ -42,6 +44,9 @@ func TestCloneExecutionSessionCopiesMutableInputs(t *testing.T) {
 	}
 	if got := original.RequestDrafts[draftKey].FormParams["name"]; got != "fido" {
 		t.Fatalf("expected original form draft to stay unchanged, got %q", got)
+	}
+	if got := original.RequestDrafts[draftKey].FormFileParams["file"]; got != "/tmp/demo.txt" {
+		t.Fatalf("expected original file draft to stay unchanged, got %q", got)
 	}
 	if got := original.AuthState["api_key"].APIKey; got != "secret" {
 		t.Fatalf("expected original auth state to stay unchanged, got %q", got)
@@ -95,6 +100,7 @@ func TestServiceExecuteCurrentCapturesExecutedRequestSnapshot(t *testing.T) {
 	draft := EnsureRequestDraft(&session, &operation)
 	draft.PathParams["petId"] = "abc"
 	draft.FormParams["name"] = "fido"
+	draft.FormFileParams["file"] = "/tmp/demo.txt"
 	draft.BodyMediaType = "application/json"
 	draft.BodyRaw = `{"name":"fido"}`
 
@@ -107,6 +113,9 @@ func TestServiceExecuteCurrentCapturesExecutedRequestSnapshot(t *testing.T) {
 	}
 	if got := result.Snapshot.Draft.FormParams["name"]; got != "fido" {
 		t.Fatalf("expected snapshot form param, got %q", got)
+	}
+	if got := result.Snapshot.Draft.FormFileParams["file"]; got != "/tmp/demo.txt" {
+		t.Fatalf("expected snapshot file param, got %q", got)
 	}
 	if got := result.Snapshot.Draft.BodyRaw; got != `{"name":"fido"}` {
 		t.Fatalf("expected snapshot body, got %q", got)
@@ -220,6 +229,7 @@ func TestRestoreHistoryRequestRestoresCurrentOperationInputs(t *testing.T) {
 				ServerURL:       "https://history.example.com",
 				PathParams:      map[string]string{"petId": "from-history"},
 				FormParams:      map[string]string{"name": "from-history"},
+				FormFileParams:  map[string]string{"file": "/tmp/from-history.txt"},
 				BodyMediaType:   "application/json",
 				BodyRaw:         `{"name":"fido"}`,
 			},
@@ -239,6 +249,9 @@ func TestRestoreHistoryRequestRestoresCurrentOperationInputs(t *testing.T) {
 	}
 	if got := session.RequestDrafts[currentDraftKey].FormParams["name"]; got != "from-history" {
 		t.Fatalf("expected current form draft restore, got %q", got)
+	}
+	if got := session.RequestDrafts[currentDraftKey].FormFileParams["file"]; got != "/tmp/from-history.txt" {
+		t.Fatalf("expected current file draft restore, got %q", got)
 	}
 	if got := session.RequestDrafts[currentDraftKey].BodyRaw; got != `{"name":"fido"}` {
 		t.Fatalf("expected current draft body restore, got %q", got)

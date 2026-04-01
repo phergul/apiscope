@@ -28,6 +28,7 @@ const (
 const (
 	SwaggerCollectionFormatExtension    = "x-apiscope-swagger-collection-format"
 	SwaggerParameterLocationExtension   = "x-apiscope-swagger-parameter-location"
+	SwaggerFormFileParameterExtension   = "x-apiscope-swagger-form-file"
 	SwaggerFormBodyMediaTypeExtension   = "x-apiscope-swagger-form-body-media-type"
 	SwaggerAssumedFormEncodingExtension = "x-apiscope-swagger-assumed-form-encoding"
 )

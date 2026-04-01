@@ -101,3 +101,17 @@ func TestMoveAndBoundaryActiveRowClampSelection(t *testing.T) {
 		t.Fatalf("expected end boundary, got %d", got)
 	}
 }
+
+func TestBuildHelpViewIncludesHistoryControls(t *testing.T) {
+	t.Parallel()
+
+	help := BuildHelpView()
+	if help.Title != "History help" {
+		t.Fatalf("expected history help title, got %q", help.Title)
+	}
+	for _, snippet := range []string{"Enter load response", "r restore request"} {
+		if !strings.Contains(help.Body, snippet) {
+			t.Fatalf("expected history help to include %q, got %q", snippet, help.Body)
+		}
+	}
+}

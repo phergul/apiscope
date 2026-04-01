@@ -21,29 +21,29 @@ type paneLayoutSpec struct {
 // render renders the full root shell, including panes, status bar, and overlays.
 func (m *Model) render() string {
 	width, height := m.resolvedDimensions()
-	if m.hasBlockingLoadError() {
-		return m.renderBlockingLoadError(width, height)
-	}
-
-	preset := m.viewState.RightPaneLayoutPreset
-	if preset == "" {
-		preset = chooseLayoutPreset(width)
-	}
-
 	statusBar := m.renderStatusBar(width)
 	bodyHeight := max(height-m.statusBarHeight(width), 12)
 	helpOverlay := m.projectHelpOverlay()
 
 	var body string
-	if m.viewState.ZoomedPane {
-		body = m.renderZoomLayout(width, bodyHeight)
+	if m.hasBlockingLoadError() {
+		body = m.renderBlockingLoadError(width, bodyHeight)
 	} else {
-		body = m.renderPresetLayout(preset, width, bodyHeight)
+		preset := m.viewState.RightPaneLayoutPreset
+		if preset == "" {
+			preset = chooseLayoutPreset(width)
+		}
+
+		if m.viewState.ZoomedPane {
+			body = m.renderZoomLayout(width, bodyHeight)
+		} else {
+			body = m.renderPresetLayout(preset, width, bodyHeight)
+		}
 	}
 
 	view := lipgloss.JoinVertical(lipgloss.Left, body, statusBar)
-	view = m.renderHelpOverlay(view, width, helpOverlay)
-	return m.renderHistoryPopup(view)
+	view = m.renderHistoryPopup(view)
+	return m.renderHelpOverlay(view, width, helpOverlay)
 }
 
 // renderPresetLayout renders the shell body for the requested layout preset.

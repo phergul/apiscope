@@ -15,12 +15,6 @@ type EditorState struct {
 	ActiveRowMeta  string
 }
 
-type HelpView struct {
-	Hint  string
-	Title string
-	Body  string
-}
-
 type EditorInput struct {
 	Kind      model.RequestEditKind
 	Buffer    string
@@ -58,19 +52,6 @@ func BuildEditView(state EditorState) EditView {
 		View:      state.View,
 		Title:     editTitle(state.Kind),
 		Context:   editContext(state),
-	}
-}
-
-// BuildHelpView builds the help content for the active request editor.
-func BuildHelpView(state EditorState) HelpView {
-	if strings.TrimSpace(state.Kind) == "" {
-		return HelpView{}
-	}
-
-	return HelpView{
-		Hint:  "Help - ?",
-		Title: "Help",
-		Body:  editHelpBody(state.Kind),
 	}
 }
 

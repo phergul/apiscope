@@ -16,6 +16,15 @@ var paneFocusOrder = []model.FocusedPane{
 
 // updateKey routes top-level key handling across global shortcuts and focused panes.
 func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.helpOverlayOpen() {
+		return m.updateHelpOverlayKey(msg)
+	}
+
+	if msg.String() == "?" {
+		m.openHelpOverlay()
+		return m, nil
+	}
+
 	if m.hasBlockingLoadError() {
 		switch msg.String() {
 		case "ctrl+c", "q", "enter", "esc":

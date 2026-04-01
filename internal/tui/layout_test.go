@@ -8,6 +8,8 @@ import (
 
 	"github.com/phergul/apiscope/internal/model"
 	detailsui "github.com/phergul/apiscope/internal/tui/details"
+	historyui "github.com/phergul/apiscope/internal/tui/history"
+	requestui "github.com/phergul/apiscope/internal/tui/request"
 	"github.com/phergul/apiscope/internal/tui/widgets"
 
 	"github.com/charmbracelet/lipgloss"
@@ -249,7 +251,7 @@ func TestRenderShowsPreviousRequestsPopupAbovePaneLayout(t *testing.T) {
 	m.openHistoryPopup()
 
 	content := stripANSI(m.render())
-	for _, snippet := range []string{"Previous requests", "GET /pets", "Enter load response", "1 Operations", "4 Response"} {
+	for _, snippet := range []string{"Previous requests", "GET /pets", "Selected request", "1 Operations", "4 Response"} {
 		if !strings.Contains(content, snippet) {
 			t.Fatalf("expected history popup render to include %q, got %q", snippet, content)
 		}
@@ -437,16 +439,14 @@ func TestPanesLoseOuterFocusWhileHistoryPopupIsActive(t *testing.T) {
 	}
 }
 
-func TestRenderAnchorsRequestHelpPopupAboveStatusBarHint(t *testing.T) {
+func TestRenderAnchorsHelpPopupAboveStatusBarHint(t *testing.T) {
 	t.Parallel()
 
 	m := newLoadedModelForRendering()
 	m.shell.width = 100
 	m.shell.height = 20
-	m.viewState.FocusedPane = model.FocusedPaneRequest
-	m.viewState.ActiveEditorMode = model.EditorModeEdit
-	m.viewState.RequestEditKind = model.RequestEditKindField
-	m.requestUI.editHelpOpen = true
+	m.helpUI.open = true
+	m.helpUI.view = requestui.BuildEditHelpView(requestui.EditorState{Kind: "field"})
 
 	content := stripANSI(m.render())
 	lines := strings.Split(content, "\n")
@@ -463,6 +463,31 @@ func TestRenderAnchorsRequestHelpPopupAboveStatusBarHint(t *testing.T) {
 	for _, snippet := range []string{"Help", "Enter save", "Esc cancel"} {
 		if !strings.Contains(window, snippet) {
 			t.Fatalf("expected help popup above status bar to include %q, got %q", snippet, window)
+		}
+	}
+}
+
+func TestRenderLayersHelpPopupAboveHistoryPopup(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForRendering()
+	m.shell.width = 100
+	m.shell.height = 24
+	m.historyUI.open = true
+	m.session.RequestHistory = []model.HistoryEntry{{
+		RequestID:    7,
+		OperationKey: model.NewOperationKey("GET", "/pets"),
+		ServerURL:    "https://api.example.com",
+		Request:      model.ExecutedRequestSnapshot{ServerURL: "https://api.example.com"},
+		Response:     &model.HTTPResponse{Status: "200 OK"},
+	}}
+	m.helpUI.open = true
+	m.helpUI.view = historyui.BuildHelpView()
+
+	content := stripANSI(m.render())
+	for _, snippet := range []string{"Previous requests", "History help", "Enter load response"} {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected layered render to include %q, got %q", snippet, content)
 		}
 	}
 }

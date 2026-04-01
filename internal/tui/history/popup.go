@@ -26,7 +26,6 @@ type PopupData struct {
 	Title     string
 	Meta      string
 	Body      string
-	Help      string
 	ActiveRow int
 }
 
@@ -34,7 +33,6 @@ type PopupData struct {
 func ProjectPopup(input PopupInput) PopupData {
 	data := PopupData{
 		Title: "Previous requests",
-		Help:  "Enter load response\nr restore request\nEsc close",
 	}
 	if input.Selected != nil {
 		data.Meta = strings.ToUpper(input.Selected.Method) + " " + input.Selected.Path
@@ -233,7 +231,7 @@ func requestSections(draft model.RequestDraft) [][]string {
 	}
 	if preview := bodyPreview(draft.BodyRaw); preview != "" {
 		lines := []string{"Body preview:"}
-		for _, line := range strings.Split(preview, "\n") {
+		for line := range strings.SplitSeq(preview, "\n") {
 			lines = append(lines, "  "+line)
 		}
 		sections = append(sections, lines)

@@ -97,13 +97,11 @@ func (m *Model) renderHistoryPopup(view string) string {
 	})
 
 	popup := widgets.RenderPopup(widgets.PopupData{
-		Title:       data.Title,
-		Meta:        data.Meta,
-		Body:        data.Body,
-		Help:        data.Help,
-		HelpVisible: true,
-		Width:       popupWidth,
-		Focused:     true,
+		Title:   data.Title,
+		Meta:    data.Meta,
+		Body:    data.Body,
+		Width:   popupWidth,
+		Focused: !m.helpOverlayOpen(),
 	})
 
 	return widgets.OverlayCentered(widgets.CenteredOverlayData{

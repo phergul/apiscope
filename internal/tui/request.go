@@ -139,6 +139,18 @@ func (m *Model) requestEditorInput() requestui.EditorInput {
 	}
 }
 
+// currentRequestEditorState projects the active request editor state for contextual help.
+func (m *Model) currentRequestEditorState() requestui.EditorState {
+	selected := m.resolvedSelectedOperation()
+	return requestui.BuildEditorState(
+		m.requestEditorInput(),
+		m.activeRequestRows(),
+		m.viewState.RequestActiveRow,
+		selected,
+		app.EnsureRequestDraft(&m.session, selected),
+	)
+}
+
 // requestValidationState flattens request validation into request-pane inputs.
 func (m *Model) requestValidationState(activeSection string) requestui.ValidationState {
 	state := requestui.ValidationState{
@@ -237,7 +249,6 @@ func (m *Model) projectRequestPaneForSize(width, height int) requestui.PaneProje
 		Editor:            m.requestEditorInput(),
 		ContentWidth:      contentWidth,
 		ContentHeight:     contentHeight,
-		HelpOpen:          m.requestUI.editHelpOpen,
 	})
 }
 
@@ -252,16 +263,6 @@ func (m *Model) configureRequestEditors(contentWidth, height int) {
 
 	// keep the body editor short enough to preserve surrounding pane context while editing.
 	m.widgets.requestBodyInput.SetSize(max(bodyPopupWidth-4, 20), max(min(height-10, 12), 4))
-}
-
-// currentRequestHelpOverlay returns the current request editor help overlay, if any.
-func (m *Model) currentRequestHelpOverlay() helpOverlayView {
-	overlay := m.projectRequestPaneForSize(0, 0).HelpOverlay
-	return helpOverlayView{
-		Title: overlay.Title,
-		Body:  overlay.Body,
-		Hint:  overlay.Hint,
-	}
 }
 
 // securitySchemes returns the loaded security-scheme map when a spec is available.
@@ -321,7 +322,6 @@ func (m *Model) beginRequestEdit() {
 	m.viewState.RequestEditKind = start.Kind
 	m.viewState.RequestEditTarget = start.Target
 	m.viewState.RequestEditBuffer = start.Buffer
-	m.requestUI.editHelpOpen = false
 	if start.ResetScroll {
 		m.viewState.RequestScrollOffset = 0
 	}
@@ -366,7 +366,6 @@ func (m *Model) finishRequestEdit() {
 	m.viewState.RequestEditKind = model.RequestEditKindNone
 	m.viewState.RequestEditTarget = ""
 	m.viewState.RequestEditBuffer = ""
-	m.requestUI.editHelpOpen = false
 	m.clearRequestValidation()
 	m.syncActiveRequestRow()
 }
@@ -410,27 +409,11 @@ func (m *Model) maxRequestEditScrollOffset() int {
 
 // updateRequestEditKey handles key input while the request editor is active.
 func (m *Model) updateRequestEditKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.requestUI.editHelpOpen {
-		switch msg.String() {
-		case "ctrl+c", "q":
-			return m, tea.Quit
-		case "?":
-			m.requestUI.editHelpOpen = false
-			return m, nil
-		default:
-			m.requestUI.editHelpOpen = false
-			return m, nil
-		}
-	}
-
 	switch msg.String() {
 	case "ctrl+c", "q":
 		return m, tea.Quit
 	case "esc":
 		m.cancelRequestEdit()
-	case "?":
-		m.requestUI.editHelpOpen = !m.requestUI.editHelpOpen
-		return m, nil
 	case "ctrl+s":
 		if m.viewState.RequestEditKind == model.RequestEditKindBody {
 			m.saveRequestEdit()

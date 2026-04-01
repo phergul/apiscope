@@ -46,30 +46,23 @@ type PaneInput struct {
 	Editor            EditorInput
 	ContentWidth      int
 	ContentHeight     int
-	HelpOpen          bool
 }
 
-// PaneProjection contains the rendered request pane data and any detached help overlay.
+// PaneProjection contains the rendered request pane data.
 type PaneProjection struct {
-	Data        Data
-	HelpOverlay HelpView
+	Data Data
 }
 
 // ProjectPane projects root request state into a rendered request-pane view model.
 func ProjectPane(input PaneInput) PaneProjection {
-	data, editorState := projectPaneData(input)
-	help := HelpView{Hint: BuildHelpView(editorState).Hint}
-	if input.HelpOpen {
-		help = BuildHelpView(editorState)
-	}
+	data, _ := projectPaneData(input)
 
 	if input.ContentHeight > 0 && !data.LoadInFlight && len(data.Sections) > 0 {
 		data = WindowVisibleRows(data, input.ScrollOffset, max(input.ContentHeight, 1))
 	}
 
 	return PaneProjection{
-		Data:        data,
-		HelpOverlay: help,
+		Data: data,
 	}
 }
 

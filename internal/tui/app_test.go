@@ -1670,7 +1670,85 @@ func TestModelRequestEditingBlocksNavigationUntilExit(t *testing.T) {
 	}
 }
 
-func TestModelQuestionMarkTogglesRequestPopupHelp(t *testing.T) {
+func TestModelQuestionMarkOpensBrowseHelpForFocusedPane(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		pane  model.FocusedPane
+		title string
+	}{
+		{name: "operations", pane: model.FocusedPaneOperations, title: "Operations help"},
+		{name: "details", pane: model.FocusedPaneDetails, title: "Details help"},
+		{name: "request", pane: model.FocusedPaneRequest, title: "Request help"},
+		{name: "response", pane: model.FocusedPaneResponse, title: "Response help"},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			m := newLoadedModelForNavigation()
+			m.viewState.FocusedPane = tt.pane
+
+			updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+			updated := updatedModel.(*Model)
+			if !updated.helpOverlayOpen() {
+				t.Fatal("expected question mark to open contextual help")
+			}
+			if updated.helpUI.view.Title != tt.title {
+				t.Fatalf("expected help title %q, got %q", tt.title, updated.helpUI.view.Title)
+			}
+		})
+	}
+}
+
+func TestModelHelpOverlayBlocksBrowseMutationUntilClosed(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	updated := updatedModel.(*Model)
+	if !updated.helpOverlayOpen() {
+		t.Fatal("expected help overlay to open")
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	updated = updatedModel.(*Model)
+	if updated.viewState.OperationsCursor != 0 {
+		t.Fatalf("expected browse movement to be blocked while help is open, got cursor %d", updated.viewState.OperationsCursor)
+	}
+	if !updated.helpOverlayOpen() {
+		t.Fatal("expected help overlay to remain open after ignored key")
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated = updatedModel.(*Model)
+	if updated.helpOverlayOpen() {
+		t.Fatal("expected esc to close help overlay")
+	}
+}
+
+func TestModelHelpOverlayStillAllowsQuitKeys(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	updated := updatedModel.(*Model)
+	if !updated.helpOverlayOpen() {
+		t.Fatal("expected help overlay to open")
+	}
+
+	_, cmd := updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	if cmd == nil {
+		t.Fatal("expected q to keep quitting while help is open")
+	}
+}
+
+func TestModelQuestionMarkOpensRequestEditHelpAndEscClosesHelpFirst(t *testing.T) {
 	t.Parallel()
 
 	m := newLoadedModelForNavigation()
@@ -1679,20 +1757,119 @@ func TestModelQuestionMarkTogglesRequestPopupHelp(t *testing.T) {
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	updated := updatedModel.(*Model)
-	if updated.requestUI.editHelpOpen {
-		t.Fatal("expected popup help to start hidden")
+	if updated.viewState.RequestEditKind != model.RequestEditKindField {
+		t.Fatalf("expected field edit mode, got %q", updated.viewState.RequestEditKind)
 	}
 
 	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
 	updated = updatedModel.(*Model)
-	if !updated.requestUI.editHelpOpen {
-		t.Fatal("expected question mark to open popup help")
+	if !updated.helpOverlayOpen() {
+		t.Fatal("expected request edit help to open")
+	}
+	if updated.helpUI.view.Title != "Help" {
+		t.Fatalf("expected request edit help title, got %q", updated.helpUI.view.Title)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated = updatedModel.(*Model)
+	if updated.helpOverlayOpen() {
+		t.Fatal("expected esc to close help overlay first")
+	}
+	if updated.viewState.RequestEditKind != model.RequestEditKindField {
+		t.Fatalf("expected request edit to remain active after closing help, got %q", updated.viewState.RequestEditKind)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated = updatedModel.(*Model)
+	if updated.viewState.RequestEditKind != model.RequestEditKindNone {
+		t.Fatalf("expected second esc to cancel request edit, got %q", updated.viewState.RequestEditKind)
+	}
+}
+
+func TestModelQuestionMarkOpensFilterHelpAndBlocksEditingUntilClosed(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	updated := updatedModel.(*Model)
+	if updated.viewState.ActiveEditorMode != model.EditorModeFilter {
+		t.Fatalf("expected filter editing mode, got %q", updated.viewState.ActiveEditorMode)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	updated = updatedModel.(*Model)
+	if !updated.helpOverlayOpen() {
+		t.Fatal("expected filter help to open")
+	}
+	if updated.helpUI.view.Title != "Filter help" {
+		t.Fatalf("expected filter help title, got %q", updated.helpUI.view.Title)
 	}
 
 	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
 	updated = updatedModel.(*Model)
-	if updated.requestUI.editHelpOpen {
-		t.Fatal("expected next keypress to close popup help")
+	if updated.viewState.FilterText != "" {
+		t.Fatalf("expected filter text to stay unchanged while help is open, got %q", updated.viewState.FilterText)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated = updatedModel.(*Model)
+	if updated.helpOverlayOpen() {
+		t.Fatal("expected esc to close filter help")
+	}
+	if updated.viewState.ActiveEditorMode != model.EditorModeFilter {
+		t.Fatalf("expected filter edit mode to remain active after closing help, got %q", updated.viewState.ActiveEditorMode)
+	}
+}
+
+func TestModelQuestionMarkOpensHistoryHelpAndKeepsPopupOpen(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.session.RequestHistory = []model.HistoryEntry{{
+		RequestID:     7,
+		OperationKey:  model.NewOperationKey("GET", "/pets"),
+		ServerURL:     "https://api.example.com",
+		Request:       model.ExecutedRequestSnapshot{ServerURL: "https://api.example.com"},
+		Response:      &model.HTTPResponse{Status: "200 OK"},
+		TransportNote: "",
+	}}
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	updated := updatedModel.(*Model)
+	if !updated.historyPopupOpen() {
+		t.Fatal("expected history popup to open")
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	updated = updatedModel.(*Model)
+	if !updated.helpOverlayOpen() {
+		t.Fatal("expected history help to open")
+	}
+	if updated.helpUI.view.Title != "History help" {
+		t.Fatalf("expected history help title, got %q", updated.helpUI.view.Title)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated = updatedModel.(*Model)
+	if !updated.historyPopupOpen() {
+		t.Fatal("expected history popup to remain open after closing help")
+	}
+}
+
+func TestModelQuestionMarkOpensBlockingLoadErrorHelp(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.shell.loadErr = errors.New("boom")
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	updated := updatedModel.(*Model)
+	if !updated.helpOverlayOpen() {
+		t.Fatal("expected blocking load error help to open")
+	}
+	if updated.helpUI.view.Title != "Load error help" {
+		t.Fatalf("expected load error help title, got %q", updated.helpUI.view.Title)
 	}
 }
 

@@ -8,11 +8,6 @@ import (
 	statusbarui "github.com/phergul/apiscope/internal/tui/statusbar"
 )
 
-// projectOperationsPane projects root state into the operations pane render model.
-func (m *Model) projectOperationsPane() operationsui.Data {
-	return m.projectOperationsPaneForState(0, 0, m.viewState.OperationsScrollOffset).Data
-}
-
 // projectOperationsPaneForState projects root state into the operations pane for a specific size and offset.
 func (m *Model) projectOperationsPaneForState(contentWidth, maxLines, scrollOffset int) operationsui.PaneProjection {
 	selectedKey := model.OperationKey("")
@@ -77,11 +72,6 @@ func (m *Model) projectDetailsPaneForSize(width, height int) detailsui.PaneProje
 	}
 
 	return detailsui.ProjectPane(data)
-}
-
-// projectResponsePane projects root state into the response pane render model without viewport clipping.
-func (m *Model) projectResponsePane() responseui.Data {
-	return m.projectResponsePaneForSize(0, 0).Data
 }
 
 // projectResponsePaneForSize projects root state into the response pane for a specific pane size.

@@ -35,32 +35,6 @@ func TestProjectPaneResolvesActiveSectionBeforeProjectingRows(t *testing.T) {
 	}
 }
 
-func TestProjectPaneKeepsOnlyHintWhenHelpIsClosed(t *testing.T) {
-	t.Parallel()
-
-	projection := ProjectPane(PaneInput{
-		Selected: &model.Operation{
-			RequestBody: &model.RequestBodySpec{
-				Content: []model.MediaTypeSpec{{MediaType: "application/json"}},
-			},
-		},
-		Draft:         &model.RequestDraft{},
-		ActiveSection: SectionBody,
-		Editor: EditorInput{
-			Kind:   model.RequestEditKindBody,
-			Buffer: "{}",
-		},
-		HelpOpen: false,
-	})
-
-	if projection.HelpOverlay.Hint != "Help - ?" {
-		t.Fatalf("expected closed help overlay hint, got %q", projection.HelpOverlay.Hint)
-	}
-	if projection.HelpOverlay.Title != "" || projection.HelpOverlay.Body != "" {
-		t.Fatalf("expected closed help overlay to omit body, got %+v", projection.HelpOverlay)
-	}
-}
-
 func TestProjectPaneBuildsEditableAuthRows(t *testing.T) {
 	t.Parallel()
 

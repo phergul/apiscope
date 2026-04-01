@@ -49,8 +49,7 @@ type widgetState struct {
 
 // requestUIState groups request-editor state that still belongs to the root adapters.
 type requestUIState struct {
-	validation   app.RequestValidationResult
-	editHelpOpen bool
+	validation app.RequestValidationResult
 }
 
 // historyUIState groups shell-owned previous-request popup state.
@@ -58,6 +57,12 @@ type historyUIState struct {
 	open       bool
 	activeRow  int
 	filterText string
+}
+
+// helpUIState groups the root-owned contextual help overlay state.
+type helpUIState struct {
+	open bool
+	view widgets.HelpView
 }
 
 // Model is the root Bubble Tea model for the TUI shell.
@@ -70,6 +75,7 @@ type Model struct {
 	widgets   widgetState
 	requestUI requestUIState
 	historyUI historyUIState
+	helpUI    helpUIState
 }
 
 // NewProgram builds the CLI-facing Bubble Tea program wrapper.

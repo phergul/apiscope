@@ -68,6 +68,7 @@ type HistoryEntry struct {
 	RequestID     uint64
 	OperationKey  OperationKey
 	ServerURL     string
+	Request       ExecutedRequestSnapshot
 	Response      *HTTPResponse
 	TransportNote string
 }

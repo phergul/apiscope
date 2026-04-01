@@ -180,6 +180,36 @@ func TestRenderBlockingLoadErrorShowsCenteredQuitPopup(t *testing.T) {
 	}
 }
 
+func TestRenderShowsPreviousRequestsPopupAbovePaneLayout(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForRendering()
+	m.shell.width = 120
+	m.shell.height = 30
+	m.session.RequestHistory = []model.HistoryEntry{
+		{
+			RequestID:    4,
+			OperationKey: model.NewOperationKey("GET", "/pets"),
+			ServerURL:    "https://api.example.com",
+			Response:     &model.HTTPResponse{Status: "200 OK"},
+			Request: model.ExecutedRequestSnapshot{
+				ServerURL: "https://api.example.com",
+				Draft: model.RequestDraft{
+					PathParams: map[string]string{"petId": "abc"},
+				},
+			},
+		},
+	}
+	m.openHistoryPopup()
+
+	content := stripANSI(m.render())
+	for _, snippet := range []string{"Previous requests", "GET /pets", "Enter load response", "1 Operations", "4 Response"} {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected history popup render to include %q, got %q", snippet, content)
+		}
+	}
+}
+
 func TestRenderZoomLayoutShowsOnlyFocusedPaneAndStatusBar(t *testing.T) {
 	t.Parallel()
 

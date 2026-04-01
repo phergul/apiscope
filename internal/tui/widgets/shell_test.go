@@ -58,3 +58,28 @@ func TestOverlayBottomRightAnchorsPopupAboveBottomInset(t *testing.T) {
 		t.Fatalf("expected overlay to preserve earlier base content, got %q", content)
 	}
 }
+
+func TestOverlayCenteredPlacesPopupInViewportMiddle(t *testing.T) {
+	t.Parallel()
+
+	base := strings.Join([]string{
+		"row 1",
+		"row 2",
+		"row 3",
+		"row 4",
+		"row 5",
+	}, "\n")
+
+	content := ansi.Strip(OverlayCentered(CenteredOverlayData{
+		Base:  base,
+		Popup: "POP",
+	}))
+
+	lines := strings.Split(content, "\n")
+	if !strings.Contains(lines[2], "POP") {
+		t.Fatalf("expected popup near the vertical middle, got %q", lines[2])
+	}
+	if !strings.Contains(content, "row 1") || !strings.Contains(content, "row 5") {
+		t.Fatalf("expected centered overlay to preserve surrounding base content, got %q", content)
+	}
+}

@@ -53,6 +53,13 @@ type requestUIState struct {
 	editHelpOpen bool
 }
 
+// historyUIState groups shell-owned previous-request popup state.
+type historyUIState struct {
+	open       bool
+	activeRow  int
+	filterText string
+}
+
 // Model is the root Bubble Tea model for the TUI shell.
 type Model struct {
 	service   *app.Service
@@ -62,6 +69,7 @@ type Model struct {
 	panes     paneState
 	widgets   widgetState
 	requestUI requestUIState
+	historyUI historyUIState
 }
 
 // NewProgram builds the CLI-facing Bubble Tea program wrapper.
@@ -156,6 +164,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.session = msg.result.Session
 		m.viewState = msg.result.View
 		m.requestUI.validation = app.RequestValidationResult{}
+		m.historyUI = historyUIState{}
 		m.session.ActiveLoadRequestID = msg.requestID
 		m.viewState.ActiveLoadRequestID = msg.requestID
 		m.viewState.LoadInFlight = false
@@ -176,6 +185,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				RequestID:     msg.requestID,
 				OperationKey:  msg.result.OperationKey,
 				ServerURL:     msg.result.ServerURL,
+				Request:       msg.result.Snapshot,
 				Response:      msg.result.Response,
 				TransportNote: msg.result.Response.TransportError,
 			})

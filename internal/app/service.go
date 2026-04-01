@@ -55,6 +55,7 @@ func (s *Service) LoadSource(ctx context.Context, rawSource string) (LoadResult,
 type ExecuteResult struct {
 	OperationKey model.OperationKey
 	ServerURL    string
+	Snapshot     model.ExecutedRequestSnapshot
 	Response     *model.HTTPResponse
 	Validation   RequestValidationResult
 }
@@ -71,11 +72,13 @@ func (s *Service) ExecuteCurrent(ctx context.Context, session model.SessionState
 	}
 
 	draft := EnsureRequestDraft(&session, operation)
+	snapshot := BuildExecutedRequestSnapshot(session, draft)
 	validation := ValidateExecutableRequest(session, operation, draft)
 	if validation.HasIssues() {
 		return ExecuteResult{
 			OperationKey: operation.Key,
 			ServerURL:    session.SelectedServerURL,
+			Snapshot:     snapshot,
 			Validation:   validation,
 		}
 	}
@@ -92,6 +95,7 @@ func (s *Service) ExecuteCurrent(ctx context.Context, session model.SessionState
 		return ExecuteResult{
 			OperationKey: operation.Key,
 			ServerURL:    session.SelectedServerURL,
+			Snapshot:     snapshot,
 			Response: &model.HTTPResponse{
 				OperationKey:   operation.Key,
 				TransportError: err.Error(),
@@ -103,6 +107,7 @@ func (s *Service) ExecuteCurrent(ctx context.Context, session model.SessionState
 	return ExecuteResult{
 		OperationKey: operation.Key,
 		ServerURL:    session.SelectedServerURL,
+		Snapshot:     snapshot,
 		Response:     response,
 	}
 }

@@ -860,6 +860,236 @@ func TestModelCtrlRExecutesWhenLaterAuthAlternativeIsSatisfied(t *testing.T) {
 	}
 }
 
+func TestModelPOpensAndClosesPreviousRequestsPopup(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	updated := updatedModel.(*Model)
+	if !updated.historyPopupOpen() {
+		t.Fatal("expected p to open the previous-requests popup")
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated = updatedModel.(*Model)
+	if updated.historyPopupOpen() {
+		t.Fatal("expected esc to close the previous-requests popup")
+	}
+}
+
+func TestModelPreviousRequestsPopupNavigationUsesJKHomeAndEnd(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.session.RequestHistory = []model.HistoryEntry{
+		{RequestID: 1, OperationKey: model.NewOperationKey("GET", "/pets")},
+		{RequestID: 2, OperationKey: model.NewOperationKey("GET", "/pets")},
+		{RequestID: 3, OperationKey: model.NewOperationKey("GET", "/pets")},
+	}
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	updated := updatedModel.(*Model)
+	if updated.historyUI.activeRow != 0 {
+		t.Fatalf("expected popup to start at newest entry, got %d", updated.historyUI.activeRow)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	updated = updatedModel.(*Model)
+	if updated.historyUI.activeRow != 1 {
+		t.Fatalf("expected j to move selection down, got %d", updated.historyUI.activeRow)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnd})
+	updated = updatedModel.(*Model)
+	if updated.historyUI.activeRow != 2 {
+		t.Fatalf("expected end to jump to last entry, got %d", updated.historyUI.activeRow)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyHome})
+	updated = updatedModel.(*Model)
+	if updated.historyUI.activeRow != 0 {
+		t.Fatalf("expected home to jump to first entry, got %d", updated.historyUI.activeRow)
+	}
+}
+
+func TestModelPreviousRequestsPopupEnterLoadsHistoricalResponse(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FocusedPane = model.FocusedPaneOperations
+	m.session.LastResponse = &model.HTTPResponse{Status: "202 Accepted", PrettyBody: "current"}
+	m.session.RequestHistory = []model.HistoryEntry{
+		{
+			RequestID:    7,
+			OperationKey: model.NewOperationKey("GET", "/pets"),
+			ServerURL:    "https://api.example.com",
+			Response: &model.HTTPResponse{
+				OperationKey: model.NewOperationKey("GET", "/pets"),
+				Status:       "200 OK",
+				PrettyBody:   "historical",
+			},
+			Request: model.ExecutedRequestSnapshot{
+				ServerURL: "https://api.example.com",
+			},
+		},
+	}
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	updated := updatedModel.(*Model)
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated = updatedModel.(*Model)
+
+	if updated.historyPopupOpen() {
+		t.Fatal("expected enter to close the popup")
+	}
+	if updated.viewState.FocusedPane != model.FocusedPaneResponse {
+		t.Fatalf("expected enter to focus response pane, got %q", updated.viewState.FocusedPane)
+	}
+	if updated.panes.activeResponseSection != "Live" {
+		t.Fatalf("expected enter to select live response, got %q", updated.panes.activeResponseSection)
+	}
+	if updated.session.LastResponse == nil || updated.session.LastResponse.PrettyBody != "historical" {
+		t.Fatalf("expected historical response to load, got %#v", updated.session.LastResponse)
+	}
+	if updated.viewState.Notice != "loaded previous response #7" {
+		t.Fatalf("expected response recall notice, got %q", updated.viewState.Notice)
+	}
+}
+
+func TestModelPreviousRequestsPopupRestoreRequestFocusesPaneThree(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	operationKey := model.NewOperationKey("GET", "/pets")
+	draftKey := model.NewDraftKey("", operationKey)
+	m.session.SelectedServerURL = "https://current.example.com"
+	m.session.RequestDrafts = map[model.DraftKey]*model.RequestDraft{
+		draftKey: {
+			Key:          draftKey,
+			OperationKey: operationKey,
+			ServerURL:    "https://current.example.com",
+			PathParams:   map[string]string{"petId": "current"},
+		},
+	}
+	m.session.AuthState = map[string]model.AuthValue{
+		"api_key": {Type: model.AuthSchemeValueTypeAPIKey, APIKey: "current"},
+	}
+	m.panes.activeRequestSection = requestui.SectionAuth
+	m.session.RequestHistory = []model.HistoryEntry{
+		{
+			RequestID:    9,
+			OperationKey: operationKey,
+			ServerURL:    "https://history.example.com",
+			Request: model.ExecutedRequestSnapshot{
+				OperationKey: operationKey,
+				ServerURL:    "https://history.example.com",
+				Draft: model.RequestDraft{
+					Key:          draftKey,
+					OperationKey: operationKey,
+					ServerURL:    "https://history.example.com",
+					PathParams:   map[string]string{"petId": "from-history"},
+					BodyRaw:      `{"name":"fido"}`,
+				},
+				AuthState: map[string]model.AuthValue{
+					"api_key": {Type: model.AuthSchemeValueTypeAPIKey, APIKey: "restored"},
+				},
+			},
+			Response: &model.HTTPResponse{Status: "200 OK"},
+		},
+	}
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	updated := updatedModel.(*Model)
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	updated = updatedModel.(*Model)
+
+	if updated.historyPopupOpen() {
+		t.Fatal("expected r to close the popup")
+	}
+	if updated.viewState.FocusedPane != model.FocusedPaneRequest {
+		t.Fatalf("expected request restore to focus pane 3, got %q", updated.viewState.FocusedPane)
+	}
+	if got := updated.session.SelectedServerURL; got != "https://history.example.com" {
+		t.Fatalf("expected server restore, got %q", got)
+	}
+	if got := updated.ensureSelectedRequestDraft().PathParams["petId"]; got != "from-history" {
+		t.Fatalf("expected request draft restore, got %q", got)
+	}
+	if got := updated.session.AuthState["api_key"].APIKey; got != "restored" {
+		t.Fatalf("expected auth state restore, got %q", got)
+	}
+	if updated.viewState.Notice != "restored request #9" {
+		t.Fatalf("expected request restore notice, got %q", updated.viewState.Notice)
+	}
+}
+
+func TestModelPreviousRequestsPopupBlocksNormalPaneNavigation(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.session.RequestHistory = []model.HistoryEntry{
+		{RequestID: 1, OperationKey: model.NewOperationKey("GET", "/pets")},
+	}
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	updated := updatedModel.(*Model)
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'4'}})
+	updated = updatedModel.(*Model)
+	if updated.viewState.FocusedPane != model.FocusedPaneOperations {
+		t.Fatalf("expected popup to block focus changes, got %q", updated.viewState.FocusedPane)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	updated = updatedModel.(*Model)
+	if updated.session.SelectedOperationKey != model.NewOperationKey("GET", "/pets") {
+		t.Fatalf("expected popup to block operation navigation, got %q", updated.session.SelectedOperationKey)
+	}
+}
+
+func TestModelPreviousRequestsPopupShowsNewExecutionHistory(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	m := newLoadedModelForNavigation()
+	m.service = app.NewService(nil)
+	m.session.SelectedServerURL = server.URL
+	m.session.AuthState = map[string]model.AuthValue{
+		"api_key": {Type: model.AuthSchemeValueTypeAPIKey, APIKey: "secret"},
+	}
+	draft := m.ensureSelectedRequestDraft()
+	draft.PathParams["petId"] = "abc"
+	draft.BodyRaw = `{"name":"fido"}`
+	draft.BodyMediaType = "application/json"
+
+	updatedModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlR})
+	updated := updatedModel.(*Model)
+	if cmd == nil {
+		t.Fatal("expected ctrl+r to execute")
+	}
+
+	msg := cmd()
+	updatedModel, _ = updated.Update(msg)
+	updated = updatedModel.(*Model)
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	updated = updatedModel.(*Model)
+	view := stripANSI(updated.View())
+	if !strings.Contains(view, "Previous requests") {
+		t.Fatalf("expected popup heading after execution, got %q", view)
+	}
+	if !strings.Contains(view, "Server: "+server.URL) {
+		t.Fatalf("expected popup details to include executed server, got %q", view)
+	}
+	if !strings.Contains(view, "Path: petId=abc") {
+		t.Fatalf("expected popup details to include executed inputs, got %q", view)
+	}
+}
+
 func TestModelIgnoresStaleExecuteResults(t *testing.T) {
 	t.Parallel()
 

@@ -453,7 +453,7 @@ func (m *Model) executeCurrentRequest() tea.Cmd {
 	m.viewState.Notice = "executing request"
 
 	service := m.service
-	session := m.session
+	session := app.CloneExecutionSession(m.session)
 
 	return func() tea.Msg {
 		return executeFinishedMsg{

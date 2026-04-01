@@ -42,7 +42,8 @@ func (m *Model) render() string {
 	}
 
 	view := lipgloss.JoinVertical(lipgloss.Left, body, statusBar)
-	return m.renderHelpOverlay(view, width, helpOverlay)
+	view = m.renderHelpOverlay(view, width, helpOverlay)
+	return m.renderHistoryPopup(view)
 }
 
 // renderPresetLayout renders the shell body for the requested layout preset.

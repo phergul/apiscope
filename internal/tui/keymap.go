@@ -31,6 +31,9 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.requestEditActive() {
 		return m.updateRequestEditKey(msg)
 	}
+	if m.historyPopupOpen() {
+		return m.updateHistoryPopupKey(msg)
+	}
 
 	if handledModel, handledCmd, handled := m.updateGlobalKey(msg); handled {
 		return handledModel, handledCmd
@@ -48,6 +51,9 @@ func (m *Model) updateGlobalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		if cmd := m.executeCurrentRequest(); cmd != nil {
 			return m, cmd, true
 		}
+		return m, nil, true
+	case "p":
+		m.openHistoryPopup()
 		return m, nil, true
 	case "1":
 		m.setFocusedPane(model.FocusedPaneOperations)
@@ -78,6 +84,29 @@ func (m *Model) updateGlobalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	}
 
 	return m, nil, true
+}
+
+func (m *Model) updateHistoryPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "esc", "p", "q":
+		m.closeHistoryPopup()
+	case "j", "down":
+		m.moveHistoryPopupRow(1)
+	case "k", "up":
+		m.moveHistoryPopupRow(-1)
+	case "home":
+		m.setHistoryPopupBoundary(false)
+	case "end":
+		m.setHistoryPopupBoundary(true)
+	case "enter":
+		m.loadSelectedHistoryResponse()
+	case "r":
+		m.restoreSelectedHistoryRequest()
+	}
+
+	return m, nil
 }
 
 // updateBrowseKey routes pane-local browse keys for the focused pane.

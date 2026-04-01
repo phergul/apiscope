@@ -15,6 +15,12 @@ type BottomRightOverlayData struct {
 	BottomInset int
 }
 
+// CenteredOverlayData describes a popup centered over a rendered shell view.
+type CenteredOverlayData struct {
+	Base  string
+	Popup string
+}
+
 // RenderCenteredModal renders a centered modal within the available viewport.
 func RenderCenteredModal(viewportWidth, viewportHeight int, data CenteredModalData) string {
 	// remove the modal frame chrome before sizing the wrapped body content.
@@ -28,5 +34,12 @@ func OverlayBottomRight(data BottomRightOverlayData) string {
 	x := max(lipgloss.Width(data.Base)-lipgloss.Width(data.Popup), 0)
 	// keep the popup above reserved bottom rows such as the status bar.
 	y := max(lipgloss.Height(data.Base)-data.BottomInset-lipgloss.Height(data.Popup), 0)
+	return Overlay(data.Base, data.Popup, x, y)
+}
+
+// OverlayCentered places a popup in the center of a rendered shell view.
+func OverlayCentered(data CenteredOverlayData) string {
+	x := max((lipgloss.Width(data.Base)-lipgloss.Width(data.Popup))/2, 0)
+	y := max((lipgloss.Height(data.Base)-lipgloss.Height(data.Popup))/2, 0)
 	return Overlay(data.Base, data.Popup, x, y)
 }

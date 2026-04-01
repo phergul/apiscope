@@ -85,3 +85,33 @@ func TestProjectPaneRendersDeclaredResponses(t *testing.T) {
 		t.Fatalf("expected declared response body to render, got %q", content)
 	}
 }
+
+func TestProjectPaneClipsWrappedLiveBodyWithoutLeakingOneLongLine(t *testing.T) {
+	t.Parallel()
+
+	projected := ProjectPane(PaneInput{
+		Selected: &model.Operation{
+			Key:    model.NewOperationKey("GET", "/pets"),
+			Method: "GET",
+			Path:   "/pets",
+		},
+		LastResponse: &model.HTTPResponse{
+			OperationKey: model.NewOperationKey("GET", "/pets"),
+			Status:       "404 Not Found",
+			ContentType:  "text/html",
+			PrettyBody:   "<html><body>this response line is long enough to require hard wrapping in the pane</body></html>",
+		},
+		ActiveSection: SectionLive,
+		ContentWidth:  24,
+		ContentHeight: 4,
+	})
+
+	if projected.MaxScrollOffset == 0 {
+		t.Fatal("expected wrapped live body to become scrollable")
+	}
+
+	content := ansi.Strip(Render(projected.Data))
+	if strings.Contains(content, "<html><body>this response line is long enough to require hard wrapping in the pane</body></html>") {
+		t.Fatalf("expected wrapped live response body to be clipped by viewport, got %q", content)
+	}
+}

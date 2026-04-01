@@ -161,7 +161,7 @@ func TestSectionBodyUsesLiveStyleLayoutForDeclaredResponses(t *testing.T) {
 			{Name: "X-Trace-ID", Schema: &model.Schema{Type: "string"}},
 		},
 		Content: []model.MediaTypeSpec{{MediaType: "application/json"}},
-	}))
+	}, 40))
 
 	for _, snippet := range []string{
 		"Description: OK",
@@ -173,6 +173,50 @@ func TestSectionBodyUsesLiveStyleLayoutForDeclaredResponses(t *testing.T) {
 	} {
 		if !strings.Contains(content, snippet) {
 			t.Fatalf("expected declared response layout to include %q, got %q", snippet, content)
+		}
+	}
+}
+
+func TestLiveSectionHardWrapsLongBodyLinesBeforeViewportClipping(t *testing.T) {
+	t.Parallel()
+
+	section := LiveSection(&model.HTTPResponse{
+		OperationKey: model.NewOperationKey("GET", "/pets"),
+		Status:       "404 Not Found",
+		ContentType:  "text/html",
+		PrettyBody:   "<html><body>this response line is long enough to require hard wrapping in the pane</body></html>",
+	}, &model.Operation{
+		Key: model.NewOperationKey("GET", "/pets"),
+	}, 24)
+
+	content := ansi.Strip(section.Body)
+	if strings.Contains(content, "<html><body>this response line is long enough to require hard wrapping in the pane</body></html>") {
+		t.Fatalf("expected long body line to be wrapped before rendering, got %q", content)
+	}
+	if !strings.Contains(content, "│ <html><body>this respo") {
+		t.Fatalf("expected wrapped body prefix to render, got %q", content)
+	}
+}
+
+func TestLiveSectionNormalizesCarriageReturnsInBody(t *testing.T) {
+	t.Parallel()
+
+	section := LiveSection(&model.HTTPResponse{
+		OperationKey: model.NewOperationKey("GET", "/pets"),
+		Status:       "404 Not Found",
+		ContentType:  "text/html",
+		Body:         []byte("<html>\r\n<body>\r\n<center>oops</center>\r\n</body>\r\n</html>"),
+	}, &model.Operation{
+		Key: model.NewOperationKey("GET", "/pets"),
+	}, 32)
+
+	content := ansi.Strip(section.Body)
+	if strings.Contains(content, "\r") {
+		t.Fatalf("expected carriage returns to be normalized, got %q", content)
+	}
+	for _, snippet := range []string{"│ <html>", "│ <body>", "│ <center>oops</center>", "│ </html>"} {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected normalized body content to include %q, got %q", snippet, content)
 		}
 	}
 }

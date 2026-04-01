@@ -35,7 +35,7 @@ func ProjectPane(input PaneInput) PaneProjection {
 
 	data.Sections = append(
 		[]widgets.Section{LiveSection(input.LastResponse, input.Selected, input.ContentWidth)},
-		Sections(input.Selected.Responses)...,
+		Sections(input.Selected.Responses, input.ContentWidth)...,
 	)
 	data.ActiveSection = ResolveActiveSection(input.ActiveSection, input.Selected.Responses)
 

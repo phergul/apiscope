@@ -51,12 +51,12 @@ func BoundaryActiveSection(last bool, responses []model.ResponseSpec) string {
 }
 
 // Sections builds the declared response sections for the selected operation.
-func Sections(responses []model.ResponseSpec) []widgets.Section {
+func Sections(responses []model.ResponseSpec, contentWidth int) []widgets.Section {
 	sections := make([]widgets.Section, 0, len(responses))
 	for _, response := range responses {
 		sections = append(sections, widgets.Section{
 			Label: response.StatusCode,
-			Body:  sectionBody(response),
+			Body:  sectionBody(response, contentWidth),
 		})
 	}
 
@@ -107,7 +107,7 @@ func ActiveSectionBody(sections []widgets.Section, active string) string {
 }
 
 // sectionBody renders a declared response section body.
-func sectionBody(response model.ResponseSpec) string {
+func sectionBody(response model.ResponseSpec, contentWidth int) string {
 	lines := []string{
 		renderMetaLine("Description", describe.NormaliseInlineText(util.FallbackText(response.Description, "None"))),
 	}
@@ -121,7 +121,7 @@ func sectionBody(response model.ResponseSpec) string {
 
 	lines = append(lines, "", "Body:")
 	mediaTypes := describe.DefaultStrings(describe.MediaTypesForContent(response.Content), "none")
-	lines = append(lines, renderBodyBlock(strings.Join(mediaTypes, "\n"))...)
+	lines = append(lines, renderBodyBlock(strings.Join(mediaTypes, "\n"), contentWidth)...)
 
 	return strings.Join(lines, "\n")
 }
@@ -166,7 +166,7 @@ func liveSectionBody(response *model.HTTPResponse, contentWidth int) string {
 	if body == "" {
 		body = "<empty>"
 	}
-	lines = append(lines, renderBodyBlock(body)...)
+	lines = append(lines, renderBodyBlock(body, contentWidth)...)
 
 	return strings.Join(lines, "\n")
 }
@@ -224,12 +224,33 @@ func renderDeclaredHeaders(headers []model.Parameter) []string {
 }
 
 // renderBodyBlock renders the response body as an indented content block.
-func renderBodyBlock(body string) []string {
+func renderBodyBlock(body string, contentWidth int) []string {
+	body = normalizeRenderedBody(body)
 	bodyLines := strings.Split(body, "\n")
 	lines := make([]string, 0, len(bodyLines))
+	wrapWidth := max(contentWidth-2, 1)
 	for _, line := range bodyLines {
-		lines = append(lines, widgets.MutedTextStyle().Render("│ ")+widgets.BodyTextStyle().Render(line))
+		wrapped := ansi.Hardwrap(line, wrapWidth, true)
+		for wrappedLine := range strings.SplitSeq(wrapped, "\n") {
+			lines = append(lines, widgets.MutedTextStyle().Render("│ ")+widgets.BodyTextStyle().Render(wrappedLine))
+		}
 	}
 
 	return lines
+}
+
+func normalizeRenderedBody(body string) string {
+	body = strings.ReplaceAll(body, "\r\n", "\n")
+	body = strings.ReplaceAll(body, "\r", "\n")
+
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r == '\n' || r == '\t':
+			return r
+		case r < 0x20 || r == 0x7f:
+			return ' '
+		default:
+			return r
+		}
+	}, body)
 }

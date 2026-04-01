@@ -19,6 +19,7 @@ const (
 	ParameterLocationQuery  ParameterLocation = "query"
 	ParameterLocationHeader ParameterLocation = "header"
 	ParameterLocationCookie ParameterLocation = "cookie"
+	ParameterLocationForm   ParameterLocation = "form"
 )
 
 type SecuritySchemeType string
@@ -112,6 +113,7 @@ type Operation struct {
 	Responses           []ResponseSpec
 	Security            *SecurityRequirement
 	DefaultServerURLs   []string
+	FormBodyMediaType   string
 	SelectedContentType string
 }
 

@@ -142,6 +142,75 @@ definitions:
 	}
 }
 
+func TestDocumentNormalisesSwaggerFormDataAsFormParameters(t *testing.T) {
+	t.Parallel()
+
+	spec, err := Document(mustResolvedSwagger(t, `swagger: "2.0"
+info:
+  title: Swagger Demo
+  version: 1.0.0
+paths:
+  /pets:
+    post:
+      consumes: [application/x-www-form-urlencoded]
+      parameters:
+        - name: name
+          in: formData
+          required: true
+          type: string
+      responses:
+        "200":
+          description: ok
+`))
+	if err != nil {
+		t.Fatalf("Document returned error: %v", err)
+	}
+
+	if len(spec.Operations) != 1 {
+		t.Fatalf("expected 1 operation, got %d", len(spec.Operations))
+	}
+	op := spec.Operations[0]
+	if op.FormBodyMediaType != "application/x-www-form-urlencoded" {
+		t.Fatalf("expected form body media type marker, got %q", op.FormBodyMediaType)
+	}
+	if op.RequestBody != nil {
+		t.Fatalf("expected form-only operation to omit request body, got %#v", op.RequestBody)
+	}
+	if len(op.Parameters) != 1 || op.Parameters[0].In != model.ParameterLocationForm {
+		t.Fatalf("expected normalised form parameter, got %#v", op.Parameters)
+	}
+}
+
+func TestDocumentWarnsWhenSwaggerFormDataAssumesUrlencodedConsumes(t *testing.T) {
+	t.Parallel()
+
+	spec, err := Document(mustResolvedSwagger(t, `swagger: "2.0"
+info:
+  title: Swagger Demo
+  version: 1.0.0
+paths:
+  /pets:
+    post:
+      parameters:
+        - name: name
+          in: formData
+          type: string
+      responses:
+        "200":
+          description: ok
+`))
+	if err != nil {
+		t.Fatalf("Document returned error: %v", err)
+	}
+
+	if len(spec.Operations) != 1 || spec.Operations[0].FormBodyMediaType != "application/x-www-form-urlencoded" {
+		t.Fatalf("expected assumed form body media type, got %#v", spec.Operations)
+	}
+	if !hasWarningContaining(spec.Warnings, "assumed application/x-www-form-urlencoded") {
+		t.Fatalf("expected consumes assumption warning, got %#v", spec.Warnings)
+	}
+}
+
 func TestDocumentNormalisesEquivalentSwaggerAndOAS3Shapes(t *testing.T) {
 	t.Parallel()
 

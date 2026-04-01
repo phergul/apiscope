@@ -225,3 +225,41 @@ func TestProjectPaneBuildsSupportNotesForActiveSectionAndRows(t *testing.T) {
 		t.Fatalf("expected clearer content-based row value, got %q", projection.Data.Rows[0].Value)
 	}
 }
+
+func TestProjectPaneBuildsEditableFormRows(t *testing.T) {
+	t.Parallel()
+
+	projection := ProjectPane(PaneInput{
+		Selected: &model.Operation{
+			Parameters: []model.Parameter{
+				{
+					Name:     "name",
+					In:       model.ParameterLocationForm,
+					Required: true,
+					Schema:   &model.Schema{Type: "string"},
+				},
+			},
+			FormBodyMediaType: "application/x-www-form-urlencoded",
+		},
+		Draft: &model.RequestDraft{
+			FormParams: map[string]string{"name": "fido"},
+		},
+		ActiveSection: SectionForm,
+	})
+
+	if projection.Data.ActiveSection != SectionForm {
+		t.Fatalf("expected form section, got %q", projection.Data.ActiveSection)
+	}
+	if len(projection.Data.Rows) != 1 {
+		t.Fatalf("expected one form row, got %d", len(projection.Data.Rows))
+	}
+	if projection.Data.Rows[0].Label != "name" {
+		t.Fatalf("expected form row label name, got %q", projection.Data.Rows[0].Label)
+	}
+	if projection.Data.Rows[0].Value != "fido" {
+		t.Fatalf("expected form row value fido, got %q", projection.Data.Rows[0].Value)
+	}
+	if !projection.Data.Rows[0].Editable {
+		t.Fatal("expected form row to be editable")
+	}
+}

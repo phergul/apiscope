@@ -98,6 +98,27 @@ func TestSetDraftParameterStoresAndClearsValuesByLocation(t *testing.T) {
 	}
 }
 
+func TestSetDraftParameterStoresFormValues(t *testing.T) {
+	t.Parallel()
+
+	session := model.SessionState{
+		SpecFingerprint: "spec-123",
+		RequestDrafts:   make(map[model.DraftKey]*model.RequestDraft),
+	}
+	operation := &model.Operation{Key: model.NewOperationKey("POST", "/pets")}
+	parameter := model.Parameter{Name: "name", In: model.ParameterLocationForm}
+
+	draft := SetDraftParameter(&session, operation, parameter, "fido")
+	if got := draft.FormParams["name"]; got != "fido" {
+		t.Fatalf("expected form param to be stored, got %q", got)
+	}
+
+	draft = SetDraftParameter(&session, operation, parameter, "")
+	if _, ok := draft.FormParams["name"]; ok {
+		t.Fatalf("expected cleared form param to be removed, got %#v", draft.FormParams)
+	}
+}
+
 func TestSetDraftBodyRawPreservesEmptyString(t *testing.T) {
 	t.Parallel()
 

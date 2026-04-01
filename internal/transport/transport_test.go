@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -39,6 +40,51 @@ func TestPrepareRequestBuildsPathQueryHeadersCookiesAndBody(t *testing.T) {
 	}
 	if got := request.Header.Get("Content-Type"); got != "application/json" {
 		t.Fatalf("expected content type to be set, got %q", got)
+	}
+	cookie, err := request.Cookie("session")
+	if err != nil {
+		t.Fatalf("expected cookie to be set: %v", err)
+	}
+	if cookie.Value != "cookie-1" {
+		t.Fatalf("expected cookie value cookie-1, got %q", cookie.Value)
+	}
+}
+
+func TestPrepareRequestSerializesUrlencodedFormParams(t *testing.T) {
+	t.Parallel()
+
+	executor := NewExecutor(nil)
+	operation := &model.Operation{
+		Method:            "POST",
+		Path:              "/pets",
+		FormBodyMediaType: "application/x-www-form-urlencoded",
+	}
+	draft := &model.RequestDraft{
+		QueryParams:  map[string]string{"limit": "10"},
+		HeaderParams: map[string]string{"X-Trace-ID": "trace-1"},
+		CookieParams: map[string]string{"session": "cookie-1"},
+		FormParams:   map[string]string{"name": "fido", "skip": "  "},
+	}
+
+	request, err := executor.PrepareRequest(operation, draft, "https://api.example.com", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("PrepareRequest returned error: %v", err)
+	}
+	if got := request.Header.Get("Content-Type"); got != "application/x-www-form-urlencoded" {
+		t.Fatalf("expected form content type, got %q", got)
+	}
+	body, err := io.ReadAll(request.Body)
+	if err != nil {
+		t.Fatalf("ReadAll returned error: %v", err)
+	}
+	if got := string(body); got != "name=fido" {
+		t.Fatalf("expected urlencoded form body, got %q", got)
+	}
+	if got := request.URL.String(); got != "https://api.example.com/pets?limit=10" {
+		t.Fatalf("unexpected prepared URL %q", got)
+	}
+	if got := request.Header.Get("X-Trace-ID"); got != "trace-1" {
+		t.Fatalf("expected header to be preserved, got %q", got)
 	}
 	cookie, err := request.Cookie("session")
 	if err != nil {

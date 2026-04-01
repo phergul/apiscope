@@ -25,7 +25,12 @@ const (
 	DocumentFormatYAML DocumentFormat = "yaml"
 )
 
-const SwaggerCollectionFormatExtension = "x-apiscope-swagger-collection-format"
+const (
+	SwaggerCollectionFormatExtension    = "x-apiscope-swagger-collection-format"
+	SwaggerParameterLocationExtension   = "x-apiscope-swagger-parameter-location"
+	SwaggerFormBodyMediaTypeExtension   = "x-apiscope-swagger-form-body-media-type"
+	SwaggerAssumedFormEncodingExtension = "x-apiscope-swagger-assumed-form-encoding"
+)
 
 type LoadedDocument struct {
 	Source            Source

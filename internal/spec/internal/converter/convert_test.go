@@ -149,6 +149,110 @@ paths:
       parameters:
         - name: file
           in: formData
+          type: file
+      responses:
+        "200":
+          description: ok
+`
+
+	_, err := Convert(mustParsedSwagger(t, raw))
+	if !isPipelineErrorKind(err, pipeline.ErrorKindUnsupportedSwaggerConstruct) {
+		t.Fatalf("expected unsupported swagger construct error, got %v", err)
+	}
+}
+
+func TestConvertSupportsUrlencodedSwaggerFormData(t *testing.T) {
+	t.Parallel()
+
+	raw := `swagger: "2.0"
+info:
+  title: Demo
+  version: 1.0.0
+paths:
+  /pets:
+    post:
+      consumes: [application/x-www-form-urlencoded]
+      parameters:
+        - name: name
+          in: formData
+          required: true
+          type: string
+      responses:
+        "200":
+          description: ok
+`
+
+	converted, err := Convert(mustParsedSwagger(t, raw))
+	if err != nil {
+		t.Fatalf("Convert returned error: %v", err)
+	}
+
+	pathItem := converted.OpenAPI3Doc.Paths.Value("/pets")
+	if pathItem == nil || pathItem.Post == nil {
+		t.Fatal("expected converted post operation")
+	}
+	if pathItem.Post.RequestBody != nil {
+		t.Fatalf("expected formData to stay in parameters for pane 3 projection, got %#v", pathItem.Post.RequestBody)
+	}
+	if len(pathItem.Post.Parameters) != 1 {
+		t.Fatalf("expected one converted form parameter, got %d", len(pathItem.Post.Parameters))
+	}
+	parameter := pathItem.Post.Parameters[0].Value
+	if parameter == nil {
+		t.Fatal("expected converted form parameter value")
+	}
+	if got := parameter.Extensions[pipeline.SwaggerParameterLocationExtension]; got != "formData" {
+		t.Fatalf("expected swagger formData extension, got %#v", got)
+	}
+	if got := pathItem.Post.Extensions[pipeline.SwaggerFormBodyMediaTypeExtension]; got != "application/x-www-form-urlencoded" {
+		t.Fatalf("expected form body media type extension, got %#v", got)
+	}
+}
+
+func TestConvertRejectsMultipartSwaggerFormData(t *testing.T) {
+	t.Parallel()
+
+	raw := `swagger: "2.0"
+info:
+  title: Demo
+  version: 1.0.0
+paths:
+  /pets:
+    post:
+      consumes: [multipart/form-data]
+      parameters:
+        - name: name
+          in: formData
+          type: string
+      responses:
+        "200":
+          description: ok
+`
+
+	_, err := Convert(mustParsedSwagger(t, raw))
+	if !isPipelineErrorKind(err, pipeline.ErrorKindUnsupportedSwaggerConstruct) {
+		t.Fatalf("expected unsupported swagger construct error, got %v", err)
+	}
+}
+
+func TestConvertRejectsMixedSwaggerBodyAndFormData(t *testing.T) {
+	t.Parallel()
+
+	raw := `swagger: "2.0"
+info:
+  title: Demo
+  version: 1.0.0
+paths:
+  /pets:
+    post:
+      consumes: [application/x-www-form-urlencoded]
+      parameters:
+        - name: body
+          in: body
+          schema:
+            type: object
+        - name: name
+          in: formData
           type: string
       responses:
         "200":

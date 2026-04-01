@@ -59,6 +59,8 @@ func ActiveRows(
 		return parameterRows(describe.ParametersInLocation(selected.Parameters, model.ParameterLocationHeader), draft)
 	case "Cookie":
 		return parameterRows(describe.ParametersInLocation(selected.Parameters, model.ParameterLocationCookie), draft)
+	case SectionForm:
+		return parameterRows(describe.ParametersInLocation(selected.Parameters, model.ParameterLocationForm), draft)
 	case SectionServer:
 		return serverRows(servers, selectedServerURL)
 	case SectionBody:
@@ -157,6 +159,8 @@ func DraftParameterValue(draft *model.RequestDraft, parameter model.Parameter) s
 		return draft.HeaderParams[parameter.Name]
 	case model.ParameterLocationCookie:
 		return draft.CookieParams[parameter.Name]
+	case model.ParameterLocationForm:
+		return draft.FormParams[parameter.Name]
 	default:
 		return ""
 	}

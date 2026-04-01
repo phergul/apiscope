@@ -25,6 +25,7 @@ func EnsureRequestDraft(session *model.SessionState, operation *model.Operation)
 		QueryParams:      make(map[string]string),
 		HeaderParams:     make(map[string]string),
 		CookieParams:     make(map[string]string),
+		FormParams:       make(map[string]string),
 		SelectedExamples: make(map[string]string),
 	}
 	if operation.RequestBody != nil && len(operation.RequestBody.Content) > 0 {
@@ -104,6 +105,11 @@ func parameterValueMap(draft *model.RequestDraft, location model.ParameterLocati
 			draft.CookieParams = make(map[string]string)
 		}
 		return draft.CookieParams
+	case model.ParameterLocationForm:
+		if draft.FormParams == nil {
+			draft.FormParams = make(map[string]string)
+		}
+		return draft.FormParams
 	default:
 		return nil
 	}

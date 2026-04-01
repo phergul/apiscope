@@ -52,6 +52,7 @@ type fingerprintOperation struct {
 	Deprecated        bool                            `json:"deprecated"`
 	Tags              []string                        `json:"tags,omitempty"`
 	DefaultServerURLs []string                        `json:"default_server_urls,omitempty"`
+	FormBodyMediaType string                          `json:"form_body_media_type,omitempty"`
 	Parameters        []fingerprintParameter          `json:"parameters,omitempty"`
 	RequestBody       *fingerprintRequestBody         `json:"request_body,omitempty"`
 	Responses         []fingerprintResponse           `json:"responses,omitempty"`
@@ -208,6 +209,7 @@ func canonicalOperations(operations []model.Operation) []fingerprintOperation {
 			Deprecated:        operation.Deprecated,
 			Tags:              append([]string{}, operation.Tags...),
 			DefaultServerURLs: append([]string{}, operation.DefaultServerURLs...),
+			FormBodyMediaType: operation.FormBodyMediaType,
 			Parameters:        canonicalParameters(operation.Parameters),
 			RequestBody:       canonicalRequestBody(operation.RequestBody),
 			Responses:         canonicalResponses(operation.Responses),

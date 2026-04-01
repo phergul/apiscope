@@ -9,6 +9,7 @@ const (
 	SectionServer = "Server"
 	SectionBody   = "Body"
 	SectionAuth   = "Auth"
+	SectionForm   = "Form"
 )
 
 var parameterLocations = []model.ParameterLocation{
@@ -16,6 +17,7 @@ var parameterLocations = []model.ParameterLocation{
 	model.ParameterLocationQuery,
 	model.ParameterLocationHeader,
 	model.ParameterLocationCookie,
+	model.ParameterLocationForm,
 }
 
 // AvailableSections returns the visible request pane sections for the selected operation.
@@ -30,7 +32,7 @@ func AvailableSections(selected *model.Operation, security *model.SecurityRequir
 			sections = append(sections, locationSectionLabel(location))
 		}
 	}
-	if selected.RequestBody != nil {
+	if showBodySection(selected) {
 		sections = append(sections, SectionBody)
 	}
 	if security != nil && len(security.Alternatives) > 0 {
@@ -41,6 +43,16 @@ func AvailableSections(selected *model.Operation, security *model.SecurityRequir
 	}
 
 	return sections
+}
+
+// showBodySection reports whether the request pane should show the raw body editor.
+func showBodySection(selected *model.Operation) bool {
+	return selected != nil && selected.RequestBody != nil && !isFormOnlyOperation(selected)
+}
+
+// isFormOnlyOperation reports whether the selected operation is represented purely as urlencoded form fields.
+func isFormOnlyOperation(selected *model.Operation) bool {
+	return selected != nil && selected.RequestBody == nil && selected.FormBodyMediaType != ""
 }
 
 // ResolveActiveSection resolves the current request section against the available request sections.
@@ -80,6 +92,8 @@ func locationSectionLabel(location model.ParameterLocation) string {
 		return "Header"
 	case model.ParameterLocationCookie:
 		return "Cookie"
+	case model.ParameterLocationForm:
+		return SectionForm
 	default:
 		return string(location)
 	}

@@ -80,6 +80,15 @@ func normaliseOperation(pathName, method string, operation *openapi3.Operation, 
 	responses, responseWarnings := normaliseResponses(operation.Responses)
 	state.warnings = append(state.warnings, responseWarnings...)
 
+	formBodyMediaType, hasFormBodyMediaType := swaggerFormBodyMediaTypeFromExtensions(operation.Extensions)
+	if swaggerAssumedFormEncodingFromExtensions(operation.Extensions) {
+		state.warnings = append(state.warnings, model.SpecWarning{
+			Code:    model.SpecWarningAmbiguousBehavior,
+			Message: fmt.Sprintf("swagger formData operation %s %s did not declare consumes; assumed application/x-www-form-urlencoded", method, pathName),
+			Path:    pathName,
+		})
+	}
+
 	return model.Operation{
 		Key:                 model.NewOperationKey(method, pathName),
 		ID:                  operation.OperationID,
@@ -94,6 +103,7 @@ func normaliseOperation(pathName, method string, operation *openapi3.Operation, 
 		Responses:           responses,
 		Security:            normaliseSecurityRequirementsPtr(operation.Security),
 		DefaultServerURLs:   normaliseServerURLs(effectiveServers(operation, pathItem, specServers)),
+		FormBodyMediaType:   conditionalString(hasFormBodyMediaType, formBodyMediaType),
 		SelectedContentType: defaultSelectedContentType(requestBody),
 	}, nil
 }
@@ -154,7 +164,7 @@ func normaliseParameters(parameters openapi3.Parameters) ([]model.Parameter, []m
 			continue
 		}
 		parameter := parameterRef.Value
-		in, ok := normaliseParameterLocation(parameter.In)
+		in, ok := normaliseParameterLocation(parameter.In, parameter.Extensions)
 		if !ok {
 			warnings = append(warnings, model.SpecWarning{
 				Code:    model.SpecWarningUnsupportedFeature,
@@ -198,7 +208,11 @@ func parameterIdentity(parameter model.Parameter) string {
 	return string(parameter.In) + "\x00" + parameter.Name
 }
 
-func normaliseParameterLocation(in string) (model.ParameterLocation, bool) {
+func normaliseParameterLocation(in string, extensions map[string]any) (model.ParameterLocation, bool) {
+	if location, ok := swaggerParameterLocationFromExtensions(extensions); ok {
+		return location, true
+	}
+
 	switch in {
 	case "path":
 		return model.ParameterLocationPath, true
@@ -208,6 +222,8 @@ func normaliseParameterLocation(in string) (model.ParameterLocation, bool) {
 		return model.ParameterLocationHeader, true
 	case "cookie":
 		return model.ParameterLocationCookie, true
+	case "formData":
+		return model.ParameterLocationForm, true
 	default:
 		return "", false
 	}
@@ -402,4 +418,59 @@ func swaggerCollectionFormatFromExtensions(extensions map[string]any) (string, b
 	}
 
 	return value, true
+}
+
+func swaggerParameterLocationFromExtensions(extensions map[string]any) (model.ParameterLocation, bool) {
+	if len(extensions) == 0 {
+		return "", false
+	}
+	raw, ok := extensions[pipeline.SwaggerParameterLocationExtension]
+	if !ok || raw == nil {
+		return "", false
+	}
+
+	switch strings.ToLower(strings.TrimSpace(fmt.Sprint(raw))) {
+	case "formdata":
+		return model.ParameterLocationForm, true
+	default:
+		return "", false
+	}
+}
+
+func swaggerFormBodyMediaTypeFromExtensions(extensions map[string]any) (string, bool) {
+	if len(extensions) == 0 {
+		return "", false
+	}
+	raw, ok := extensions[pipeline.SwaggerFormBodyMediaTypeExtension]
+	if !ok || raw == nil {
+		return "", false
+	}
+
+	value := strings.TrimSpace(fmt.Sprint(raw))
+	if value == "" {
+		return "", false
+	}
+
+	return value, true
+}
+
+func swaggerAssumedFormEncodingFromExtensions(extensions map[string]any) bool {
+	if len(extensions) == 0 {
+		return false
+	}
+	raw, ok := extensions[pipeline.SwaggerAssumedFormEncodingExtension]
+	if !ok || raw == nil {
+		return false
+	}
+
+	assumed, ok := raw.(bool)
+	return ok && assumed
+}
+
+func conditionalString(ok bool, value string) string {
+	if !ok {
+		return ""
+	}
+
+	return value
 }

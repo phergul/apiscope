@@ -32,7 +32,7 @@ func normaliseSecuritySchemes(components *openapi3.Components, state *normalisat
 		switch scheme.Type {
 		case "apiKey":
 			normalised.Type = model.SecuritySchemeTypeAPIKey
-			if in, ok := normaliseParameterLocation(scheme.In); ok {
+			if in, ok := normaliseParameterLocation(scheme.In, nil); ok {
 				normalised.In = in
 			}
 			normalised.ParameterName = scheme.Name

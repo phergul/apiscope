@@ -137,6 +137,39 @@ func TestSaveEditWritesBodyBufferToDraft(t *testing.T) {
 	}
 }
 
+func TestSaveEditWritesFormFieldToDraft(t *testing.T) {
+	t.Parallel()
+
+	session := model.SessionState{
+		RequestDrafts: map[model.DraftKey]*model.RequestDraft{},
+	}
+	selected := &model.Operation{Key: model.NewOperationKey("POST", "/pets")}
+	parameter := model.Parameter{Name: "name", In: model.ParameterLocationForm}
+
+	ok := SaveEdit(
+		&session,
+		selected,
+		[]RowDescriptor{{
+			ID:        "form:name",
+			Kind:      RowKindParameter,
+			Parameter: &parameter,
+			Editable:  true,
+		}},
+		0,
+		model.RequestEditKindField,
+		"fido",
+		nil,
+	)
+	if !ok {
+		t.Fatal("expected save to succeed")
+	}
+
+	draft := app.EnsureRequestDraft(&session, selected)
+	if got := draft.FormParams["name"]; got != "fido" {
+		t.Fatalf("expected form draft to be saved, got %q", got)
+	}
+}
+
 func TestStartEditSeedsAuthFieldBufferFromSessionAuthState(t *testing.T) {
 	t.Parallel()
 

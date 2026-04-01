@@ -126,6 +126,7 @@ func cloneRequestDraft(draft *model.RequestDraft) *model.RequestDraft {
 	cloned.QueryParams = cloneStringMap(draft.QueryParams)
 	cloned.HeaderParams = cloneStringMap(draft.HeaderParams)
 	cloned.CookieParams = cloneStringMap(draft.CookieParams)
+	cloned.FormParams = cloneStringMap(draft.FormParams)
 	cloned.SelectedExamples = cloneStringMap(draft.SelectedExamples)
 	return &cloned
 }

@@ -129,6 +129,8 @@ func draftParameterValue(draft *model.RequestDraft, parameter model.Parameter) s
 		return draft.HeaderParams[parameter.Name]
 	case model.ParameterLocationCookie:
 		return draft.CookieParams[parameter.Name]
+	case model.ParameterLocationForm:
+		return draft.FormParams[parameter.Name]
 	default:
 		return ""
 	}
@@ -145,6 +147,8 @@ func requestSectionForLocation(location model.ParameterLocation) string {
 		return "Header"
 	case model.ParameterLocationCookie:
 		return "Cookie"
+	case model.ParameterLocationForm:
+		return "Form"
 	default:
 		return string(location)
 	}

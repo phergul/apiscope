@@ -222,6 +222,9 @@ func requestSections(draft model.RequestDraft) [][]string {
 	if line := formatParamLine("Cookie", draft.CookieParams); line != "" {
 		sections = append(sections, []string{line})
 	}
+	if line := formatParamLine("Form", draft.FormParams); line != "" {
+		sections = append(sections, []string{line})
+	}
 	if strings.TrimSpace(draft.BodyMediaType) != "" {
 		sections = append(sections, []string{"Body media type: " + draft.BodyMediaType})
 	}

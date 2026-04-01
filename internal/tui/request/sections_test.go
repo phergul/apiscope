@@ -40,3 +40,22 @@ func TestAvailableSectionsIncludesServerWhenMultipleTopLevelServersExist(t *test
 		t.Fatalf("expected server section last, got %#v", sections)
 	}
 }
+
+func TestAvailableSectionsPlacesFormBeforeBodyAndOmitsBodyForFormOnlyOperations(t *testing.T) {
+	t.Parallel()
+
+	selected := &model.Operation{
+		Parameters: []model.Parameter{
+			{Name: "name", In: model.ParameterLocationForm},
+		},
+		FormBodyMediaType: "application/x-www-form-urlencoded",
+	}
+
+	sections := AvailableSections(selected, nil, nil)
+	if len(sections) != 1 {
+		t.Fatalf("expected only form section, got %#v", sections)
+	}
+	if sections[0] != SectionForm {
+		t.Fatalf("expected form section, got %#v", sections)
+	}
+}

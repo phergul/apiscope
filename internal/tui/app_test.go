@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -827,6 +828,60 @@ func TestModelCtrlRStillExecutesWhenOperationShowsSupportNotes(t *testing.T) {
 	updated := updatedModel.(*Model)
 	if cmd == nil {
 		t.Fatal("expected ctrl+r to execute even with support notes present")
+	}
+
+	msg := cmd()
+	updatedModel, _ = updated.Update(msg)
+	updated = updatedModel.(*Model)
+	if updated.session.LastResponse == nil {
+		t.Fatal("expected response after execution")
+	}
+	if updated.session.LastResponse.TransportError != "" {
+		t.Fatalf("expected successful execution, got %q", updated.session.LastResponse.TransportError)
+	}
+}
+
+func TestModelCtrlRExecutesUrlencodedFormOperation(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Method; got != http.MethodPost {
+			t.Fatalf("expected POST request, got %q", got)
+		}
+		if got := r.Header.Get("Content-Type"); got != "application/x-www-form-urlencoded" {
+			t.Fatalf("expected form content type, got %q", got)
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("ReadAll returned error: %v", err)
+		}
+		if got := string(body); got != "name=fido" {
+			t.Fatalf("expected urlencoded form body, got %q", got)
+		}
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	m := newLoadedModelForNavigation()
+	m.service = app.NewService(nil)
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.session.SelectedOperationKey = model.NewOperationKey("POST", "/pets")
+	m.session.SelectedServerURL = server.URL
+	m.session.Spec.Security = nil
+	m.session.Spec.Operations[1].Parameters = []model.Parameter{
+		{Name: "name", In: model.ParameterLocationForm, Required: true, Schema: &model.Schema{Type: "string"}},
+	}
+	m.session.Spec.Operations[1].FormBodyMediaType = "application/x-www-form-urlencoded"
+	m.session.Spec.Operations[1].Security = nil
+	m.panes.activeRequestSection = requestui.SectionForm
+
+	draft := m.ensureSelectedRequestDraft()
+	draft.FormParams["name"] = "fido"
+
+	updatedModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlR})
+	updated := updatedModel.(*Model)
+	if cmd == nil {
+		t.Fatal("expected ctrl+r to execute form request")
 	}
 
 	msg := cmd()

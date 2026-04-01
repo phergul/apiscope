@@ -22,9 +22,10 @@ func convertSwaggerParameters(source, location string, rawParameters []map[strin
 	return parameters, nil
 }
 
-func convertSwaggerOperationInputs(source, pathName, method string, operationMap map[string]any, globalConsumes []string) (openapi3.Parameters, *openapi3.RequestBodyRef, error) {
+func convertSwaggerOperationInputs(source, pathName, method string, operationMap map[string]any, globalConsumes []string) (openapi3.Parameters, *openapi3.RequestBodyRef, map[string]any, error) {
 	parameters := openapi3.Parameters{}
 	var requestBody *openapi3.RequestBodyRef
+	formParameters := openapi3.Parameters{}
 
 	rawParameters := getSliceMap(operationMap, "parameters")
 	for index, rawParameter := range rawParameters {
@@ -34,25 +35,55 @@ func convertSwaggerOperationInputs(source, pathName, method string, operationMap
 		switch inValue {
 		case "body":
 			if requestBody != nil {
-				return nil, nil, unsupportedSwaggerConstruct(source, location, "multiple body parameters are not supported")
+				return nil, nil, nil, unsupportedSwaggerConstruct(source, location, "multiple body parameters are not supported")
+			}
+			if len(formParameters) > 0 {
+				return nil, nil, nil, unsupportedSwaggerConstruct(source, location, "mixed body and formData parameters are not supported")
 			}
 			body, err := convertSwaggerBodyParameter(source, location, rawParameter, consumesForOperation(operationMap, globalConsumes))
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			requestBody = body
 		case "formData":
-			return nil, nil, unsupportedSwaggerConstruct(source, location, "formData parameters are not supported")
+			if requestBody != nil {
+				return nil, nil, nil, unsupportedSwaggerConstruct(source, location, "mixed body and formData parameters are not supported")
+			}
+			if swaggerFormDataIsFile(rawParameter) {
+				return nil, nil, nil, unsupportedSwaggerConstruct(source, location, "file formData parameters are not supported")
+			}
+			parameter, err := convertSwaggerFormParameter(source, location, rawParameter)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			formParameters = append(formParameters, parameter)
 		default:
 			parameter, err := convertSwaggerParameter(source, location, rawParameter)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			parameters = append(parameters, parameter)
 		}
 	}
 
-	return parameters, requestBody, nil
+	if len(formParameters) == 0 {
+		return parameters, requestBody, nil, nil
+	}
+
+	mediaType, assumedEncoding, err := resolveSwaggerFormDataMediaType(source, pathName, method, consumesForOperation(operationMap, globalConsumes))
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	parameters = append(parameters, formParameters...)
+	extensions := map[string]any{
+		pipeline.SwaggerFormBodyMediaTypeExtension: mediaType,
+	}
+	if assumedEncoding {
+		extensions[pipeline.SwaggerAssumedFormEncodingExtension] = true
+	}
+
+	return parameters, requestBody, extensions, nil
 }
 
 func convertSwaggerBodyParameter(source, location string, rawParameter map[string]any, consumes []string) (*openapi3.RequestBodyRef, error) {
@@ -107,6 +138,27 @@ func convertSwaggerParameter(source, location string, rawParameter map[string]an
 		Schema:      schema,
 	}
 	applySwaggerCollectionFormat(parameter, inValue, rawParameter)
+
+	return &openapi3.ParameterRef{Value: parameter}, nil
+}
+
+func convertSwaggerFormParameter(source, location string, rawParameter map[string]any) (*openapi3.ParameterRef, error) {
+	schema, err := convertSchemaFromParameter(source, location, rawParameter)
+	if err != nil {
+		return nil, err
+	}
+
+	parameter := &openapi3.Parameter{
+		Name:        getString(rawParameter, "name"),
+		In:          "query",
+		Description: getString(rawParameter, "description"),
+		Required:    getBool(rawParameter, "required"),
+		Schema:      schema,
+		Extensions: map[string]any{
+			pipeline.SwaggerParameterLocationExtension: "formData",
+		},
+	}
+	applySwaggerCollectionFormat(parameter, "formData", rawParameter)
 
 	return &openapi3.ParameterRef{Value: parameter}, nil
 }
@@ -191,6 +243,35 @@ func consumesForOperation(operationMap map[string]any, global []string) []string
 		return local
 	}
 	return global
+}
+
+func resolveSwaggerFormDataMediaType(source, pathName, method string, consumes []string) (string, bool, error) {
+	if len(consumes) == 0 {
+		return "application/x-www-form-urlencoded", true, nil
+	}
+
+	if containsMediaType(consumes, "application/x-www-form-urlencoded") {
+		return "application/x-www-form-urlencoded", false, nil
+	}
+	if containsMediaType(consumes, "multipart/form-data") {
+		return "", false, unsupportedSwaggerConstruct(source, fmt.Sprintf("%s %s consumes", strings.ToUpper(method), pathName), "multipart formData parameters are not supported")
+	}
+
+	return "", false, unsupportedSwaggerConstruct(source, fmt.Sprintf("%s %s consumes", strings.ToUpper(method), pathName), "formData parameters are only supported for application/x-www-form-urlencoded")
+}
+
+func containsMediaType(consumes []string, target string) bool {
+	for _, mediaType := range consumes {
+		if strings.EqualFold(strings.TrimSpace(mediaType), target) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func swaggerFormDataIsFile(rawParameter map[string]any) bool {
+	return strings.EqualFold(strings.TrimSpace(getString(rawParameter, "type")), "file")
 }
 
 func applySwaggerCollectionFormat(parameter *openapi3.Parameter, inValue string, raw map[string]any) {

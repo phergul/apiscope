@@ -113,7 +113,7 @@ paths:
       parameters:
         - name: file
           in: formData
-          type: string
+          type: file
       responses:
         "200":
           description: ok

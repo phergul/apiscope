@@ -94,7 +94,7 @@ func convertSwaggerPathItem(source, pathName string, pathMap map[string]any, glo
 }
 
 func convertSwaggerOperation(source, pathName, method string, operationMap map[string]any, globalConsumes, globalProduces []string) (*openapi3.Operation, error) {
-	parameters, requestBody, err := convertSwaggerOperationInputs(source, pathName, method, operationMap, globalConsumes)
+	parameters, requestBody, extensions, err := convertSwaggerOperationInputs(source, pathName, method, operationMap, globalConsumes)
 	if err != nil {
 		return nil, err
 	}
@@ -119,5 +119,6 @@ func convertSwaggerOperation(source, pathName, method string, operationMap map[s
 		RequestBody: requestBody,
 		Responses:   responses,
 		Security:    securityRequirementPtr(security),
+		Extensions:  extensions,
 	}, nil
 }

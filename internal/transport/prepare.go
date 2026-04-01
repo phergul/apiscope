@@ -62,7 +62,11 @@ func (e *Executor) PrepareRequest(
 	targetURL.RawQuery = queryValues.Encode()
 
 	var body io.Reader
-	if draft != nil && draft.BodyRaw != "" {
+	formBody := ""
+	if operation.FormBodyMediaType == "application/x-www-form-urlencoded" {
+		formBody = encodeFormParams(draft)
+		body = strings.NewReader(formBody)
+	} else if draft != nil && draft.BodyRaw != "" {
 		body = strings.NewReader(draft.BodyRaw)
 	}
 
@@ -84,7 +88,9 @@ func (e *Executor) PrepareRequest(
 			}
 			request.AddCookie(&http.Cookie{Name: key, Value: value})
 		}
-		if draft.BodyRaw != "" && strings.TrimSpace(draft.BodyMediaType) != "" {
+		if operation.FormBodyMediaType == "application/x-www-form-urlencoded" {
+			request.Header.Set("Content-Type", operation.FormBodyMediaType)
+		} else if draft.BodyRaw != "" && strings.TrimSpace(draft.BodyMediaType) != "" {
 			request.Header.Set("Content-Type", draft.BodyMediaType)
 		}
 	}
@@ -93,6 +99,23 @@ func (e *Executor) PrepareRequest(
 	}
 
 	return request, nil
+}
+
+// encodeFormParams serializes non-empty form values for urlencoded request bodies.
+func encodeFormParams(draft *model.RequestDraft) string {
+	if draft == nil || len(draft.FormParams) == 0 {
+		return ""
+	}
+
+	values := url.Values{}
+	for key, value := range draft.FormParams {
+		if strings.TrimSpace(value) == "" {
+			continue
+		}
+		values.Set(key, value)
+	}
+
+	return values.Encode()
 }
 
 // resolvePath substitutes draft path parameters into an operation path template.

@@ -10,7 +10,6 @@ import (
 	"github.com/phergul/apiscope/internal/util"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 )
 
 // PopupInput contains the root-owned state needed to project the previous-requests popup.
@@ -427,32 +426,12 @@ func fixedBodyBlock(body string, width, height int) string {
 
 // wrapLines wraps preview lines to the available pane width before viewport clipping.
 func wrapLines(lines []string, width int) []string {
-	if width <= 0 {
-		return append([]string(nil), lines...)
-	}
-
-	wrapped := make([]string, 0, len(lines))
-	for _, line := range lines {
-		if strings.TrimSpace(line) == "" {
-			wrapped = append(wrapped, "")
-			continue
-		}
-
-		wordWrapped := ansi.Wordwrap(line, width, "")
-		hardWrapped := ansi.Hardwrap(wordWrapped, width, true)
-		wrapped = append(wrapped, strings.Split(hardWrapped, "\n")...)
-	}
-
-	return wrapped
+	return widgets.WrapLines(lines, width)
 }
 
 // fitLine clips one list row to the requested width while preserving the surrounding style.
 func fitLine(line string, width int) string {
-	if width <= 0 {
-		return line
-	}
-
-	return lipgloss.NewStyle().Width(width).MaxWidth(width).Render(line)
+	return widgets.FitLine(line, width)
 }
 
 // renderPreviewHeading styles one preview heading to match the muted response-pane headings.

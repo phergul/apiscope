@@ -11,13 +11,22 @@ import (
 	"github.com/phergul/apiscope/internal/tui/widgets"
 )
 
-func previewBody(state State, schema *model.Schema, label, note string) string {
-	if schema == nil {
-		return "No schema selected."
+func previewBody(node *treeNode, width int) string {
+	lines := previewLines(node)
+	return strings.Join(widgets.WrapLines(lines, width), "\n")
+}
+
+func previewLines(node *treeNode) []string {
+	if node == nil {
+		return []string{"No schema selected."}
+	}
+	if node.Schema == nil {
+		return groupPreviewLines(node)
 	}
 
+	schema := node.Schema
 	lines := make([]string, 0, 24)
-	if path := breadcrumbPath(state, label); strings.TrimSpace(path) != "" {
+	if path := previewPath(node); strings.TrimSpace(path) != "" {
 		lines = append(lines, renderMetaLine("Path", path))
 	}
 	if strings.TrimSpace(schema.Ref) != "" {
@@ -28,37 +37,53 @@ func previewBody(state State, schema *model.Schema, label, note string) string {
 	}
 	lines = append(lines, renderMetaLine("Type", describe.SchemaTypeHint(schema)))
 	if strings.TrimSpace(schema.Description) != "" {
-		lines = append(lines, "", "Description:", schema.Description)
+		lines = append(lines, "", renderMetaLine("Description", schema.Description))
 	}
 	if len(schema.Required) > 0 {
 		lines = append(lines, "", renderMetaLine("Required", strings.Join(schema.Required, ", ")))
 	}
 	if len(schema.Enum) > 0 {
-		lines = append(lines, "", "Enum:")
+		lines = append(lines, "", renderMetaLine("Enum", fmt.Sprintf("%d values", len(schema.Enum))))
 		for _, value := range schema.Enum {
 			lines = append(lines, "- "+formatValue(value))
 		}
 	}
 	if example := formatStructuredValue(schema.Example); strings.TrimSpace(example) != "" {
-		lines = append(lines, "", "Example:", example)
+		lines = append(lines, "", renderMetaLine("Example", example))
 	}
 	if defaultValue := formatStructuredValue(schema.Default); strings.TrimSpace(defaultValue) != "" {
-		lines = append(lines, "", "Default:", defaultValue)
+		lines = append(lines, "", renderMetaLine("Default", defaultValue))
 	}
 
-	lines = append(lines, "", "Children:")
 	children := childSummary(schema)
-	if len(children) == 0 {
-		lines = append(lines, "- none")
-	} else {
+	if len(children) > 0 {
+		lines = append(lines, "", renderMetaLine("Children", ""))
 		lines = append(lines, children...)
 	}
 
-	if strings.TrimSpace(note) != "" {
-		lines = append(lines, "", renderMetaLine("Note", note))
+	if strings.TrimSpace(node.Note) != "" {
+		lines = append(lines, "", renderMetaLine("Note", node.Note))
 	}
 
-	return strings.Join(lines, "\n")
+	return lines
+}
+
+func groupPreviewLines(node *treeNode) []string {
+	lines := []string{
+		renderMetaLine("Path", previewPath(node)),
+		renderMetaLine("Entries", fmt.Sprintf("%d", len(node.Children))),
+	}
+	if len(node.Children) == 0 {
+		lines = append(lines, "", renderMetaLine("Children", "- none"))
+		return lines
+	}
+
+	lines = append(lines, "", renderMetaLine("Children", ""))
+	for _, child := range node.Children {
+		lines = append(lines, "- "+previewLabel(child))
+	}
+
+	return lines
 }
 
 func childSummary(schema *model.Schema) []string {
@@ -84,18 +109,6 @@ func childSummary(schema *model.Schema) []string {
 	}
 
 	return lines
-}
-
-func breadcrumbPath(state State, label string) string {
-	parts := make([]string, 0, len(state.Breadcrumbs)+1)
-	for _, breadcrumb := range state.Breadcrumbs {
-		parts = append(parts, breadcrumb.Label)
-	}
-	if strings.TrimSpace(label) != "" && (len(parts) == 0 || parts[len(parts)-1] != label) {
-		parts = append(parts, label)
-	}
-
-	return strings.Join(parts, " > ")
 }
 
 func renderMetaLine(label, value string) string {

@@ -1829,7 +1829,7 @@ func TestModelSchemaExplorerClosesAndResetsState(t *testing.T) {
 	if updated.schemaExplorerOpen() {
 		t.Fatal("expected esc to close schema explorer")
 	}
-	if updated.schemaExplorerUI.state.OperationKey != "" || len(updated.schemaExplorerUI.state.Breadcrumbs) != 0 {
+	if updated.schemaExplorerUI.state.OperationKey != "" || len(updated.schemaExplorerUI.state.ExpandedNodeIDs) != 0 {
 		t.Fatalf("expected schema explorer state to reset, got %#v", updated.schemaExplorerUI.state)
 	}
 }

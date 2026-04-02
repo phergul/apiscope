@@ -4,19 +4,13 @@ import "github.com/phergul/apiscope/internal/model"
 
 const maxTraversalDepth = 12
 
-// Breadcrumb describes one drilled schema node in the current explorer path.
-type Breadcrumb struct {
-	Label  string
-	Schema *model.Schema
-}
-
 // State holds the root-owned runtime state for the schema explorer.
 type State struct {
 	OperationKey        model.OperationKey
-	Breadcrumbs         []Breadcrumb
 	ActiveRow           int
-	RowScrollOffset     int
+	TreeScrollOffset    int
 	PreviewScrollOffset int
+	ExpandedNodeIDs     map[string]struct{}
 }
 
 // Action describes one shell-level effect requested by the explorer update logic.
@@ -49,7 +43,6 @@ type ProjectionInput struct {
 type Projection struct {
 	Data             Data
 	MaxPreviewScroll int
-	MaxRowScroll     int
 	VisibleRows      int
 }
 
@@ -64,10 +57,25 @@ type Data struct {
 	RightWidth int
 }
 
-type row struct {
-	Label     string
-	Meta      string
-	Schema    *model.Schema
-	Drillable bool
-	Note      string
+type nodeLabel struct {
+	Prefix string
+	Name   string
+	Meta   string
+}
+
+type treeNode struct {
+	ID       string
+	Parent   *treeNode
+	Label    nodeLabel
+	Schema   *model.Schema
+	Note     string
+	Children []*treeNode
+}
+
+type visibleRow struct {
+	Node            *treeNode
+	Depth           int
+	Expanded        bool
+	HasNextSibling  bool
+	AncestorHasNext []bool
 }

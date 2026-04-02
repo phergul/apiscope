@@ -13,8 +13,9 @@ func BuildHelpView() widgets.HelpView {
 		Title: "Schema explorer help",
 		Body: strings.Join([]string{
 			"j/k or up/down move selection",
-			"Enter drill into selected schema",
-			"h, left, or backspace go back",
+			"Enter toggle selected branch",
+			"l or right expand selected branch",
+			"h, left, or backspace collapse branch",
 			"Home / End jump to first or last row",
 			"Ctrl+U / Ctrl+D scroll preview",
 			"Esc close schema explorer",

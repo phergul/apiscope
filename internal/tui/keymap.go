@@ -34,6 +34,10 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	if m.schemaExplorerOpen() {
+		return m.updateSchemaExplorerKey(msg)
+	}
+
 	if m.viewState.ActiveEditorMode == model.EditorModeFilter {
 		return m.updateOperationsFilterKey(msg)
 	}
@@ -147,6 +151,10 @@ func (m *Model) updateBrowseKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.moveFocusedPaneSection(1)
 	case "[", "h":
 		m.moveFocusedPaneSection(-1)
+	case "s":
+		if m.viewState.FocusedPane == model.FocusedPaneDetails {
+			m.openSchemaExplorer()
+		}
 	}
 
 	return m, nil

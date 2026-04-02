@@ -6,6 +6,7 @@ import (
 	operationsui "github.com/phergul/apiscope/internal/tui/operations"
 	requestui "github.com/phergul/apiscope/internal/tui/request"
 	responseui "github.com/phergul/apiscope/internal/tui/response"
+	schemaexplorerui "github.com/phergul/apiscope/internal/tui/schemaexplorer"
 )
 
 type paneView struct {
@@ -123,9 +124,10 @@ func (m *Model) paneView(pane model.FocusedPane) paneView {
 	switch pane {
 	case model.FocusedPaneDetails:
 		return paneView{
-			Title:   "2 Details",
-			Body:    m.detailsPaneContent(),
-			Focused: m.paneOuterFocused(pane),
+			Title:      "2 Details",
+			TitleRight: m.detailsPaneTitleRight(),
+			Body:       m.detailsPaneContent(),
+			Focused:    m.paneOuterFocused(pane),
 		}
 	case model.FocusedPaneRequest:
 		return paneView{
@@ -148,6 +150,17 @@ func (m *Model) paneView(pane model.FocusedPane) paneView {
 			Focused: m.paneOuterFocused(pane),
 		}
 	}
+}
+
+func (m *Model) detailsPaneTitleRight() string {
+	if m.viewState.FocusedPane != model.FocusedPaneDetails {
+		return ""
+	}
+	if schemaexplorerui.Available(m.resolvedSelectedOperation()) {
+		return "Open schemas s"
+	}
+
+	return ""
 }
 
 // paneOuterFocused reports whether a shell pane should render its focused border state.

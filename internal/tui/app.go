@@ -68,15 +68,16 @@ type helpUIState struct {
 
 // Model is the root Bubble Tea model for the TUI shell.
 type Model struct {
-	service   *app.Service
-	session   model.SessionState
-	viewState model.ViewState
-	shell     shellState
-	panes     paneState
-	widgets   widgetState
-	requestUI requestUIState
-	historyUI historyUIState
-	helpUI    helpUIState
+	service          *app.Service
+	session          model.SessionState
+	viewState        model.ViewState
+	shell            shellState
+	panes            paneState
+	widgets          widgetState
+	requestUI        requestUIState
+	historyUI        historyUIState
+	helpUI           helpUIState
+	schemaExplorerUI schemaExplorerUIState
 }
 
 // NewProgram builds the CLI-facing Bubble Tea program wrapper.

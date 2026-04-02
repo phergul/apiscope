@@ -28,6 +28,8 @@ func (m *Model) render() string {
 	var body string
 	if m.hasBlockingLoadError() {
 		body = m.renderBlockingLoadError(width, bodyHeight)
+	} else if m.schemaExplorerOpen() {
+		body = m.renderSchemaExplorer(width, bodyHeight)
 	} else {
 		preset := m.viewState.RightPaneLayoutPreset
 		if preset == "" {

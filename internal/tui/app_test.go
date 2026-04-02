@@ -1772,6 +1772,119 @@ func TestModelQuestionMarkOpensBrowseHelpForFocusedPane(t *testing.T) {
 	}
 }
 
+func TestModelDetailsPaneShowsSchemaExplorerHintWhenFocusedAndAvailable(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FocusedPane = model.FocusedPaneDetails
+
+	view := m.paneView(model.FocusedPaneDetails)
+	if view.TitleRight != "Open schemas s" {
+		t.Fatalf("expected schema explorer hint, got %q", view.TitleRight)
+	}
+
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	view = m.paneView(model.FocusedPaneDetails)
+	if view.TitleRight != "" {
+		t.Fatalf("expected hint to hide when details is not focused, got %q", view.TitleRight)
+	}
+}
+
+func TestModelSchemaExplorerOpensOnlyFromFocusedDetailsPane(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	updated := updatedModel.(*Model)
+	if updated.schemaExplorerOpen() {
+		t.Fatal("expected schema explorer to stay closed outside the details pane")
+	}
+
+	updated.viewState.FocusedPane = model.FocusedPaneDetails
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	updated = updatedModel.(*Model)
+	if !updated.schemaExplorerOpen() {
+		t.Fatal("expected schema explorer to open from the details pane")
+	}
+	if updated.schemaExplorerUI.state.OperationKey != model.NewOperationKey("GET", "/pets") {
+		t.Fatalf("expected explorer to freeze the selected operation, got %q", updated.schemaExplorerUI.state.OperationKey)
+	}
+}
+
+func TestModelSchemaExplorerClosesAndResetsState(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FocusedPane = model.FocusedPaneDetails
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	updated := updatedModel.(*Model)
+	if !updated.schemaExplorerOpen() {
+		t.Fatal("expected schema explorer to open")
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated = updatedModel.(*Model)
+	if updated.schemaExplorerOpen() {
+		t.Fatal("expected esc to close schema explorer")
+	}
+	if updated.schemaExplorerUI.state.OperationKey != "" || len(updated.schemaExplorerUI.state.Breadcrumbs) != 0 {
+		t.Fatalf("expected schema explorer state to reset, got %#v", updated.schemaExplorerUI.state)
+	}
+}
+
+func TestModelSchemaExplorerReplacesPaneLayoutAndKeepsStatusBar(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FocusedPane = model.FocusedPaneDetails
+	m.shell.width = 120
+	m.shell.height = 32
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	updated := updatedModel.(*Model)
+
+	view := stripANSI(updated.View())
+	if !strings.Contains(view, "Schema Explorer") {
+		t.Fatalf("expected schema explorer heading, got %q", view)
+	}
+	if strings.Contains(view, "1 Operations") || strings.Contains(view, "2 Details") {
+		t.Fatalf("expected explorer mode to replace pane layout, got %q", view)
+	}
+	if !strings.Contains(view, "Help - ?") {
+		t.Fatalf("expected status bar to remain visible, got %q", view)
+	}
+}
+
+func TestModelSchemaExplorerBlocksPaneNavigationAndUsesExplorerHelp(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FocusedPane = model.FocusedPaneDetails
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	updated := updatedModel.(*Model)
+	if !updated.schemaExplorerOpen() {
+		t.Fatal("expected schema explorer to open")
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'4'}})
+	updated = updatedModel.(*Model)
+	if updated.viewState.FocusedPane != model.FocusedPaneDetails {
+		t.Fatalf("expected pane focus changes to stay blocked, got %q", updated.viewState.FocusedPane)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	updated = updatedModel.(*Model)
+	if !updated.helpOverlayOpen() {
+		t.Fatal("expected schema explorer help to open")
+	}
+	if updated.helpUI.view.Title != "Schema explorer help" {
+		t.Fatalf("expected schema explorer help title, got %q", updated.helpUI.view.Title)
+	}
+}
+
 func TestModelHelpOverlayBlocksBrowseMutationUntilClosed(t *testing.T) {
 	t.Parallel()
 

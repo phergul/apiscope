@@ -9,6 +9,7 @@ import (
 	operationsui "github.com/phergul/apiscope/internal/tui/operations"
 	requestui "github.com/phergul/apiscope/internal/tui/request"
 	responseui "github.com/phergul/apiscope/internal/tui/response"
+	schemaexplorerui "github.com/phergul/apiscope/internal/tui/schemaexplorer"
 	"github.com/phergul/apiscope/internal/tui/widgets"
 	"github.com/phergul/apiscope/internal/util"
 
@@ -63,6 +64,8 @@ func (m *Model) currentHelpView() widgets.HelpView {
 	switch {
 	case m.hasBlockingLoadError():
 		return m.blockingLoadErrorHelpView()
+	case m.schemaExplorerOpen():
+		return schemaexplorerui.BuildHelpView()
 	case m.historyPopupOpen():
 		return historyui.BuildHelpView()
 	case m.viewState.ActiveEditorMode == model.EditorModeFilter:

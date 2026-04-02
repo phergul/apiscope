@@ -21,22 +21,46 @@ func (m *Model) historyPopupOpen() bool {
 func (m *Model) openHistoryPopup() {
 	m.historyUI.open = true
 	m.historyUI.activeRow = historyui.ClampActiveRow(m.selectedOperationHistory(), m.historyUI.activeRow)
+	m.historyUI.previewScrollOffset = 0
 }
 
 // closeHistoryPopup hides the previous-requests popup and resets its transient cursor state.
 func (m *Model) closeHistoryPopup() {
 	m.historyUI.open = false
 	m.historyUI.activeRow = 0
+	m.historyUI.previewScrollOffset = 0
 }
 
 // moveHistoryPopupRow moves the popup selection through operation-scoped history entries.
 func (m *Model) moveHistoryPopupRow(direction int) {
-	m.historyUI.activeRow = historyui.MoveActiveRow(m.selectedOperationHistory(), m.historyUI.activeRow, direction)
+	next := historyui.MoveActiveRow(m.selectedOperationHistory(), m.historyUI.activeRow, direction)
+	if next != m.historyUI.activeRow {
+		m.historyUI.previewScrollOffset = 0
+	}
+	m.historyUI.activeRow = next
 }
 
 // setHistoryPopupBoundary jumps the popup selection to the first or last history row.
 func (m *Model) setHistoryPopupBoundary(last bool) {
-	m.historyUI.activeRow = historyui.BoundaryActiveRow(m.selectedOperationHistory(), last)
+	next := historyui.BoundaryActiveRow(m.selectedOperationHistory(), last)
+	if next != m.historyUI.activeRow {
+		m.historyUI.previewScrollOffset = 0
+	}
+	m.historyUI.activeRow = next
+}
+
+// scrollHistoryPopupPreviewBy moves the preview viewport by the provided delta.
+func (m *Model) scrollHistoryPopupPreviewBy(delta int) {
+	projected := m.projectHistoryPopup()
+	target := m.historyUI.previewScrollOffset + delta
+	if target < 0 {
+		target = 0
+	}
+	if target > projected.MaxPreviewScroll {
+		target = projected.MaxPreviewScroll
+	}
+
+	m.historyUI.previewScrollOffset = target
 }
 
 // selectedOperationHistory returns newest-first history for the currently selected operation.
@@ -78,23 +102,37 @@ func (m *Model) restoreSelectedHistoryRequest() {
 	m.viewState.Notice = "Restored request #" + formatRequestID(entry.RequestID)
 }
 
+// projectHistoryPopup projects the current previous-requests popup for the resolved shell size.
+func (m *Model) projectHistoryPopup() historyui.PopupData {
+	width, height := m.resolvedDimensions()
+	maxWidth := max(width-2, 20)
+	minWidth := min(60, maxWidth)
+	popupWidth := util.Clamp(int(float64(width)*0.8), minWidth, maxWidth)
+	maxHeight := max(height-2, 8)
+	minHeight := min(12, maxHeight)
+	popupHeight := util.Clamp(int(float64(height)*0.8), minHeight, maxHeight)
+
+	return historyui.ProjectPopup(historyui.PopupInput{
+		Selected:            m.resolvedSelectedOperation(),
+		Entries:             m.selectedOperationHistory(),
+		ActiveRow:           m.historyUI.activeRow,
+		PreviewScrollOffset: m.historyUI.previewScrollOffset,
+		ContentWidth:        max(popupWidth-4, 1),
+		ContentHeight:       max(popupHeight-4, 1),
+	})
+}
+
 // renderHistoryPopup overlays the centered previous-requests popup above the shell layout.
 func (m *Model) renderHistoryPopup(view string) string {
 	if !m.historyPopupOpen() {
 		return view
 	}
 
-	width, height := m.resolvedDimensions()
-	// keep the popup wide enough for request summaries while still fitting compact terminals.
-	popupWidth := util.Clamp(int(float64(width)*0.78), 40, max(width-2, 40))
-	contentHeight := util.Clamp(height-14, 8, 16)
-	data := historyui.ProjectPopup(historyui.PopupInput{
-		Selected:      m.resolvedSelectedOperation(),
-		Entries:       m.selectedOperationHistory(),
-		ActiveRow:     m.historyUI.activeRow,
-		ContentWidth:  max(popupWidth-4, 1),
-		ContentHeight: contentHeight,
-	})
+	width, _ := m.resolvedDimensions()
+	maxWidth := max(width-2, 20)
+	minWidth := min(60, maxWidth)
+	popupWidth := util.Clamp(int(float64(width)*0.8), minWidth, maxWidth)
+	data := m.projectHistoryPopup()
 
 	popup := widgets.RenderPopup(widgets.PopupData{
 		Title:   data.Title,

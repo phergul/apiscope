@@ -216,7 +216,7 @@ func renderRow(row Row, width int) string {
 	rowStyle := widgets.BodyTextStyle()
 
 	if row.Selected {
-		methodStyle = methodStyle.Background(widgets.CurrentTheme().Palette.Selection)
+		methodStyle = methodStyle.Foreground(widgets.MethodSelectedColor(row.Method)).Background(widgets.CurrentTheme().Palette.Selection)
 		pathStyle = widgets.SelectedTextStyle()
 		rowStyle = widgets.SelectedTextStyle()
 	}

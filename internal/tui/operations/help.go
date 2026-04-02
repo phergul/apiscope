@@ -15,6 +15,7 @@ func BuildBrowseHelpView() widgets.HelpView {
 			"j/k or up/down move selection",
 			"[ or ] or h/l jump groups",
 			"/ filter operations",
+			"t / T switch theme",
 			"1-4 or Tab / Shift+Tab focus panes",
 			"z zoom focused pane",
 			"? or Esc close help",

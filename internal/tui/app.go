@@ -54,9 +54,10 @@ type requestUIState struct {
 
 // historyUIState groups shell-owned previous-request popup state.
 type historyUIState struct {
-	open       bool
-	activeRow  int
-	filterText string
+	open                bool
+	activeRow           int
+	previewScrollOffset int
+	filterText          string
 }
 
 // helpUIState groups the root-owned contextual help overlay state.
@@ -222,6 +223,18 @@ func (m *Model) ensureWidgetDefaults() {
 	m.widgets.filterInput.SetPlaceholder("Filter operations")
 	m.widgets.requestFieldInput.SetPlaceholder("Enter value")
 	m.widgets.requestBodyInput.SetPlaceholder("Enter raw request body")
+}
+
+// cycleTheme selects the next or previous built-in theme and surfaces a shell notice.
+func (m *Model) cycleTheme(forward bool) {
+	current := widgets.CurrentTheme().Name
+	next := widgets.PreviousThemeName(current)
+	if forward {
+		next = widgets.NextThemeName(current)
+	}
+
+	widgets.SetThemeByName(next)
+	m.viewState.Notice = "Theme: " + widgets.CurrentTheme().Name
 }
 
 // startLoadCmd starts a new asynchronous spec load request.

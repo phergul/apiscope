@@ -19,6 +19,7 @@ import (
 	"github.com/phergul/apiscope/internal/spec"
 	detailsui "github.com/phergul/apiscope/internal/tui/details"
 	requestui "github.com/phergul/apiscope/internal/tui/request"
+	"github.com/phergul/apiscope/internal/tui/widgets"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -1208,6 +1209,9 @@ func TestModelPreviousRequestsPopupNavigationUsesJKHomeAndEnd(t *testing.T) {
 	if updated.historyUI.activeRow != 1 {
 		t.Fatalf("expected j to move selection down, got %d", updated.historyUI.activeRow)
 	}
+	if updated.historyUI.previewScrollOffset != 0 {
+		t.Fatalf("expected selection changes to reset preview scroll, got %d", updated.historyUI.previewScrollOffset)
+	}
 
 	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnd})
 	updated = updatedModel.(*Model)
@@ -1219,6 +1223,64 @@ func TestModelPreviousRequestsPopupNavigationUsesJKHomeAndEnd(t *testing.T) {
 	updated = updatedModel.(*Model)
 	if updated.historyUI.activeRow != 0 {
 		t.Fatalf("expected home to jump to first entry, got %d", updated.historyUI.activeRow)
+	}
+}
+
+func TestModelPreviousRequestsPopupOpenResetsPreviewScroll(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.historyUI.previewScrollOffset = 7
+	m.session.RequestHistory = []model.HistoryEntry{
+		{RequestID: 1, OperationKey: model.NewOperationKey("GET", "/pets")},
+	}
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	updated := updatedModel.(*Model)
+	if updated.historyUI.previewScrollOffset != 0 {
+		t.Fatalf("expected popup open to reset preview scroll, got %d", updated.historyUI.previewScrollOffset)
+	}
+}
+
+func TestModelPreviousRequestsPopupCtrlUDScrollsPreviewOnly(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.shell.width = 120
+	m.shell.height = 20
+	m.session.RequestHistory = []model.HistoryEntry{{
+		RequestID:    1,
+		OperationKey: model.NewOperationKey("GET", "/pets"),
+		ServerURL:    "https://api.example.com",
+		Request: model.ExecutedRequestSnapshot{
+			ServerURL: "https://api.example.com",
+			Draft: model.RequestDraft{
+				BodyRaw: "{\n  \"name\": \"fido\"\n}",
+			},
+		},
+		Response: &model.HTTPResponse{
+			Status:      "200 OK",
+			PrettyBody:  "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\nline11\nline12\nline13\nline14",
+			ContentType: "application/json",
+		},
+	}}
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	updated := updatedModel.(*Model)
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+	updated = updatedModel.(*Model)
+	if updated.historyUI.activeRow != 0 {
+		t.Fatalf("expected ctrl+d to leave the active row unchanged, got %d", updated.historyUI.activeRow)
+	}
+	if updated.historyUI.previewScrollOffset == 0 {
+		t.Fatal("expected ctrl+d to scroll the preview")
+	}
+
+	before := updated.historyUI.previewScrollOffset
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	updated = updatedModel.(*Model)
+	if updated.historyUI.previewScrollOffset >= before {
+		t.Fatalf("expected ctrl+u to scroll preview upward, got %d", updated.historyUI.previewScrollOffset)
 	}
 }
 
@@ -1353,6 +1415,12 @@ func TestModelPreviousRequestsPopupBlocksNormalPaneNavigation(t *testing.T) {
 	updated = updatedModel.(*Model)
 	if updated.session.SelectedOperationKey != model.NewOperationKey("GET", "/pets") {
 		t.Fatalf("expected popup to block operation navigation, got %q", updated.session.SelectedOperationKey)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+	updated = updatedModel.(*Model)
+	if updated.historyUI.activeRow != 0 {
+		t.Fatalf("expected preview scrolling to leave row selection unchanged, got %d", updated.historyUI.activeRow)
 	}
 }
 
@@ -1748,6 +1816,64 @@ func TestModelHelpOverlayStillAllowsQuitKeys(t *testing.T) {
 	}
 }
 
+func TestModelThemeKeysCycleThemesInBrowseMode(t *testing.T) {
+	t.Parallel()
+
+	original := widgets.CurrentTheme()
+	t.Cleanup(func() {
+		widgets.SetTheme(original)
+	})
+	widgets.SetThemeByName("default")
+
+	m := newLoadedModelForNavigation()
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+	updated := updatedModel.(*Model)
+	if widgets.CurrentTheme().Name != widgets.NextThemeName("default") {
+		t.Fatalf("expected next theme after default, got %q", widgets.CurrentTheme().Name)
+	}
+	if updated.viewState.Notice != "Theme: harbor" {
+		t.Fatalf("expected theme change notice, got %q", updated.viewState.Notice)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'T'}})
+	updated = updatedModel.(*Model)
+	if widgets.CurrentTheme().Name != "default" {
+		t.Fatalf("expected uppercase T to cycle back to default, got %q", widgets.CurrentTheme().Name)
+	}
+	if updated.viewState.Notice != "Theme: default" {
+		t.Fatalf("expected previous theme notice, got %q", updated.viewState.Notice)
+	}
+}
+
+func TestModelThemeKeysDoNothingWhileHelpIsOpen(t *testing.T) {
+	t.Parallel()
+
+	original := widgets.CurrentTheme()
+	t.Cleanup(func() {
+		widgets.SetTheme(original)
+	})
+	widgets.SetThemeByName("default")
+
+	m := newLoadedModelForNavigation()
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	updated := updatedModel.(*Model)
+	if !updated.helpOverlayOpen() {
+		t.Fatal("expected help overlay to open")
+	}
+	noticeBefore := updated.viewState.Notice
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+	updated = updatedModel.(*Model)
+	if widgets.CurrentTheme().Name != "default" {
+		t.Fatalf("expected theme to remain unchanged while help is open, got %q", widgets.CurrentTheme().Name)
+	}
+	if updated.viewState.Notice != noticeBefore {
+		t.Fatalf("expected notice to remain unchanged while help is open, got %q", updated.viewState.Notice)
+	}
+}
+
 func TestModelQuestionMarkOpensRequestEditHelpAndEscClosesHelpFirst(t *testing.T) {
 	t.Parallel()
 
@@ -1783,6 +1909,35 @@ func TestModelQuestionMarkOpensRequestEditHelpAndEscClosesHelpFirst(t *testing.T
 	updated = updatedModel.(*Model)
 	if updated.viewState.RequestEditKind != model.RequestEditKindNone {
 		t.Fatalf("expected second esc to cancel request edit, got %q", updated.viewState.RequestEditKind)
+	}
+}
+
+func TestModelThemeKeysDoNotInterfereWithRequestEditing(t *testing.T) {
+	t.Parallel()
+
+	original := widgets.CurrentTheme()
+	t.Cleanup(func() {
+		widgets.SetTheme(original)
+	})
+	widgets.SetThemeByName("default")
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.panes.activeRequestSection = "Path"
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated := updatedModel.(*Model)
+	if updated.viewState.RequestEditKind != model.RequestEditKindField {
+		t.Fatalf("expected field edit mode, got %q", updated.viewState.RequestEditKind)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+	updated = updatedModel.(*Model)
+	if widgets.CurrentTheme().Name != "default" {
+		t.Fatalf("expected theme to remain unchanged during request edit, got %q", widgets.CurrentTheme().Name)
+	}
+	if updated.viewState.RequestEditBuffer != "t" {
+		t.Fatalf("expected theme key to be treated as request input, got %q", updated.viewState.RequestEditBuffer)
 	}
 }
 
@@ -1822,6 +1977,33 @@ func TestModelQuestionMarkOpensFilterHelpAndBlocksEditingUntilClosed(t *testing.
 	}
 }
 
+func TestModelThemeKeysDoNotInterfereWithFilterEditing(t *testing.T) {
+	t.Parallel()
+
+	original := widgets.CurrentTheme()
+	t.Cleanup(func() {
+		widgets.SetTheme(original)
+	})
+	widgets.SetThemeByName("default")
+
+	m := newLoadedModelForNavigation()
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	updated := updatedModel.(*Model)
+	if updated.viewState.ActiveEditorMode != model.EditorModeFilter {
+		t.Fatalf("expected filter editing mode, got %q", updated.viewState.ActiveEditorMode)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+	updated = updatedModel.(*Model)
+	if widgets.CurrentTheme().Name != "default" {
+		t.Fatalf("expected theme to remain unchanged during filter edit, got %q", widgets.CurrentTheme().Name)
+	}
+	if updated.viewState.FilterText != "t" {
+		t.Fatalf("expected theme key to be treated as filter input, got %q", updated.viewState.FilterText)
+	}
+}
+
 func TestModelQuestionMarkOpensHistoryHelpAndKeepsPopupOpen(t *testing.T) {
 	t.Parallel()
 
@@ -1854,6 +2036,44 @@ func TestModelQuestionMarkOpensHistoryHelpAndKeepsPopupOpen(t *testing.T) {
 	updated = updatedModel.(*Model)
 	if !updated.historyPopupOpen() {
 		t.Fatal("expected history popup to remain open after closing help")
+	}
+}
+
+func TestModelThemeKeysStillWorkFromHistoryPopup(t *testing.T) {
+	t.Parallel()
+
+	original := widgets.CurrentTheme()
+	t.Cleanup(func() {
+		widgets.SetTheme(original)
+	})
+	widgets.SetThemeByName("default")
+
+	m := newLoadedModelForNavigation()
+	m.session.RequestHistory = []model.HistoryEntry{{
+		RequestID:     7,
+		OperationKey:  model.NewOperationKey("GET", "/pets"),
+		ServerURL:     "https://api.example.com",
+		Request:       model.ExecutedRequestSnapshot{ServerURL: "https://api.example.com"},
+		Response:      &model.HTTPResponse{Status: "200 OK"},
+		TransportNote: "",
+	}}
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	updated := updatedModel.(*Model)
+	if !updated.historyPopupOpen() {
+		t.Fatal("expected history popup to open")
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+	updated = updatedModel.(*Model)
+	if widgets.CurrentTheme().Name != "harbor" {
+		t.Fatalf("expected theme cycling to work from history popup, got %q", widgets.CurrentTheme().Name)
+	}
+	if updated.viewState.Notice != "Theme: harbor" {
+		t.Fatalf("expected history popup theme notice, got %q", updated.viewState.Notice)
+	}
+	if !updated.historyPopupOpen() {
+		t.Fatal("expected history popup to stay open after theme switch")
 	}
 }
 

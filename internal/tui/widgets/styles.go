@@ -173,3 +173,22 @@ func PopupFrameStyle(width int, focused bool) lipgloss.Style {
 		BorderForeground(borderColor).
 		Padding(0, 1)
 }
+
+// PopupPreviewColumnStyle returns the fixed-size style for one history-popup split column.
+func PopupPreviewColumnStyle(width, height int) lipgloss.Style {
+	return lipgloss.NewStyle().
+		Width(width).
+		MaxWidth(width).
+		Height(height).
+		MaxHeight(height)
+}
+
+// PopupPreviewDividerStyle returns the muted vertical divider style for split popup layouts.
+func PopupPreviewDividerStyle(height int) lipgloss.Style {
+	return lipgloss.NewStyle().
+		Width(1).
+		MaxWidth(1).
+		Height(height).
+		MaxHeight(height).
+		Foreground(CurrentTheme().Palette.Border)
+}

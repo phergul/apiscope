@@ -23,7 +23,7 @@ type CenteredOverlayData struct {
 
 // RenderCenteredModal renders a centered modal within the available viewport.
 func RenderCenteredModal(viewportWidth, viewportHeight int, data CenteredModalData) string {
-	// remove the modal frame chrome before sizing the wrapped body content.
+	// remove the modal frame before sizing the wrapped body content.
 	modal := ModalStyle(max(data.Width-4, 1)).Render(data.Body)
 	return lipgloss.Place(viewportWidth, viewportHeight, lipgloss.Center, lipgloss.Center, modal)
 }

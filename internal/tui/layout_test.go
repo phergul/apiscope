@@ -251,10 +251,45 @@ func TestRenderShowsPreviousRequestsPopupAbovePaneLayout(t *testing.T) {
 	m.openHistoryPopup()
 
 	content := stripANSI(m.render())
-	for _, snippet := range []string{"Previous requests", "GET /pets", "Selected request", "1 Operations", "4 Response"} {
+	for _, snippet := range []string{"Previous requests", "GET /pets", "Request", "Response", "1 Operations"} {
 		if !strings.Contains(content, snippet) {
 			t.Fatalf("expected history popup render to include %q, got %q", snippet, content)
 		}
+	}
+}
+
+func TestRenderHistoryPopupUsesEightyPercentSizeRule(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForRendering()
+	m.shell.width = 100
+	m.shell.height = 30
+	m.session.RequestHistory = []model.HistoryEntry{{
+		RequestID:    4,
+		OperationKey: model.NewOperationKey("GET", "/pets"),
+		ServerURL:    "https://api.example.com",
+		Request: model.ExecutedRequestSnapshot{
+			ServerURL: "https://api.example.com",
+		},
+		Response: &model.HTTPResponse{Status: "200 OK"},
+	}}
+	m.openHistoryPopup()
+
+	data := m.projectHistoryPopup()
+	popup := stripANSI(widgets.RenderPopup(widgets.PopupData{
+		Title:   data.Title,
+		Meta:    data.Meta,
+		Body:    data.Body,
+		Width:   80,
+		Focused: true,
+	}))
+	lines := strings.Split(strings.TrimRight(popup, "\n"), "\n")
+	width := lipgloss.Width(lines[0])
+	if width != 80 {
+		t.Fatalf("expected popup width 80, got %d in %q", width, lines[0])
+	}
+	if len(lines) != 24 {
+		t.Fatalf("expected popup height 24, got %d", len(lines))
 	}
 }
 

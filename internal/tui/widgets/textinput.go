@@ -25,6 +25,11 @@ func (i *TextInput) ensure() {
 	*i = NewTextInput()
 }
 
+func (i *TextInput) refreshTheme() {
+	i.ensure()
+	applyTextInputTheme(&i.model)
+}
+
 func applyTextInputTheme(model *bubbletextinput.Model) {
 	model.TextStyle = InputTextStyle()
 	model.PlaceholderStyle = InputPlaceholderStyle()
@@ -33,22 +38,22 @@ func applyTextInputTheme(model *bubbletextinput.Model) {
 }
 
 func (i *TextInput) Focus() {
-	i.ensure()
+	i.refreshTheme()
 	i.model.Focus()
 }
 
 func (i *TextInput) Blur() {
-	i.ensure()
+	i.refreshTheme()
 	i.model.Blur()
 }
 
 func (i *TextInput) SetValue(value string) {
-	i.ensure()
+	i.refreshTheme()
 	i.model.SetValue(value)
 }
 
 func (i *TextInput) SetPlaceholder(value string) {
-	i.ensure()
+	i.refreshTheme()
 	i.model.Placeholder = value
 }
 
@@ -60,12 +65,12 @@ func (i TextInput) Value() string {
 }
 
 func (i *TextInput) SetWidth(width int) {
-	i.ensure()
+	i.refreshTheme()
 	i.model.Width = width
 }
 
 func (i *TextInput) Update(msg tea.Msg) tea.Cmd {
-	i.ensure()
+	i.refreshTheme()
 	var cmd tea.Cmd
 	i.model, cmd = i.model.Update(msg)
 	return cmd
@@ -75,6 +80,7 @@ func (i TextInput) BareView() string {
 	if !i.initialized {
 		i = NewTextInput()
 	}
+	applyTextInputTheme(&i.model)
 
 	return RenderFilledInputArea(i.model.View(), i.model.Width, 1)
 }
@@ -83,6 +89,7 @@ func (i TextInput) BareFilledView() string {
 	if !i.initialized {
 		i = NewTextInput()
 	}
+	applyTextInputTheme(&i.model)
 
 	return RenderFilledInputArea(i.model.View(), i.model.Width, 1)
 }

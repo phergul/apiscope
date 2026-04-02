@@ -13,6 +13,8 @@ func BuildHelpView() widgets.HelpView {
 		Title: "History help",
 		Body: strings.Join([]string{
 			"j/k or up/down move selection",
+			"Ctrl+U / Ctrl+D scroll preview",
+			"t / T switch theme",
 			"Enter load response",
 			"r restore request",
 			"Esc or p close history",

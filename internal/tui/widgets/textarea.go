@@ -28,6 +28,11 @@ func (t *TextArea) ensure() {
 	*t = NewTextArea()
 }
 
+func (t *TextArea) refreshTheme() {
+	t.ensure()
+	applyTextAreaTheme(&t.model)
+}
+
 // applyTextAreaTheme applies the shared textarea theme.
 func applyTextAreaTheme(model *bubbletextarea.Model) {
 	bg := lipgloss.NewStyle().Background(CurrentTheme().Palette.InputBackground)
@@ -55,23 +60,23 @@ func applyTextAreaTheme(model *bubbletextarea.Model) {
 }
 
 func (t *TextArea) Focus() {
-	t.ensure()
+	t.refreshTheme()
 	t.model.Focus()
 }
 
 func (t *TextArea) Blur() {
-	t.ensure()
+	t.refreshTheme()
 	t.model.Blur()
 }
 
 func (t *TextArea) SetValue(value string) {
-	t.ensure()
+	t.refreshTheme()
 	t.model.SetValue(value)
 }
 
 func (t *TextArea) SetPlaceholder(value string) {
-	t.ensure()
-	t.model.Placeholder = RenderFilledInputArea(value, t.model.Width(), t.model.Height())
+	t.refreshTheme()
+	t.model.Placeholder = value
 }
 
 func (t TextArea) Value() string {
@@ -82,25 +87,37 @@ func (t TextArea) Value() string {
 }
 
 func (t *TextArea) SetSize(width, height int) {
-	t.ensure()
+	t.refreshTheme()
 	t.model.SetWidth(width)
 	t.model.SetHeight(height)
 }
 
 func (t *TextArea) Update(msg tea.Msg) tea.Cmd {
-	t.ensure()
+	t.refreshTheme()
 	var cmd tea.Cmd
 	t.model, cmd = t.model.Update(msg)
 	return cmd
+}
+
+// renderContent returns the themed textarea content, preserving a full filled
+// background for empty placeholder states without storing ANSI in the model.
+func (t TextArea) renderContent() string {
+	content := t.model.View()
+	if t.model.Value() == "" && t.model.Placeholder != "" {
+		content = InputPlaceholderStyle().Render(t.model.Placeholder)
+	}
+
+	return RenderFilledInputArea(content, t.model.Width(), t.model.Height())
 }
 
 func (t TextArea) View() string {
 	if !t.initialized {
 		t = NewTextArea()
 	}
+	applyTextAreaTheme(&t.model)
 
 	return InputFrameStyle(t.model.Focused()).Render(
-		RenderFilledInputArea(t.model.View(), t.model.Width(), t.model.Height()),
+		t.renderContent(),
 	)
 }
 
@@ -108,6 +125,7 @@ func (t TextArea) BareView() string {
 	if !t.initialized {
 		t = NewTextArea()
 	}
+	applyTextAreaTheme(&t.model)
 
-	return RenderFilledInputArea(t.model.View(), t.model.Width(), t.model.Height())
+	return t.renderContent()
 }

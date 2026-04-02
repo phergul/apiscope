@@ -173,13 +173,13 @@ func TestProjectPaneBuildsSupportNotesForActiveSectionAndRows(t *testing.T) {
 		Support: SupportState{
 			MessagesBySection: []SupportNote{{
 				Severity: SupportSeverityUnsupported,
-				Summary:  "Content-based parameter is read-only in v1.",
+				Summary:  "Content-based parameter is read-only.",
 				Detail:   "This parameter uses media-type content. Pane 3 cannot edit or send it yet.",
 			}},
 			RowNotes: map[string][]SupportNote{
 				"query:legacy": {{
 					Severity: SupportSeverityUnsupported,
-					Summary:  "Content-based parameter is read-only in v1.",
+					Summary:  "Content-based parameter is read-only.",
 					Detail:   "This parameter uses media-type content. Pane 3 cannot edit or send it yet.",
 				}},
 			},

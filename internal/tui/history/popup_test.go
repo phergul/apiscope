@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/phergul/apiscope/internal/model"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestProjectPopupShowsOperationScopedEmptyState(t *testing.T) {
@@ -61,15 +63,15 @@ func TestProjectPopupRendersHistoryRowsAndSelectedRequestDetails(t *testing.T) {
 			},
 		},
 		ActiveRow:     0,
-		ContentWidth:  72,
-		ContentHeight: 14,
+		ContentWidth:  88,
+		ContentHeight: 24,
 	})
 
 	for _, snippet := range []string{
-		"Requests",
-		"#8  transport failed  https://staging.example.com",
-		"#7  200 OK  https://api.example.com",
-		"Selected request",
+		"#8  transport failed",
+		"#7  200 OK",
+		"Request",
+		"Request ID: 8",
 		"Server: https://staging.example.com",
 		"Path: petId=abc",
 		"Files: file=/tmp/demo.txt",
@@ -80,6 +82,14 @@ func TestProjectPopupRendersHistoryRowsAndSelectedRequestDetails(t *testing.T) {
 		if !strings.Contains(data.Body, snippet) {
 			t.Fatalf("expected popup body to include %q, got %q", snippet, data.Body)
 		}
+	}
+	for _, snippet := range []string{"Response", "Transport: dial tcp timeout"} {
+		if !strings.Contains(data.Body, snippet) {
+			t.Fatalf("expected popup response preview to include %q, got %q", snippet, data.Body)
+		}
+	}
+	if strings.Contains(data.Body, "Selected request") {
+		t.Fatalf("expected old stacked selected-request block to be removed, got %q", data.Body)
 	}
 }
 
@@ -109,9 +119,94 @@ func TestBuildHelpViewIncludesHistoryControls(t *testing.T) {
 	if help.Title != "History help" {
 		t.Fatalf("expected history help title, got %q", help.Title)
 	}
-	for _, snippet := range []string{"Enter load response", "r restore request"} {
+	for _, snippet := range []string{"Enter load response", "r restore request", "Ctrl+U / Ctrl+D scroll preview", "t / T switch theme"} {
 		if !strings.Contains(help.Body, snippet) {
 			t.Fatalf("expected history help to include %q, got %q", snippet, help.Body)
+		}
+	}
+}
+
+func TestProjectPopupClipsAndScrollsPreview(t *testing.T) {
+	t.Parallel()
+
+	data := ProjectPopup(PopupInput{
+		Selected: &model.Operation{
+			Method: "GET",
+			Path:   "/pets",
+		},
+		Entries: []model.HistoryEntry{{
+			RequestID:    5,
+			OperationKey: model.NewOperationKey("GET", "/pets"),
+			ServerURL:    "https://api.example.com",
+			Request: model.ExecutedRequestSnapshot{
+				ServerURL: "https://api.example.com",
+				Draft: model.RequestDraft{
+					BodyRaw: "{\n  \"name\": \"fido\"\n}",
+				},
+			},
+			Response: &model.HTTPResponse{
+				Status: "200 OK",
+				Headers: map[string][]string{
+					"X-01": {"one"},
+					"X-02": {"two"},
+					"X-03": {"three"},
+					"X-04": {"four"},
+					"X-05": {"five"},
+					"X-06": {"six"},
+					"X-07": {"seven"},
+					"X-08": {"eight"},
+				},
+				PrettyBody:  "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10",
+				ContentType: "application/json",
+			},
+		}},
+		ActiveRow:           0,
+		PreviewScrollOffset: 12,
+		ContentWidth:        88,
+		ContentHeight:       8,
+	})
+
+	if data.MaxPreviewScroll == 0 {
+		t.Fatal("expected long preview content to become scrollable")
+	}
+	if !strings.Contains(data.Body, "X-02: two") {
+		t.Fatalf("expected preview scroll offset to reveal lower body lines, got %q", data.Body)
+	}
+	if strings.Contains(data.Body, "Request ID: 5") {
+		t.Fatalf("expected top-of-preview request details to scroll out, got %q", data.Body)
+	}
+}
+
+func TestProjectPopupNormalizesCarriageReturnsInBodyPreview(t *testing.T) {
+	t.Parallel()
+
+	data := ProjectPopup(PopupInput{
+		Selected: &model.Operation{
+			Method: "GET",
+			Path:   "/pets",
+		},
+		Entries: []model.HistoryEntry{{
+			RequestID: 5,
+			Request: model.ExecutedRequestSnapshot{
+				ServerURL: "https://api.example.com",
+			},
+			Response: &model.HTTPResponse{
+				Status: "404 Not Found",
+				Body:   []byte("<html>\r\n<body>\r\n<center>oops</center>\r\n</body>\r\n</html>"),
+			},
+		}},
+		ActiveRow:     0,
+		ContentWidth:  88,
+		ContentHeight: 20,
+	})
+
+	content := ansi.Strip(data.Body)
+	if strings.Contains(content, "\r") {
+		t.Fatalf("expected carriage returns to be normalized, got %q", content)
+	}
+	for _, snippet := range []string{"<html>", "<body>", "<center>oops</center>", "</html>"} {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected normalized preview to include %q, got %q", snippet, content)
 		}
 	}
 }

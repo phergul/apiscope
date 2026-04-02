@@ -38,7 +38,7 @@ func ProjectRequestSupportNotes(operation *model.Operation) []RequestSupportNote
 				Section:  section,
 				Target:   target,
 				Severity: RequestSupportSeverityUnsupported,
-				Summary:  "Content-based parameter is read-only in v1.",
+				Summary:  "Content-based parameter is read-only.",
 				Detail:   "This parameter uses media-type content. Pane 3 cannot edit or send it yet.",
 			})
 		}

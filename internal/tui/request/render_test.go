@@ -27,7 +27,7 @@ func TestRenderShowsGroupedInputsAndAuthRows(t *testing.T) {
 				Editable: false,
 				Support: []SupportNote{{
 					Severity: SupportSeverityUnsupported,
-					Summary:  "Content-based parameter is read-only in v1.",
+					Summary:  "Content-based parameter is read-only.",
 					Detail:   "This parameter uses media-type content. Pane 3 cannot edit or send it yet.",
 				}},
 			},
@@ -39,7 +39,7 @@ func TestRenderShowsGroupedInputsAndAuthRows(t *testing.T) {
 		"Path  Query  Body  Auth",
 		" petId (required, string) = <unset>",
 		"legacy (optional, content) = content-based input [read-only]",
-		"unsupported: Content-based parameter is read-only in v1. This parameter uses media-type content. Pane 3 cannot edit or send it yet.",
+		"unsupported: Content-based parameter is read-only. This parameter uses media-type content. Pane 3 cannot edit or send it yet.",
 	}
 	for _, snippet := range wantSnippets {
 		if !strings.Contains(content, snippet) {

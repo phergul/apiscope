@@ -258,7 +258,7 @@ func (m *Model) configureRequestEditors(contentWidth, height int) {
 	fieldPopupWidth := min(max(contentWidth-10, 24), 64)
 	// allow the body editor to use more width because it edits multi-line payload content.
 	bodyPopupWidth := min(max(contentWidth-8, 28), 84)
-	// subtract the popup frame chrome before sizing the embedded text input.
+	// subtract the popup frame before sizing the embedded text input.
 	m.widgets.requestFieldInput.SetWidth(max(fieldPopupWidth-4, 12))
 
 	// keep the body editor short enough to preserve surrounding pane context while editing.

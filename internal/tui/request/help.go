@@ -17,6 +17,7 @@ func BuildBrowseHelpView() widgets.HelpView {
 			"[ or ] or h/l switch sections",
 			"Enter edit value or cycle option",
 			"Ctrl+R send request",
+			"t / T switch theme",
 			"1-4 or Tab / Shift+Tab focus panes",
 			"z zoom focused pane",
 			"? or Esc close help",

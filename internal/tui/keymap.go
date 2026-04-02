@@ -64,6 +64,12 @@ func (m *Model) updateGlobalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	case "p":
 		m.openHistoryPopup()
 		return m, nil, true
+	case "t":
+		m.cycleTheme(true)
+		return m, nil, true
+	case "T":
+		m.cycleTheme(false)
+		return m, nil, true
 	case "1":
 		m.setFocusedPane(model.FocusedPaneOperations)
 	case "2":
@@ -109,6 +115,14 @@ func (m *Model) updateHistoryPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.setHistoryPopupBoundary(false)
 	case "end":
 		m.setHistoryPopupBoundary(true)
+	case "ctrl+u":
+		m.scrollHistoryPopupPreviewBy(-5)
+	case "ctrl+d":
+		m.scrollHistoryPopupPreviewBy(5)
+	case "t":
+		m.cycleTheme(true)
+	case "T":
+		m.cycleTheme(false)
 	case "enter":
 		m.loadSelectedHistoryResponse()
 	case "r":

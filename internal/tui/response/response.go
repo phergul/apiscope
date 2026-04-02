@@ -225,7 +225,7 @@ func renderDeclaredHeaders(headers []model.Parameter) []string {
 
 // renderBodyBlock renders the response body as an indented content block.
 func renderBodyBlock(body string, contentWidth int) []string {
-	body = normalizeRenderedBody(body)
+	body = widgets.NormalizeRenderedBody(body)
 	bodyLines := strings.Split(body, "\n")
 	lines := make([]string, 0, len(bodyLines))
 	wrapWidth := max(contentWidth-2, 1)
@@ -237,20 +237,4 @@ func renderBodyBlock(body string, contentWidth int) []string {
 	}
 
 	return lines
-}
-
-func normalizeRenderedBody(body string) string {
-	body = strings.ReplaceAll(body, "\r\n", "\n")
-	body = strings.ReplaceAll(body, "\r", "\n")
-
-	return strings.Map(func(r rune) rune {
-		switch {
-		case r == '\n' || r == '\t':
-			return r
-		case r < 0x20 || r == 0x7f:
-			return ' '
-		default:
-			return r
-		}
-	}, body)
 }

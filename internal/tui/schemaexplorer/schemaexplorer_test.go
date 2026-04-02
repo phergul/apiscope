@@ -5,7 +5,9 @@ import (
 	"testing"
 
 	"github.com/phergul/apiscope/internal/model"
+	"github.com/phergul/apiscope/internal/tui/widgets"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -270,6 +272,53 @@ func TestRenderUsesBoxDrawingTreeGuides(t *testing.T) {
 	}
 }
 
+func TestSelectedRowStylesOnlyHighlightHeaderAndName(t *testing.T) {
+	originalTheme := widgets.CurrentTheme()
+	t.Cleanup(func() {
+		widgets.SetTheme(originalTheme)
+	})
+	widgets.SetTheme(widgets.DefaultTheme())
+
+	if headerRowStyle(true).GetBackground() != widgets.CurrentTheme().Palette.Selection {
+		t.Fatalf("expected selected header background %q, got %q", widgets.CurrentTheme().Palette.Selection, headerRowStyle(true).GetBackground())
+	}
+	if nameRowStyle(true).GetBackground() != widgets.CurrentTheme().Palette.Selection {
+		t.Fatalf("expected selected name background %q, got %q", widgets.CurrentTheme().Palette.Selection, nameRowStyle(true).GetBackground())
+	}
+	for label, background := range map[string]any{
+		"tree marker": treeMarkerStyle().GetBackground(),
+		"meta":        metaRowStyle().GetBackground(),
+		"note":        noteRowStyle().GetBackground(),
+	} {
+		if hasBackground(background) {
+			t.Fatalf("expected %s background to stay unset, got %#v", label, background)
+		}
+	}
+}
+
+func TestRenderUsesFullHeightDividerBetweenTreeAndPreview(t *testing.T) {
+	t.Parallel()
+
+	rendered := ansi.Strip(Render(Data{
+		LeftTitle:  "Schemas",
+		RightTitle: "Preview",
+		LeftBody:   "left one\nleft two",
+		RightBody:  "right one\nright two",
+		LeftWidth:  14,
+		RightWidth: 14,
+	}))
+
+	lines := strings.Split(rendered, "\n")
+	if len(lines) < 4 {
+		t.Fatalf("expected multi-line explorer render, got %q", rendered)
+	}
+	for _, line := range lines {
+		if !strings.Contains(line, " │ ") {
+			t.Fatalf("expected each render line to include the split divider, got %q", rendered)
+		}
+	}
+}
+
 func TestUpdateReturnsCloseActionOnEscape(t *testing.T) {
 	t.Parallel()
 
@@ -328,5 +377,20 @@ func schemaOperationFixture() *model.Operation {
 				Schema: &model.Schema{Type: "string"},
 			}},
 		}},
+	}
+}
+
+func hasBackground(background any) bool {
+	switch typed := background.(type) {
+	case nil:
+		return false
+	case string:
+		return strings.TrimSpace(typed) != ""
+	case lipgloss.Color:
+		return strings.TrimSpace(string(typed)) != ""
+	case lipgloss.NoColor:
+		return false
+	default:
+		return true
 	}
 }

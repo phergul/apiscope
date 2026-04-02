@@ -43,10 +43,15 @@ func Render(data Data) string {
 			data.RightBody,
 		}, "\n"))
 
+	dividerHeight := max(lipgloss.Height(left), lipgloss.Height(right))
+	divider := widgets.PopupPreviewDividerStyle(dividerHeight).Render(verticalDivider(dividerHeight))
+
 	return lipgloss.JoinHorizontal(
 		lipgloss.Top,
 		left,
-		" "+widgets.MutedTextStyle().Render("│")+" ",
+		" ",
+		divider,
+		" ",
 		right,
 	)
 }
@@ -77,8 +82,8 @@ func renderTreeLine(row visibleRow, selected bool) string {
 	}
 
 	var builder strings.Builder
-	builder.WriteString(renderTreePrefix(row, selected))
-	builder.WriteString(renderMarker(row, selected))
+	builder.WriteString(renderTreePrefix(row))
+	builder.WriteString(renderMarker(row))
 	builder.WriteString(" ")
 
 	if row.Depth == 0 {
@@ -87,27 +92,27 @@ func renderTreeLine(row visibleRow, selected bool) string {
 	}
 
 	if prefix := strings.TrimSpace(row.Node.Label.Prefix); prefix != "" {
-		builder.WriteString(mutedRowStyle(selected).Render(prefix + " "))
+		builder.WriteString(headerRowStyle(selected).Render(prefix + " "))
 	}
 	if name := strings.TrimSpace(row.Node.Label.Name); name != "" {
 		builder.WriteString(nameRowStyle(selected).Render(name))
 	}
 	if meta := strings.TrimSpace(row.Node.Label.Meta); meta != "" {
-		builder.WriteString(mutedRowStyle(selected).Render(" (" + meta + ")"))
+		builder.WriteString(metaRowStyle().Render(" (" + meta + ")"))
 	}
 	if note := strings.TrimSpace(row.Node.Note); note != "" {
-		builder.WriteString(noteRowStyle(selected).Render(" - " + note))
+		builder.WriteString(noteRowStyle().Render(" - " + note))
 	}
 
 	return builder.String()
 }
 
-func renderTreePrefix(row visibleRow, selected bool) string {
+func renderTreePrefix(row visibleRow) string {
 	if row.Depth == 0 {
 		return ""
 	}
 
-	chrome := mutedRowStyle(selected)
+	chrome := treeMarkerStyle()
 	var builder strings.Builder
 	for _, ancestorHasNext := range row.AncestorHasNext {
 		if ancestorHasNext {
@@ -125,8 +130,8 @@ func renderTreePrefix(row visibleRow, selected bool) string {
 	return builder.String()
 }
 
-func renderMarker(row visibleRow, selected bool) string {
-	style := mutedRowStyle(selected)
+func renderMarker(row visibleRow) string {
+	style := treeMarkerStyle()
 	switch {
 	case expandable(row.Node) && row.Expanded:
 		return style.Render(openMarker)
@@ -145,6 +150,14 @@ func groupLabelStyle(selected bool) lipgloss.Style {
 	return widgets.BodyTextStyle().Bold(true)
 }
 
+func headerRowStyle(selected bool) lipgloss.Style {
+	if selected {
+		return widgets.SelectedTextStyle()
+	}
+
+	return widgets.MutedTextStyle()
+}
+
 func nameRowStyle(selected bool) lipgloss.Style {
 	if selected {
 		return widgets.SelectedTextStyle().Bold(true)
@@ -153,20 +166,24 @@ func nameRowStyle(selected bool) lipgloss.Style {
 	return widgets.BodyTextStyle()
 }
 
-func mutedRowStyle(selected bool) lipgloss.Style {
-	if selected {
-		return widgets.SelectedTextStyle()
-	}
-
+func treeMarkerStyle() lipgloss.Style {
 	return widgets.MutedTextStyle()
 }
 
-func noteRowStyle(selected bool) lipgloss.Style {
-	if selected {
-		return widgets.SelectedTextStyle().Italic(true)
+func metaRowStyle() lipgloss.Style {
+	return widgets.MutedTextStyle()
+}
+
+func noteRowStyle() lipgloss.Style {
+	return widgets.WarningTextStyle()
+}
+
+func verticalDivider(height int) string {
+	if height <= 1 {
+		return "│"
 	}
 
-	return widgets.WarningTextStyle()
+	return strings.Repeat("│\n", height-1) + "│"
 }
 
 func columnWidths(contentWidth int) (int, int) {

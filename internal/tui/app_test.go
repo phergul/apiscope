@@ -1827,7 +1827,7 @@ func TestModelSchemaExplorerClosesAndResetsState(t *testing.T) {
 	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	updated = updatedModel.(*Model)
 	if updated.schemaExplorerOpen() {
-		t.Fatal("expected esc to close schema explorer")
+		t.Fatal("expected esc / q to close schema explorer")
 	}
 	if updated.schemaExplorerUI.state.OperationKey != "" || len(updated.schemaExplorerUI.state.ExpandedNodeIDs) != 0 {
 		t.Fatalf("expected schema explorer state to reset, got %#v", updated.schemaExplorerUI.state)

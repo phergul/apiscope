@@ -18,7 +18,7 @@ func BuildHelpView() widgets.HelpView {
 			"h, left, or backspace collapse branch",
 			"Home / End jump to first or last row",
 			"Ctrl+U / Ctrl+D scroll preview",
-			"Esc close schema explorer",
+			"Esc / q close schema explorer",
 			"t / T switch theme",
 			"? or Esc close help",
 		}, "\n"),

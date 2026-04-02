@@ -1,6 +1,10 @@
 package app
 
-import "github.com/phergul/apiscope/internal/model"
+import (
+	"strings"
+
+	"github.com/phergul/apiscope/internal/model"
+)
 
 // EnsureRequestDraft returns the request draft for the selected operation, creating one when needed.
 func EnsureRequestDraft(session *model.SessionState, operation *model.Operation) *model.RequestDraft {
@@ -29,9 +33,7 @@ func EnsureRequestDraft(session *model.SessionState, operation *model.Operation)
 		FormFileParams:   make(map[string]string),
 		SelectedExamples: make(map[string]string),
 	}
-	if operation.RequestBody != nil && len(operation.RequestBody.Content) > 0 {
-		draft.BodyMediaType = operation.RequestBody.Content[0].MediaType
-	}
+	seedRequestDraft(draft, operation)
 
 	session.RequestDrafts[key] = draft
 	return draft
@@ -64,7 +66,12 @@ func SetDraftBodyMediaType(session *model.SessionState, operation *model.Operati
 		return nil
 	}
 
-	draft.BodyMediaType = mediaType
+	replaceBody := shouldReplaceSeededBody(operation, draft)
+	draft.BodyMediaType = strings.TrimSpace(mediaType)
+	if replaceBody {
+		draft.BodyRaw = ""
+		seedDraftBody(draft, operation)
+	}
 	return draft
 }
 

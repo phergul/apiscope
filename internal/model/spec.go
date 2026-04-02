@@ -213,6 +213,8 @@ type Schema struct {
 	Format      string
 	Title       string
 	Description string
+	Example     any
+	Default     any
 	Nullable    bool
 	Properties  map[string]*Schema
 	Items       *Schema

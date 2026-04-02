@@ -33,7 +33,7 @@ func convertSchemaFromParameter(source, location string, rawParameter map[string
 	}
 
 	schemaMap := map[string]any{}
-	for _, key := range []string{"type", "format", "description", "enum", "items", "default"} {
+	for _, key := range []string{"type", "format", "description", "enum", "items", "default", "example"} {
 		if value, ok := rawParameter[key]; ok {
 			schemaMap[key] = value
 		}
@@ -68,9 +68,11 @@ func convertSchemaRef(source, location string, raw any) (*openapi3.SchemaRef, er
 		Type:        schemaTypes(getString(rawMap, "type")),
 		Format:      getString(rawMap, "format"),
 		Description: getString(rawMap, "description"),
+		Example:     rawMap["example"],
+		Default:     rawMap["default"],
 	}
 
-	if enumValues, ok := rawMap["enum"].([]any); ok {
+	if enumValues, ok := anySlice(rawMap["enum"]); ok {
 		schema.Enum = enumValues
 	}
 
@@ -130,4 +132,9 @@ func schemaTypes(value string) *openapi3.Types {
 	}
 	types := openapi3.Types{value}
 	return &types
+}
+
+func anySlice(value any) ([]any, bool) {
+	values, ok := value.([]any)
+	return values, ok
 }

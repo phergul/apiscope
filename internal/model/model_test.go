@@ -46,7 +46,6 @@ func TestAPISpecPreservesSourceMetadataCapabilitiesAndWarnings(t *testing.T) {
 	t.Parallel()
 
 	spec := APISpec{
-		Fingerprint:   "abc123",
 		SourceFamily:  SourceFamilySwagger2,
 		SourceVersion: "2.0",
 		Capabilities: CapabilitySet{

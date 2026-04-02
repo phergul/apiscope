@@ -23,6 +23,8 @@ func normaliseSchema(schemaRef *openapi3.SchemaRef) *model.Schema {
 	schema.Format = value.Format
 	schema.Title = value.Title
 	schema.Description = value.Description
+	schema.Example = value.Example
+	schema.Default = value.Default
 	schema.Nullable = value.Nullable
 	schema.Required = append([]string{}, value.Required...)
 	schema.Enum = append([]any{}, value.Enum...)

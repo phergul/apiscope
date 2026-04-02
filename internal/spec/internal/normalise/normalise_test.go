@@ -2,6 +2,7 @@ package normalise
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -724,6 +725,107 @@ paths:
 	}
 	if param.Example != nil || param.Default != nil {
 		t.Fatalf("expected content-based parameter example/default to stay in content, got %#v", param)
+	}
+}
+
+func TestDocumentPreservesSchemaExamplesAndDefaultsForRequestSeeding(t *testing.T) {
+	t.Parallel()
+
+	spec, err := Document(mustResolvedOpenAPI3(t, `openapi: 3.0.3
+info:
+  title: Demo
+  version: 1.0.0
+paths:
+  /pets:
+    post:
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 25
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: fido
+      responses:
+        "200":
+          description: ok
+`))
+	if err != nil {
+		t.Fatalf("Document returned error: %v", err)
+	}
+
+	param := spec.Operations[0].Parameters[0]
+	if got := fmt.Sprint(param.Default); got != "25" {
+		t.Fatalf("expected parameter default 25, got %#v", got)
+	}
+	if param.Schema == nil || fmt.Sprint(param.Schema.Default) != "25" {
+		t.Fatalf("expected schema default to be preserved, got %#v", param.Schema)
+	}
+
+	bodySchema := spec.Operations[0].RequestBody.Content[0].Schema
+	if bodySchema == nil || bodySchema.Properties["name"] == nil {
+		t.Fatalf("expected request body schema properties, got %#v", bodySchema)
+	}
+	if got := bodySchema.Properties["name"].Example; got != "fido" {
+		t.Fatalf("expected nested schema example to be preserved, got %#v", got)
+	}
+}
+
+func TestDocumentPreservesSwaggerSchemaExamplesAndDefaultsForRequestSeeding(t *testing.T) {
+	t.Parallel()
+
+	spec, err := Document(mustResolvedSwagger(t, `swagger: "2.0"
+info:
+  title: Demo
+  version: 1.0.0
+paths:
+  /pets:
+    post:
+      consumes: [application/json]
+      parameters:
+        - name: limit
+          in: query
+          type: integer
+          default: 25
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+              name:
+                type: string
+                example: fido
+      responses:
+        "200":
+          description: ok
+`))
+	if err != nil {
+		t.Fatalf("Document returned error: %v", err)
+	}
+
+	param := spec.Operations[0].Parameters[0]
+	if got := fmt.Sprint(param.Default); got != "25" {
+		t.Fatalf("expected swagger parameter default 25, got %#v", got)
+	}
+	if param.Schema == nil || fmt.Sprint(param.Schema.Default) != "25" {
+		t.Fatalf("expected swagger schema default to be preserved, got %#v", param.Schema)
+	}
+
+	bodySchema := spec.Operations[0].RequestBody.Content[0].Schema
+	if bodySchema == nil || bodySchema.Properties["name"] == nil {
+		t.Fatalf("expected swagger request body schema properties, got %#v", bodySchema)
+	}
+	if got := bodySchema.Properties["name"].Example; got != "fido" {
+		t.Fatalf("expected swagger nested schema example to be preserved, got %#v", got)
 	}
 }
 

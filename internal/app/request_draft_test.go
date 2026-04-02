@@ -42,8 +42,167 @@ func TestEnsureRequestDraftSeedsKeyAndFirstBodyMediaType(t *testing.T) {
 	if draft.BodyMediaType != "application/json" {
 		t.Fatalf("expected first request body media type to be selected, got %q", draft.BodyMediaType)
 	}
+	if draft.BodyRaw != "" {
+		t.Fatalf("expected body to stay empty when no examples or defaults exist, got %q", draft.BodyRaw)
+	}
 	if session.RequestDrafts[wantKey] != draft {
 		t.Fatal("expected draft to be stored in session map")
+	}
+}
+
+func TestEnsureRequestDraftSeedsParameterExamplesAndDefaults(t *testing.T) {
+	t.Parallel()
+
+	session := model.SessionState{
+		SpecFingerprint: "spec-123",
+		RequestDrafts:   make(map[model.DraftKey]*model.RequestDraft),
+	}
+	operation := &model.Operation{
+		Key: model.NewOperationKey("POST", "/pets"),
+		Parameters: []model.Parameter{
+			{
+				Name:    "petId",
+				In:      model.ParameterLocationPath,
+				Example: "abc123",
+			},
+			{
+				Name:    "limit",
+				In:      model.ParameterLocationQuery,
+				Default: 25,
+			},
+			{
+				Name:          "name",
+				In:            model.ParameterLocationForm,
+				FormInputKind: model.FormInputKindValue,
+				Schema: &model.Schema{
+					Example: "fido",
+				},
+			},
+			{
+				Name:          "upload",
+				In:            model.ParameterLocationForm,
+				FormInputKind: model.FormInputKindFile,
+				Example:       "/tmp/demo.txt",
+			},
+		},
+	}
+
+	draft := EnsureRequestDraft(&session, operation)
+
+	if got := draft.PathParams["petId"]; got != "abc123" {
+		t.Fatalf("expected path example to seed draft, got %q", got)
+	}
+	if got := draft.QueryParams["limit"]; got != "25" {
+		t.Fatalf("expected query default to seed draft, got %q", got)
+	}
+	if got := draft.FormParams["name"]; got != "fido" {
+		t.Fatalf("expected form schema example to seed draft, got %q", got)
+	}
+	if got := draft.FormFileParams["upload"]; got != "" {
+		t.Fatalf("expected file inputs to stay unset, got %q", got)
+	}
+}
+
+func TestEnsureRequestDraftSeedsBodyFromMediaTypeExample(t *testing.T) {
+	t.Parallel()
+
+	session := model.SessionState{
+		SpecFingerprint: "spec-123",
+		RequestDrafts:   make(map[model.DraftKey]*model.RequestDraft),
+	}
+	operation := &model.Operation{
+		Key: model.NewOperationKey("POST", "/pets"),
+		RequestBody: &model.RequestBodySpec{
+			Content: []model.MediaTypeSpec{
+				{
+					MediaType: "application/json",
+					Example: map[string]any{
+						"name": "fido",
+					},
+				},
+			},
+		},
+	}
+
+	draft := EnsureRequestDraft(&session, operation)
+
+	if got := draft.BodyRaw; got != "{\n  \"name\": \"fido\"\n}" {
+		t.Fatalf("expected media type example to seed body, got %q", got)
+	}
+}
+
+func TestEnsureRequestDraftSeedsBodyFromNamedExampleAndTracksSelection(t *testing.T) {
+	t.Parallel()
+
+	session := model.SessionState{
+		SpecFingerprint: "spec-123",
+		RequestDrafts:   make(map[model.DraftKey]*model.RequestDraft),
+	}
+	operation := &model.Operation{
+		Key: model.NewOperationKey("POST", "/pets"),
+		RequestBody: &model.RequestBodySpec{
+			Content: []model.MediaTypeSpec{
+				{
+					MediaType: "application/json",
+					Examples: map[string]model.Example{
+						"b-second": {Value: map[string]any{"name": "second"}},
+						"a-first":  {Value: map[string]any{"name": "first"}},
+					},
+				},
+			},
+		},
+	}
+
+	draft := EnsureRequestDraft(&session, operation)
+
+	if got := draft.BodyRaw; got != "{\n  \"name\": \"first\"\n}" {
+		t.Fatalf("expected first named example to seed body deterministically, got %q", got)
+	}
+	if got := draft.SelectedExamples["body:application/json"]; got != "a-first" {
+		t.Fatalf("expected named example selection to be tracked, got %q", got)
+	}
+}
+
+func TestEnsureRequestDraftSeedsBodyFromSchemaDefaults(t *testing.T) {
+	t.Parallel()
+
+	session := model.SessionState{
+		SpecFingerprint: "spec-123",
+		RequestDrafts:   make(map[model.DraftKey]*model.RequestDraft),
+	}
+	operation := &model.Operation{
+		Key: model.NewOperationKey("POST", "/pets"),
+		RequestBody: &model.RequestBodySpec{
+			Content: []model.MediaTypeSpec{
+				{
+					MediaType: "application/json",
+					Schema: &model.Schema{
+						Type: "object",
+						Properties: map[string]*model.Schema{
+							"name": {
+								Type:    "string",
+								Default: "fido",
+							},
+							"metadata": {
+								Type: "object",
+								Properties: map[string]*model.Schema{
+									"region": {
+										Type:    "string",
+										Example: "ie",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	draft := EnsureRequestDraft(&session, operation)
+
+	if got := draft.BodyRaw; got != "{\n  \"metadata\": {\n    \"region\": \"ie\"\n  },\n  \"name\": \"fido\"\n}" {
+		t.Fatalf("expected schema defaults/examples to seed JSON body, got %q", got)
 	}
 }
 
@@ -157,5 +316,71 @@ func TestSetDraftBodyRawPreservesEmptyString(t *testing.T) {
 	draft = SetDraftBodyRaw(&session, operation, "{\"name\":\"fido\"}")
 	if draft.BodyRaw != "{\"name\":\"fido\"}" {
 		t.Fatalf("expected body text to be stored, got %q", draft.BodyRaw)
+	}
+}
+
+func TestSetDraftBodyMediaTypeReseedsWhenBodyStillMatchesGeneratedSeed(t *testing.T) {
+	t.Parallel()
+
+	session := model.SessionState{
+		SpecFingerprint: "spec-123",
+		RequestDrafts:   make(map[model.DraftKey]*model.RequestDraft),
+	}
+	operation := &model.Operation{
+		Key: model.NewOperationKey("POST", "/pets"),
+		RequestBody: &model.RequestBodySpec{
+			Content: []model.MediaTypeSpec{
+				{
+					MediaType: "application/json",
+					Example:   map[string]any{"name": "json"},
+				},
+				{
+					MediaType: "application/xml",
+					Example:   "<pet><name>xml</name></pet>",
+				},
+			},
+		},
+	}
+
+	draft := EnsureRequestDraft(&session, operation)
+	if got := draft.BodyRaw; got != "{\n  \"name\": \"json\"\n}" {
+		t.Fatalf("expected initial body seed, got %q", got)
+	}
+
+	draft = SetDraftBodyMediaType(&session, operation, "application/xml")
+	if got := draft.BodyRaw; got != "<pet><name>xml</name></pet>" {
+		t.Fatalf("expected seeded body to update with media type change, got %q", got)
+	}
+}
+
+func TestSetDraftBodyMediaTypePreservesUserEditedBody(t *testing.T) {
+	t.Parallel()
+
+	session := model.SessionState{
+		SpecFingerprint: "spec-123",
+		RequestDrafts:   make(map[model.DraftKey]*model.RequestDraft),
+	}
+	operation := &model.Operation{
+		Key: model.NewOperationKey("POST", "/pets"),
+		RequestBody: &model.RequestBodySpec{
+			Content: []model.MediaTypeSpec{
+				{
+					MediaType: "application/json",
+					Example:   map[string]any{"name": "json"},
+				},
+				{
+					MediaType: "application/xml",
+					Example:   "<pet><name>xml</name></pet>",
+				},
+			},
+		},
+	}
+
+	draft := EnsureRequestDraft(&session, operation)
+	draft.BodyRaw = "{\"name\":\"custom\"}"
+
+	draft = SetDraftBodyMediaType(&session, operation, "application/xml")
+	if got := draft.BodyRaw; got != "{\"name\":\"custom\"}" {
+		t.Fatalf("expected user-edited body to be preserved, got %q", got)
 	}
 }

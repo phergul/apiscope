@@ -127,6 +127,8 @@ type fingerprintSchema struct {
 	Format      string                   `json:"format"`
 	Title       string                   `json:"title"`
 	Description string                   `json:"description"`
+	Example     any                      `json:"example,omitempty"`
+	Default     any                      `json:"default,omitempty"`
 	Nullable    bool                     `json:"nullable"`
 	Required    []string                 `json:"required,omitempty"`
 	Enum        []any                    `json:"enum,omitempty"`
@@ -360,6 +362,8 @@ func canonicalSchema(schema *model.Schema) *fingerprintSchema {
 		Format:      schema.Format,
 		Title:       schema.Title,
 		Description: schema.Description,
+		Example:     schema.Example,
+		Default:     schema.Default,
 		Nullable:    schema.Nullable,
 		Required:    append([]string{}, schema.Required...),
 		Enum:        append([]any{}, schema.Enum...),

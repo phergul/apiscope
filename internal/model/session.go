@@ -20,13 +20,15 @@ const (
 type RequestEditKind string
 
 const (
-	RequestEditKindNone  RequestEditKind = ""
-	RequestEditKindField RequestEditKind = "field"
-	RequestEditKindBody  RequestEditKind = "body"
+	RequestEditKindNone    RequestEditKind = ""
+	RequestEditKindField   RequestEditKind = "field"
+	RequestEditKindBody    RequestEditKind = "body"
+	RequestEditKindConfirm RequestEditKind = "confirm"
 )
 
 type SessionState struct {
 	SpecSource           string
+	PersistenceScopeKey  PersistenceScopeKey
 	SpecFingerprint      SpecFingerprint
 	Spec                 *APISpec
 	SelectedServerURL    string
@@ -65,10 +67,10 @@ type ViewState struct {
 }
 
 type HistoryEntry struct {
-	RequestID     uint64
-	OperationKey  OperationKey
-	ServerURL     string
-	Request       ExecutedRequestSnapshot
-	Response      *HTTPResponse
-	TransportNote string
+	RequestID     uint64                  `json:"request_id"`
+	OperationKey  OperationKey            `json:"operation_key"`
+	ServerURL     string                  `json:"server_url,omitempty"`
+	Request       ExecutedRequestSnapshot `json:"request"`
+	Response      *HTTPResponse           `json:"response,omitempty"`
+	TransportNote string                  `json:"transport_note,omitempty"`
 }

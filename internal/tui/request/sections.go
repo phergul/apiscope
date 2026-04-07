@@ -26,7 +26,7 @@ func AvailableSections(selected *model.Operation, security *model.SecurityRequir
 		return nil
 	}
 
-	sections := make([]string, 0, len(parameterLocations)+3)
+	sections := make([]string, 0, len(parameterLocations)+4)
 	for _, location := range parameterLocations {
 		if hasParametersInLocation(selected.Parameters, location) {
 			sections = append(sections, locationSectionLabel(location))
@@ -35,6 +35,7 @@ func AvailableSections(selected *model.Operation, security *model.SecurityRequir
 	if showBodySection(selected) {
 		sections = append(sections, SectionBody)
 	}
+	sections = append(sections, SectionEnvironment)
 	if security != nil && len(security.Alternatives) > 0 {
 		sections = append(sections, SectionAuth)
 	}

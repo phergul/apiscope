@@ -12,13 +12,18 @@ import (
 type RowKind string
 
 const (
-	RowKindServer        RowKind = "server"
-	RowKindAuthOption    RowKind = "auth_option"
-	RowKindParameter     RowKind = "parameter"
-	RowKindBodyMediaType RowKind = "body_media_type"
-	RowKindBodyText      RowKind = "body_text"
-	RowKindAuthField     RowKind = "auth_field"
-	RowKindAuthInfo      RowKind = "auth_info"
+	RowKindServer             RowKind = "server"
+	RowKindAuthOption         RowKind = "auth_option"
+	RowKindParameter          RowKind = "parameter"
+	RowKindBodyMediaType      RowKind = "body_media_type"
+	RowKindBodyText           RowKind = "body_text"
+	RowKindAuthField          RowKind = "auth_field"
+	RowKindAuthInfo           RowKind = "auth_info"
+	RowKindEnvironmentCurrent RowKind = "environment_current"
+	RowKindEnvironmentSave    RowKind = "environment_save"
+	RowKindEnvironmentBinding RowKind = "environment_binding"
+	RowKindEnvironmentApply   RowKind = "environment_apply"
+	RowKindEnvironmentDelete  RowKind = "environment_delete"
 )
 
 type RowDescriptor struct {
@@ -28,6 +33,7 @@ type RowDescriptor struct {
 	ServerURL        string
 	AuthSchemeName   string
 	AuthField        app.AuthField
+	EnvironmentName  string
 	ValidationTarget string
 	Label            string
 	Meta             string
@@ -45,6 +51,8 @@ func ActiveRows(
 	selectedServerURL string,
 	securitySchemes map[string]model.SecurityScheme,
 	authState map[string]model.AuthValue,
+	environments []model.SavedEnvironment,
+	appliedEnvironmentName string,
 ) []RowDescriptor {
 	if selected == nil {
 		return nil
@@ -65,6 +73,8 @@ func ActiveRows(
 		return serverRows(servers, selectedServerURL)
 	case SectionBody:
 		return bodyRows(selected.RequestBody, draft)
+	case SectionEnvironment:
+		return environmentRows(security, securitySchemes, environments, appliedEnvironmentName)
 	case SectionAuth:
 		return authRows(security, securitySchemes, authState)
 	default:

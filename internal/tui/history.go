@@ -99,6 +99,7 @@ func (m *Model) restoreSelectedHistoryRequest() {
 	)
 	m.syncActiveRequestRow()
 	m.clearRequestValidation()
+	m.syncAppliedEnvironmentMarker()
 	m.viewState.Notice = "Restored request #" + formatRequestID(entry.RequestID)
 }
 

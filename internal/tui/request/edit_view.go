@@ -33,7 +33,7 @@ func BuildEditorState(input EditorInput, rows []RowDescriptor, activeRow int, se
 	switch input.Kind {
 	case model.RequestEditKindBody:
 		state.BodyMediaType = DraftBodyMediaType(selected, draft)
-	case model.RequestEditKindField:
+	case model.RequestEditKindField, model.RequestEditKindConfirm:
 		if row := activeEditorRow(rows, activeRow); row != nil {
 			state.ActiveRowLabel = row.Label
 			state.ActiveRowMeta = row.Meta
@@ -45,11 +45,16 @@ func BuildEditorState(input EditorInput, rows []RowDescriptor, activeRow int, se
 
 // BuildEditView builds the popup view model for the active request editor.
 func BuildEditView(state EditorState) EditView {
+	view := state.View
+	if state.Kind == string(model.RequestEditKindConfirm) {
+		view = "Enter delete\nEsc cancel"
+	}
+
 	return EditView{
 		Kind:      state.Kind,
 		Buffer:    state.Buffer,
 		MediaType: state.BodyMediaType,
-		View:      state.View,
+		View:      view,
 		Title:     editTitle(state.Kind),
 		Context:   editContext(state),
 	}
@@ -84,6 +89,8 @@ func editTitle(kind string) string {
 		return "Edit body"
 	case "field":
 		return "Edit value"
+	case "confirm":
+		return "Confirm delete"
 	default:
 		return ""
 	}
@@ -99,6 +106,11 @@ func editContext(state EditorState) string {
 		return "Media type: " + state.BodyMediaType
 	case "field":
 		return formatRowContext(state.ActiveRowLabel, state.ActiveRowMeta)
+	case "confirm":
+		if strings.TrimSpace(state.Buffer) == "" {
+			return "Delete current environment?"
+		}
+		return "Delete " + state.Buffer + "?"
 	default:
 		return ""
 	}
@@ -111,6 +123,8 @@ func editHelpBody(kind string) string {
 		return "Ctrl+S save\nEsc cancel\nEnter newline\n? toggle help"
 	case "field":
 		return "Enter save\nEsc cancel\n? toggle help"
+	case "confirm":
+		return "Enter delete\nEsc cancel\n? toggle help"
 	default:
 		return ""
 	}

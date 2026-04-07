@@ -74,7 +74,6 @@ func RestoreHistoryRequest(session *model.SessionState, entry model.HistoryEntry
 		session.RequestDrafts[draft.Key] = draft
 	}
 
-	session.AuthState = cloneAuthState(entry.Request.AuthState)
 	return true
 }
 

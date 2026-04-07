@@ -7,14 +7,16 @@ import (
 )
 
 type EditStart struct {
-	Kind               model.RequestEditKind
-	Target             string
-	Buffer             string
-	FocusField         bool
-	FocusBody          bool
-	ResetScroll        bool
-	CycleServerURL     bool
-	CycleBodyMediaType bool
+	Kind                         model.RequestEditKind
+	Target                       string
+	Buffer                       string
+	FocusField                   bool
+	FocusBody                    bool
+	ResetScroll                  bool
+	CycleServerURL               bool
+	CycleBodyMediaType           bool
+	ApplyEnvironmentName         string
+	ConfirmDeleteEnvironmentName string
 }
 
 // StartEdit resolves the edit action for the active request row.
@@ -34,6 +36,36 @@ func StartEdit(
 	switch row.Kind {
 	case RowKindServer:
 		return EditStart{CycleServerURL: true}
+	case RowKindEnvironmentSave:
+		return EditStart{
+			Kind:       model.RequestEditKindField,
+			Target:     row.ID,
+			Buffer:     row.EnvironmentName,
+			FocusField: true,
+		}
+	case RowKindEnvironmentBinding:
+		if !row.Editable {
+			return EditStart{}
+		}
+		buffer := row.Value
+		if buffer == "Session only" {
+			buffer = ""
+		}
+		return EditStart{
+			Kind:       model.RequestEditKindField,
+			Target:     row.ID,
+			Buffer:     buffer,
+			FocusField: true,
+		}
+	case RowKindEnvironmentApply:
+		return EditStart{ApplyEnvironmentName: row.EnvironmentName}
+	case RowKindEnvironmentDelete:
+		return EditStart{
+			Kind:                         model.RequestEditKindConfirm,
+			Target:                       row.ID,
+			Buffer:                       row.EnvironmentName,
+			ConfirmDeleteEnvironmentName: row.EnvironmentName,
+		}
 	case RowKindParameter:
 		if !row.Editable || row.Parameter == nil {
 			return EditStart{}
@@ -102,6 +134,8 @@ func SaveEdit(
 		}
 	case model.RequestEditKindBody:
 		app.SetDraftBodyRaw(session, selected, buffer)
+	case model.RequestEditKindConfirm:
+		return row.Kind == RowKindEnvironmentDelete
 	}
 
 	return true

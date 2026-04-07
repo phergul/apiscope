@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"strings"
 
 	"github.com/phergul/apiscope/internal/app"
 	"github.com/phergul/apiscope/internal/model"
@@ -31,6 +32,8 @@ func (m *Model) activeRequestRows() []requestui.RowDescriptor {
 		m.session.SelectedServerURL,
 		m.securitySchemes(),
 		m.session.AuthState,
+		m.persisted.environments,
+		m.requestUI.appliedEnvironmentName,
 	)
 }
 
@@ -233,22 +236,24 @@ func (m *Model) projectRequestPaneForSize(width, height int) requestui.PaneProje
 	activeSection := requestui.ResolveActiveSection(m.panes.activeRequestSection, selected, security, m.topLevelServers())
 
 	return requestui.ProjectPane(requestui.PaneInput{
-		LoadInFlight:      m.viewState.LoadInFlight,
-		Selected:          selected,
-		Draft:             draft,
-		Security:          security,
-		Servers:           m.topLevelServers(),
-		SelectedServerURL: m.session.SelectedServerURL,
-		SecuritySchemes:   m.securitySchemes(),
-		AuthState:         m.session.AuthState,
-		ActiveSection:     activeSection,
-		ActiveRow:         m.viewState.RequestActiveRow,
-		ScrollOffset:      m.viewState.RequestScrollOffset,
-		Validation:        m.requestValidationState(activeSection),
-		Support:           m.requestSupportState(activeSection),
-		Editor:            m.requestEditorInput(),
-		ContentWidth:      contentWidth,
-		ContentHeight:     contentHeight,
+		LoadInFlight:           m.viewState.LoadInFlight,
+		Selected:               selected,
+		Draft:                  draft,
+		Security:               security,
+		Servers:                m.topLevelServers(),
+		SelectedServerURL:      m.session.SelectedServerURL,
+		SecuritySchemes:        m.securitySchemes(),
+		AuthState:              m.session.AuthState,
+		Environments:           m.persisted.environments,
+		AppliedEnvironmentName: m.requestUI.appliedEnvironmentName,
+		ActiveSection:          activeSection,
+		ActiveRow:              m.viewState.RequestActiveRow,
+		ScrollOffset:           m.viewState.RequestScrollOffset,
+		Validation:             m.requestValidationState(activeSection),
+		Support:                m.requestSupportState(activeSection),
+		Editor:                 m.requestEditorInput(),
+		ContentWidth:           contentWidth,
+		ContentHeight:          contentHeight,
 	})
 }
 
@@ -298,20 +303,26 @@ func (m *Model) requestEditActive() bool {
 func (m *Model) beginRequestEdit() {
 	m.clearRequestValidation()
 	selected := m.resolvedSelectedOperation()
+	rows := m.activeRequestRows()
 	start := requestui.StartEdit(
 		selected,
 		app.EnsureRequestDraft(&m.session, selected),
-		m.activeRequestRows(),
+		rows,
 		m.viewState.RequestActiveRow,
 		m.securitySchemes(),
 		m.session.AuthState,
 	)
+	if strings.TrimSpace(start.ApplyEnvironmentName) != "" {
+		m.applyEnvironmentByName(start.ApplyEnvironmentName)
+		return
+	}
 	if start.CycleBodyMediaType {
 		requestui.CycleBodyMediaType(&m.session, selected)
 		return
 	}
 	if start.CycleServerURL {
 		requestui.CycleServerURL(&m.session, m.topLevelServers())
+		m.syncAppliedEnvironmentMarker()
 		return
 	}
 	if start.Kind == model.RequestEditKindNone {
@@ -337,15 +348,39 @@ func (m *Model) beginRequestEdit() {
 
 // saveRequestEdit saves the active request editor contents back into the request draft.
 func (m *Model) saveRequestEdit() {
+	if isEnvironmentSaveTarget(m.viewState.RequestEditTarget) {
+		if m.saveCurrentEnvironment(m.viewState.RequestEditBuffer) {
+			m.finishRequestEdit()
+		}
+		return
+	}
+	if isEnvironmentBindingTarget(m.viewState.RequestEditTarget) {
+		if row, ok := activeRequestRow(m.activeRequestRows(), m.viewState.RequestActiveRow); ok && m.saveEnvironmentBinding(row, m.viewState.RequestEditBuffer) {
+			m.finishRequestEdit()
+		}
+		return
+	}
+	if m.viewState.RequestEditKind == model.RequestEditKindConfirm && isEnvironmentDeleteTarget(m.viewState.RequestEditTarget) {
+		if m.deleteCurrentEnvironment() {
+			m.finishRequestEdit()
+		}
+		return
+	}
+
+	rows := m.activeRequestRows()
+	activeRow, ok := activeRequestRow(rows, m.viewState.RequestActiveRow)
 	if requestui.SaveEdit(
 		&m.session,
 		m.resolvedSelectedOperation(),
-		m.activeRequestRows(),
+		rows,
 		m.viewState.RequestActiveRow,
 		m.viewState.RequestEditKind,
 		m.viewState.RequestEditBuffer,
 		m.securitySchemes(),
 	) {
+		if ok && shouldSyncAppliedEnvironment(activeRow) {
+			m.syncAppliedEnvironmentMarker()
+		}
 		m.finishRequestEdit()
 		return
 	}
@@ -419,7 +454,7 @@ func (m *Model) updateRequestEditKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.saveRequestEdit()
 		}
 	case "enter":
-		if m.viewState.RequestEditKind == model.RequestEditKindField {
+		if m.viewState.RequestEditKind == model.RequestEditKindField || m.viewState.RequestEditKind == model.RequestEditKindConfirm {
 			m.saveRequestEdit()
 			return m, nil
 		}
@@ -434,6 +469,8 @@ func (m *Model) updateRequestEditKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		cmd := m.widgets.requestBodyInput.Update(msg)
 		m.viewState.RequestEditBuffer = m.widgets.requestBodyInput.Value()
 		return m, cmd
+	case model.RequestEditKindConfirm:
+		return m, nil
 	}
 
 	return m, nil

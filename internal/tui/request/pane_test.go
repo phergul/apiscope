@@ -149,6 +149,8 @@ func TestProjectPaneBuildsAlternativeBlocksWithoutDeduplicatingSchemes(t *testin
 			},
 		},
 		nil,
+		nil,
+		"",
 	)
 	if rows[1].ID == rows[3].ID || rows[1].ValidationTarget == rows[3].ValidationTarget {
 		t.Fatalf("expected duplicated scheme rows to remain distinct, got %#v", rows)
@@ -235,6 +237,89 @@ func TestProjectPaneBuildsEditableFormRows(t *testing.T) {
 	}
 	if !projection.Data.Rows[0].Editable {
 		t.Fatal("expected form row to be editable")
+	}
+}
+
+func TestProjectPaneIncludesEnvironmentSectionForSelectedOperation(t *testing.T) {
+	t.Parallel()
+
+	projection := ProjectPane(PaneInput{
+		Selected: &model.Operation{
+			Key: model.NewOperationKey("GET", "/pets"),
+		},
+		ActiveSection: SectionEnvironment,
+	})
+
+	if projection.Data.ActiveSection != SectionEnvironment {
+		t.Fatalf("expected environment section, got %q", projection.Data.ActiveSection)
+	}
+	if len(projection.Data.Sections) == 0 {
+		t.Fatal("expected request sections to be projected")
+	}
+	found := false
+	for _, section := range projection.Data.Sections {
+		if section == SectionEnvironment {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected environment section in %#v", projection.Data.Sections)
+	}
+}
+
+func TestProjectPaneBuildsEnvironmentRows(t *testing.T) {
+	t.Parallel()
+
+	projection := ProjectPane(PaneInput{
+		Selected: &model.Operation{
+			Key: model.NewOperationKey("GET", "/pets"),
+		},
+		Security: &model.SecurityRequirement{
+			Alternatives: []model.SecurityAlternative{
+				{Schemes: []model.SecurityRequirementRef{{Name: "api_key"}}},
+			},
+		},
+		SecuritySchemes: map[string]model.SecurityScheme{
+			"api_key": {
+				Name:          "api_key",
+				Type:          model.SecuritySchemeTypeAPIKey,
+				In:            model.ParameterLocationHeader,
+				ParameterName: "X-API-Key",
+			},
+		},
+		ActiveSection:          SectionEnvironment,
+		AppliedEnvironmentName: "staging",
+		Environments: []model.SavedEnvironment{{
+			Name:              "staging",
+			SelectedServerURL: "https://staging.example.com",
+			AuthBindings: map[string]model.SavedAuthBinding{
+				"api_key": {
+					FieldEnvVars: map[model.AuthField]string{
+						model.AuthFieldAPIKey: "API_KEY_ENV",
+					},
+				},
+			},
+		}},
+	})
+
+	if len(projection.Data.Rows) != 5 {
+		t.Fatalf("expected current, save, binding, apply, and delete rows, got %#v", projection.Data.Rows)
+	}
+	if projection.Data.Rows[0].Kind != RowKindEnvironmentCurrent {
+		t.Fatalf("expected current-environment row first, got %#v", projection.Data.Rows[0])
+	}
+	if projection.Data.Rows[1].Kind != RowKindEnvironmentSave || !projection.Data.Rows[1].Editable {
+		t.Fatalf("expected editable save row, got %#v", projection.Data.Rows[1])
+	}
+	if projection.Data.Rows[2].Kind != RowKindEnvironmentBinding || projection.Data.Rows[2].Value != "API_KEY_ENV" {
+		t.Fatalf("expected environment binding row, got %#v", projection.Data.Rows[2])
+	}
+	if projection.Data.Rows[3].Kind != RowKindEnvironmentApply || projection.Data.Rows[3].Value == "" {
+		t.Fatalf("expected apply row with summary, got %#v", projection.Data.Rows[3])
+	}
+	if projection.Data.Rows[4].Kind != RowKindEnvironmentDelete {
+		t.Fatalf("expected delete row last, got %#v", projection.Data.Rows[4])
 	}
 }
 

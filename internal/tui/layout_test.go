@@ -57,7 +57,7 @@ func TestRequestAndResponsePaneContentFallbackToFirstVisibleWhenSelectionMissing
 	responseContent = stripANSI(responseContent)
 
 	requestSnippets := []string{
-		"Path  Query  Header  Cookie  Body  Auth",
+		"Path  Query  Header  Cookie  Body  Environment  Auth",
 		" petId (required, string) = <unset>",
 	}
 	for _, snippet := range requestSnippets {

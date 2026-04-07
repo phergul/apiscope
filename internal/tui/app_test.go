@@ -16,6 +16,7 @@ import (
 
 	"github.com/phergul/apiscope/internal/app"
 	"github.com/phergul/apiscope/internal/model"
+	"github.com/phergul/apiscope/internal/persist"
 	"github.com/phergul/apiscope/internal/spec"
 	detailsui "github.com/phergul/apiscope/internal/tui/details"
 	requestui "github.com/phergul/apiscope/internal/tui/request"
@@ -48,7 +49,7 @@ func TestModelInitLoadsSpecAsynchronously(t *testing.T) {
 				{Key: model.NewOperationKey("GET", "/pets"), Method: "GET", Path: "/pets"},
 			},
 		},
-	}, nil)
+	}, nil, nil, nil)
 
 	m := NewModel(service, "demo.yaml")
 	cmd := m.Init()
@@ -92,10 +93,30 @@ func TestModelInitLoadsSpecAsynchronously(t *testing.T) {
 	}
 }
 
+func TestNewModelAppliesPersistedThemeBeforeFirstFrame(t *testing.T) {
+	original := widgets.CurrentTheme()
+	t.Cleanup(func() {
+		widgets.SetTheme(original)
+	})
+	widgets.SetTheme(widgets.DefaultTheme())
+
+	store := persist.NewStore(t.TempDir())
+	if err := store.SaveConfig(model.UserConfig{ThemeName: "harbor"}); err != nil {
+		t.Fatalf("SaveConfig returned error: %v", err)
+	}
+
+	service := app.NewService(&stubLoader{}, nil, store, nil)
+	_ = NewModel(service, "demo.yaml")
+
+	if widgets.CurrentTheme().Name != "harbor" {
+		t.Fatalf("expected persisted harbor theme, got %q", widgets.CurrentTheme().Name)
+	}
+}
+
 func TestModelUpdatesFocusFromNumberKeys(t *testing.T) {
 	t.Parallel()
 
-	m := NewModel(app.NewService(&stubLoader{}, nil), "demo.yaml")
+	m := NewModel(app.NewService(&stubLoader{}, nil, nil, nil), "demo.yaml")
 
 	testCases := []struct {
 		key  string
@@ -119,7 +140,7 @@ func TestModelUpdatesFocusFromNumberKeys(t *testing.T) {
 func TestModelRightPaneExpansionTracksFocusChanges(t *testing.T) {
 	t.Parallel()
 
-	m := NewModel(app.NewService(&stubLoader{}, nil), "demo.yaml")
+	m := NewModel(app.NewService(&stubLoader{}, nil, nil, nil), "demo.yaml")
 	if m.viewState.ExpandedRightPane != model.FocusedPaneRequest {
 		t.Fatalf("expected request pane to be expanded by default, got %q", m.viewState.ExpandedRightPane)
 	}
@@ -146,7 +167,7 @@ func TestModelRightPaneExpansionTracksFocusChanges(t *testing.T) {
 func TestModelRotatesFocusWithTabAndShiftTab(t *testing.T) {
 	t.Parallel()
 
-	m := NewModel(app.NewService(&stubLoader{}, nil), "demo.yaml")
+	m := NewModel(app.NewService(&stubLoader{}, nil, nil, nil), "demo.yaml")
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	updated := updatedModel.(*Model)
@@ -187,7 +208,7 @@ func TestModelRotatesFocusWithTabAndShiftTab(t *testing.T) {
 func TestModelZoomToggleAndFocusChangesFollowWhileZoomed(t *testing.T) {
 	t.Parallel()
 
-	m := NewModel(app.NewService(&stubLoader{}, nil), "demo.yaml")
+	m := NewModel(app.NewService(&stubLoader{}, nil, nil, nil), "demo.yaml")
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'z'}})
 	updated := updatedModel.(*Model)
@@ -217,7 +238,7 @@ func TestModelZoomToggleAndFocusChangesFollowWhileZoomed(t *testing.T) {
 func TestModelIgnoresStaleLoadResults(t *testing.T) {
 	t.Parallel()
 
-	m := NewModel(app.NewService(&stubLoader{}, nil), "demo.yaml")
+	m := NewModel(app.NewService(&stubLoader{}, nil, nil, nil), "demo.yaml")
 	m.viewState.LoadInFlight = true
 	m.viewState.ActiveLoadRequestID = 2
 
@@ -242,7 +263,7 @@ func TestModelIgnoresStaleLoadResults(t *testing.T) {
 func TestModelSelectsLayoutPresetFromWindowSize(t *testing.T) {
 	t.Parallel()
 
-	m := NewModel(app.NewService(&stubLoader{}, nil), "demo.yaml")
+	m := NewModel(app.NewService(&stubLoader{}, nil, nil, nil), "demo.yaml")
 
 	updatedModel, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	updated := updatedModel.(*Model)
@@ -260,7 +281,7 @@ func TestModelSelectsLayoutPresetFromWindowSize(t *testing.T) {
 func TestModelRendersLoadFailureWithoutCrashing(t *testing.T) {
 	t.Parallel()
 
-	m := NewModel(app.NewService(&stubLoader{}, nil), "broken.yaml")
+	m := NewModel(app.NewService(&stubLoader{}, nil, nil, nil), "broken.yaml")
 	m.shell.width = 120
 	m.shell.height = 30
 	m.viewState.LoadInFlight = true
@@ -294,7 +315,7 @@ func TestModelRendersLoadFailureWithoutCrashing(t *testing.T) {
 func TestModelBlockingLoadErrorOnlyAllowsQuitKeys(t *testing.T) {
 	t.Parallel()
 
-	m := NewModel(app.NewService(&stubLoader{}, nil), "broken.yaml")
+	m := NewModel(app.NewService(&stubLoader{}, nil, nil, nil), "broken.yaml")
 	m.shell.loadErr = errors.New("boom")
 
 	updatedModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
@@ -546,14 +567,20 @@ func TestModelRequestSectionNavigationMovesAcrossParameterBodyAndAuth(t *testing
 
 	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
 	updated = updatedModel.(*Model)
+	if updated.panes.activeRequestSection != requestui.SectionEnvironment {
+		t.Fatalf("expected ] to move to environment, got %q", updated.panes.activeRequestSection)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	updated = updatedModel.(*Model)
 	if updated.panes.activeRequestSection != "Auth" {
-		t.Fatalf("expected ] to move to auth, got %q", updated.panes.activeRequestSection)
+		t.Fatalf("expected ] to move to auth after environment, got %q", updated.panes.activeRequestSection)
 	}
 
 	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
 	updated = updatedModel.(*Model)
-	if updated.panes.activeRequestSection != "Body" {
-		t.Fatalf("expected [ to move back to body, got %q", updated.panes.activeRequestSection)
+	if updated.panes.activeRequestSection != requestui.SectionEnvironment {
+		t.Fatalf("expected [ to move back to environment, got %q", updated.panes.activeRequestSection)
 	}
 }
 
@@ -768,7 +795,7 @@ func TestModelCtrlRExecutesAndSelectsLiveResponse(t *testing.T) {
 	defer server.Close()
 
 	m := newLoadedModelForNavigation()
-	m.service = app.NewService(nil, nil)
+	m.service = app.NewService(nil, nil, nil, nil)
 	m.viewState.FocusedPane = model.FocusedPaneRequest
 	m.session.SelectedServerURL = server.URL
 	m.session.AuthState = map[string]model.AuthValue{
@@ -817,7 +844,7 @@ func TestModelCtrlRStillExecutesWhenOperationShowsSupportNotes(t *testing.T) {
 	defer server.Close()
 
 	m := newLoadedModelForNavigation()
-	m.service = app.NewService(nil, nil)
+	m.service = app.NewService(nil, nil, nil, nil)
 	m.viewState.FocusedPane = model.FocusedPaneRequest
 	m.session.SelectedServerURL = server.URL
 	m.session.AuthState = map[string]model.AuthValue{
@@ -874,7 +901,7 @@ func TestModelCtrlRExecutesUrlencodedFormOperation(t *testing.T) {
 	defer server.Close()
 
 	m := newLoadedModelForNavigation()
-	m.service = app.NewService(nil, nil)
+	m.service = app.NewService(nil, nil, nil, nil)
 	m.viewState.FocusedPane = model.FocusedPaneRequest
 	m.session.SelectedOperationKey = model.NewOperationKey("POST", "/pets")
 	m.session.SelectedServerURL = server.URL
@@ -937,7 +964,7 @@ func TestModelCtrlRExecutesMultipartFormOperation(t *testing.T) {
 	defer server.Close()
 
 	m := newLoadedModelForNavigation()
-	m.service = app.NewService(nil, nil)
+	m.service = app.NewService(nil, nil, nil, nil)
 	m.viewState.FocusedPane = model.FocusedPaneRequest
 	m.session.SelectedOperationKey = model.NewOperationKey("POST", "/pets")
 	m.session.SelectedServerURL = server.URL
@@ -1018,7 +1045,7 @@ func TestModelCtrlRExecutesMultipartFileUploadOperation(t *testing.T) {
 	defer server.Close()
 
 	m := newLoadedModelForNavigation()
-	m.service = app.NewService(nil, nil)
+	m.service = app.NewService(nil, nil, nil, nil)
 	m.viewState.FocusedPane = model.FocusedPaneRequest
 	m.session.SelectedOperationKey = model.NewOperationKey("POST", "/pets")
 	m.session.SelectedServerURL = server.URL
@@ -1131,7 +1158,7 @@ func TestModelCtrlRExecutesWhenLaterAuthAlternativeIsSatisfied(t *testing.T) {
 	defer server.Close()
 
 	m := newLoadedModelForNavigation()
-	m.service = app.NewService(nil, nil)
+	m.service = app.NewService(nil, nil, nil, nil)
 	m.session.SelectedServerURL = server.URL
 	m.session.Spec.Operations[0].Security = &model.SecurityRequirement{
 		Alternatives: []model.SecurityAlternative{
@@ -1387,8 +1414,8 @@ func TestModelPreviousRequestsPopupRestoreRequestFocusesPaneThree(t *testing.T) 
 	if got := updated.ensureSelectedRequestDraft().PathParams["petId"]; got != "from-history" {
 		t.Fatalf("expected request draft restore, got %q", got)
 	}
-	if got := updated.session.AuthState["api_key"].APIKey; got != "restored" {
-		t.Fatalf("expected auth state restore, got %q", got)
+	if got := updated.session.AuthState["api_key"].APIKey; got != "current" {
+		t.Fatalf("expected history restore to leave auth state unchanged, got %q", got)
 	}
 	if updated.viewState.Notice != "Restored request #9" {
 		t.Fatalf("expected request restore notice, got %q", updated.viewState.Notice)
@@ -1433,7 +1460,7 @@ func TestModelPreviousRequestsPopupShowsNewExecutionHistory(t *testing.T) {
 	defer server.Close()
 
 	m := newLoadedModelForNavigation()
-	m.service = app.NewService(nil, nil)
+	m.service = app.NewService(nil, nil, nil, nil)
 	m.session.SelectedServerURL = server.URL
 	m.session.AuthState = map[string]model.AuthValue{
 		"api_key": {Type: model.AuthSchemeValueTypeAPIKey, APIKey: "secret"},
@@ -1612,7 +1639,7 @@ func TestModelRequestServerCyclesOnEnterAndExecutionUsesNewSelection(t *testing.
 	defer staging.Close()
 
 	m := &Model{
-		service: app.NewService(nil, nil),
+		service: app.NewService(nil, nil, nil, nil),
 		session: model.SessionState{
 			Spec: &model.APISpec{
 				Servers: []model.Server{
@@ -1779,7 +1806,7 @@ func TestModelDetailsPaneShowsSchemaExplorerHintWhenFocusedAndAvailable(t *testi
 	m.viewState.FocusedPane = model.FocusedPaneDetails
 
 	view := m.paneView(model.FocusedPaneDetails)
-	if view.TitleRight != "Open schemas s" {
+	if view.TitleRight != "Open schemas 's'" {
 		t.Fatalf("expected schema explorer hint, got %q", view.TitleRight)
 	}
 
@@ -2149,6 +2176,201 @@ func TestModelQuestionMarkOpensHistoryHelpAndKeepsPopupOpen(t *testing.T) {
 	updated = updatedModel.(*Model)
 	if !updated.historyPopupOpen() {
 		t.Fatal("expected history popup to remain open after closing help")
+	}
+}
+
+func TestModelEnvironmentSaveApplyAndDeleteFlow(t *testing.T) {
+	t.Setenv("APISCOPE_TEST_ENVIRONMENT_API_KEY", "secret-from-env")
+	store := persist.NewStore(t.TempDir())
+	m := newLoadedModelForNavigation()
+	m.service = app.NewService(nil, nil, store, nil)
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.panes.activeRequestSection = requestui.SectionEnvironment
+	m.session.PersistenceScopeKey = model.NewPersistenceScopeKey("demo.yaml", model.SourceFamilyOpenAPI3)
+	m.session.SelectedServerURL = "https://staging.example.com"
+	m.session.AuthState = map[string]model.AuthValue{
+		"api_key": {Type: model.AuthSchemeValueTypeAPIKey, APIKey: "secret"},
+	}
+	m.syncActiveRequestRow()
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated := updatedModel.(*Model)
+	if updated.viewState.RequestEditKind != model.RequestEditKindField {
+		t.Fatalf("expected environment save to open the field editor, got %q", updated.viewState.RequestEditKind)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("staging")})
+	updated = updatedModel.(*Model)
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated = updatedModel.(*Model)
+	if updated.viewState.Notice != "Environment saved" {
+		t.Fatalf("expected saved environment notice, got %q", updated.viewState.Notice)
+	}
+	if updated.requestUI.appliedEnvironmentName != "staging" {
+		t.Fatalf("expected applied environment marker, got %q", updated.requestUI.appliedEnvironmentName)
+	}
+	if len(updated.persisted.environments) != 1 {
+		t.Fatalf("expected one persisted environment, got %#v", updated.persisted.environments)
+	}
+
+	updated.viewState.RequestActiveRow = 2
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated = updatedModel.(*Model)
+	if updated.viewState.RequestEditKind != model.RequestEditKindField {
+		t.Fatalf("expected environment binding to open the field editor, got %q", updated.viewState.RequestEditKind)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("APISCOPE_TEST_ENVIRONMENT_API_KEY")})
+	updated = updatedModel.(*Model)
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated = updatedModel.(*Model)
+	if updated.viewState.Notice != "Environment binding saved" {
+		t.Fatalf("expected saved binding notice, got %q", updated.viewState.Notice)
+	}
+	if got := updated.persisted.environments[0].AuthBindings["api_key"].FieldEnvVars[model.AuthFieldAPIKey]; got != "APISCOPE_TEST_ENVIRONMENT_API_KEY" {
+		t.Fatalf("expected persisted env var binding, got %#v", updated.persisted.environments[0].AuthBindings)
+	}
+	if updated.session.AuthState["api_key"].APIKey != "secret-from-env" {
+		t.Fatalf("expected binding save to reapply resolved auth, got %#v", updated.session.AuthState)
+	}
+
+	updated.session.SelectedServerURL = "https://api.example.com"
+	updated.session.AuthState = map[string]model.AuthValue{}
+	updated.requestUI.appliedEnvironmentName = ""
+	updated.viewState.RequestActiveRow = 3
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated = updatedModel.(*Model)
+	if updated.viewState.Notice != "Environment applied" {
+		t.Fatalf("expected apply environment notice, got %q", updated.viewState.Notice)
+	}
+	if updated.session.SelectedServerURL != "https://staging.example.com" {
+		t.Fatalf("expected applied server url, got %q", updated.session.SelectedServerURL)
+	}
+	if updated.session.AuthState["api_key"].APIKey != "secret-from-env" {
+		t.Fatalf("expected applied auth state, got %#v", updated.session.AuthState)
+	}
+
+	updated.viewState.RequestActiveRow = 4
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated = updatedModel.(*Model)
+	if updated.viewState.RequestEditKind != model.RequestEditKindConfirm {
+		t.Fatalf("expected delete confirmation popup, got %q", updated.viewState.RequestEditKind)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated = updatedModel.(*Model)
+	if updated.viewState.Notice != "Environment deleted" {
+		t.Fatalf("expected delete notice, got %q", updated.viewState.Notice)
+	}
+	if updated.requestUI.appliedEnvironmentName != "" {
+		t.Fatalf("expected applied environment marker to clear, got %q", updated.requestUI.appliedEnvironmentName)
+	}
+	if len(updated.persisted.environments) != 0 {
+		t.Fatalf("expected environments to be removed, got %#v", updated.persisted.environments)
+	}
+	if updated.session.SelectedServerURL != "https://staging.example.com" {
+		t.Fatalf("expected live session values to stay unchanged after delete, got %q", updated.session.SelectedServerURL)
+	}
+
+	environments, err := store.LoadEnvironments()
+	if err != nil {
+		t.Fatalf("LoadEnvironments returned error: %v", err)
+	}
+	if len(environments) != 0 {
+		t.Fatalf("expected store deletion to persist, got %#v", environments)
+	}
+}
+
+func TestModelServerEditClearsAppliedEnvironmentMarker(t *testing.T) {
+	t.Parallel()
+
+	store := persist.NewStore(t.TempDir())
+	scopeKey := model.NewPersistenceScopeKey("demo.yaml", model.SourceFamilyOpenAPI3)
+	if err := store.SaveEnvironments([]model.SavedEnvironment{{
+		Name:              "staging",
+		ScopeKey:          scopeKey,
+		SelectedServerURL: "https://staging.example.com",
+	}}); err != nil {
+		t.Fatalf("SaveEnvironments returned error: %v", err)
+	}
+
+	m := newLoadedModelForNavigation()
+	m.service = app.NewService(nil, nil, store, nil)
+	m.session.PersistenceScopeKey = scopeKey
+	m.session.Spec.Servers = []model.Server{
+		{URL: "https://staging.example.com"},
+		{URL: "https://api.example.com"},
+	}
+	m.session.SelectedServerURL = "https://staging.example.com"
+	m.persisted.environments = []model.SavedEnvironment{{
+		Name:              "staging",
+		ScopeKey:          scopeKey,
+		SelectedServerURL: "https://staging.example.com",
+	}}
+	m.requestUI.appliedEnvironmentName = "staging"
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.panes.activeRequestSection = requestui.SectionServer
+	m.syncActiveRequestRow()
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated := updatedModel.(*Model)
+	if updated.session.SelectedServerURL != "https://api.example.com" {
+		t.Fatalf("expected server cycle to update the selected server, got %q", updated.session.SelectedServerURL)
+	}
+	if updated.requestUI.appliedEnvironmentName != "" {
+		t.Fatalf("expected applied environment marker to clear after server edit, got %q", updated.requestUI.appliedEnvironmentName)
+	}
+}
+
+func TestModelApplyEnvironmentShowsMissingEnvVarNotice(t *testing.T) {
+	t.Parallel()
+
+	store := persist.NewStore(t.TempDir())
+	scopeKey := model.NewPersistenceScopeKey("demo.yaml", model.SourceFamilyOpenAPI3)
+	if err := store.SaveEnvironments([]model.SavedEnvironment{{
+		Name:              "staging",
+		ScopeKey:          scopeKey,
+		SelectedServerURL: "https://staging.example.com",
+		AuthBindings: map[string]model.SavedAuthBinding{
+			"api_key": {
+				FieldEnvVars: map[model.AuthField]string{
+					model.AuthFieldAPIKey: "APISCOPE_MISSING_TOKEN",
+				},
+			},
+		},
+	}}); err != nil {
+		t.Fatalf("SaveEnvironments returned error: %v", err)
+	}
+
+	m := newLoadedModelForNavigation()
+	m.service = app.NewService(nil, nil, store, nil)
+	m.session.PersistenceScopeKey = scopeKey
+	m.session.SelectedServerURL = "https://api.example.com"
+	m.persisted.environments = []model.SavedEnvironment{{
+		Name:              "staging",
+		ScopeKey:          scopeKey,
+		SelectedServerURL: "https://staging.example.com",
+		AuthBindings: map[string]model.SavedAuthBinding{
+			"api_key": {
+				FieldEnvVars: map[model.AuthField]string{
+					model.AuthFieldAPIKey: "APISCOPE_MISSING_TOKEN",
+				},
+			},
+		},
+	}}
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.panes.activeRequestSection = requestui.SectionEnvironment
+	m.viewState.RequestActiveRow = 3
+	m.syncActiveRequestRow()
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated := updatedModel.(*Model)
+	if updated.viewState.Notice != "Environment applied; missing APISCOPE_MISSING_TOKEN" {
+		t.Fatalf("expected missing env var notice, got %q", updated.viewState.Notice)
+	}
+	if updated.session.SelectedServerURL != "https://staging.example.com" {
+		t.Fatalf("expected server update even with missing env var, got %q", updated.session.SelectedServerURL)
 	}
 }
 

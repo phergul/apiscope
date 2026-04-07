@@ -7,6 +7,7 @@ import (
 
 	"github.com/phergul/apiscope/internal/app"
 	"github.com/phergul/apiscope/internal/logging"
+	"github.com/phergul/apiscope/internal/persist"
 	"github.com/phergul/apiscope/internal/spec"
 	"github.com/phergul/apiscope/internal/tui"
 )
@@ -39,7 +40,7 @@ func run(args []string, input io.Reader, output, errOutput io.Writer) int {
 		defer closer.Close()
 	}
 
-	service := app.NewService(spec.NewLoader(nil, logger), logger)
+	service := app.NewService(spec.NewLoader(nil, logger), nil, persist.NewStore(""), logger)
 	program := newProgram(service, args[0], input, output)
 	if err := program.Run(); err != nil {
 		fmt.Fprintf(errOutput, "apiscope: %v\n", err)

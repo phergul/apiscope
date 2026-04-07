@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"io"
+	"strings"
 
 	"github.com/phergul/apiscope/internal/app"
 	"github.com/phergul/apiscope/internal/model"
@@ -27,10 +28,11 @@ type Program struct {
 
 // shellState groups root-owned runtime shell state.
 type shellState struct {
-	width   int
-	height  int
-	source  string
-	loadErr error
+	width         int
+	height        int
+	source        string
+	loadErr       error
+	startupNotice string
 }
 
 // paneState groups the root-owned active pane section state.
@@ -49,7 +51,13 @@ type widgetState struct {
 
 // requestUIState groups request-editor state that still belongs to the root adapters.
 type requestUIState struct {
-	validation app.RequestValidationResult
+	validation             app.RequestValidationResult
+	appliedEnvironmentName string
+}
+
+// persistedState groups root-owned durable user-managed state snapshots.
+type persistedState struct {
+	environments []model.SavedEnvironment
 }
 
 // historyUIState groups shell-owned previous-request popup state.
@@ -75,6 +83,7 @@ type Model struct {
 	panes            paneState
 	widgets          widgetState
 	requestUI        requestUIState
+	persisted        persistedState
 	historyUI        historyUIState
 	helpUI           helpUIState
 	schemaExplorerUI schemaExplorerUIState
@@ -102,7 +111,7 @@ func (p *Program) Run() error {
 // NewModel builds the root TUI model with default shell and pane state.
 func NewModel(service *app.Service, source string) *Model {
 	if service == nil {
-		service = app.NewService(nil, nil)
+		service = app.NewService(nil, nil, nil, nil)
 	}
 
 	filterInput := widgets.NewTextInput()
@@ -112,7 +121,7 @@ func NewModel(service *app.Service, source string) *Model {
 	requestBodyInput := widgets.NewTextArea()
 	requestBodyInput.SetPlaceholder("Enter raw request body")
 
-	return &Model{
+	model := &Model{
 		service: service,
 		shell: shellState{
 			source: source,
@@ -134,6 +143,17 @@ func NewModel(service *app.Service, source string) *Model {
 			RightPaneLayoutPreset: layoutPresetNarrow,
 		},
 	}
+
+	config, err := service.LoadConfig()
+	if err != nil {
+		model.shell.startupNotice = "Persisted data unavailable"
+		return model
+	}
+	if strings.TrimSpace(config.ThemeName) != "" {
+		widgets.SetThemeByName(config.ThemeName)
+	}
+
+	return model
 }
 
 // Init starts the initial spec load for the TUI model.
@@ -171,7 +191,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.session = msg.result.Session
 		m.viewState = msg.result.View
-		m.requestUI.validation = app.RequestValidationResult{}
+		m.requestUI = requestUIState{}
+		m.persisted.environments = append([]model.SavedEnvironment(nil), msg.result.Environments...)
 		m.historyUI = historyUIState{}
 		m.session.ActiveLoadRequestID = msg.requestID
 		m.viewState.ActiveLoadRequestID = msg.requestID
@@ -179,7 +200,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewState.RightPaneLayoutPreset = chooseLayoutPreset(m.shell.width)
 		m.syncVisibleOperations()
 		m.syncActivePaneSections()
-		m.viewState.Notice = "Spec loaded"
+		switch {
+		case strings.TrimSpace(msg.result.Notice) != "":
+			m.viewState.Notice = msg.result.Notice
+		case strings.TrimSpace(m.shell.startupNotice) != "":
+			m.viewState.Notice = m.shell.startupNotice
+		default:
+			m.viewState.Notice = "Spec loaded"
+		}
+		m.shell.startupNotice = ""
 		return m, nil
 	case executeFinishedMsg:
 		if msg.requestID != m.viewState.ActiveExecuteRequestID {
@@ -198,8 +227,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Response:      msg.result.Response,
 				TransportNote: msg.result.Response.TransportError,
 			})
+			if err := m.service.PersistHistoryEntry(m.session, m.session.RequestHistory[len(m.session.RequestHistory)-1]); err != nil {
+				m.viewState.Notice = "History not saved"
+			}
 		}
-		m.viewState.Notice = "Request succeeded"
+		if strings.TrimSpace(m.viewState.Notice) == "" || m.viewState.Notice == "Sending request" {
+			m.viewState.Notice = "Request succeeded"
+		}
 		if msg.result.Response != nil && msg.result.Response.TransportError != "" {
 			m.viewState.Notice = "Request failed"
 		}
@@ -236,6 +270,9 @@ func (m *Model) cycleTheme(forward bool) {
 
 	widgets.SetThemeByName(next)
 	m.viewState.Notice = "Theme: " + widgets.CurrentTheme().Name
+	if err := m.service.SaveThemePreference(widgets.CurrentTheme().Name); err != nil {
+		m.viewState.Notice += " (not saved)"
+	}
 }
 
 // startLoadCmd starts a new asynchronous spec load request.

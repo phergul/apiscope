@@ -15,7 +15,7 @@ func BuildBrowseHelpView() widgets.HelpView {
 			"j/k or up/down move row",
 			"Home/End jump to first or last row",
 			"[ or ] or h/l switch sections",
-			"Enter edit value or cycle option",
+			"Enter edit, apply, or cycle option",
 			"Ctrl+R send request",
 			"t / T switch theme",
 			"1-4 or Tab / Shift+Tab focus panes",

@@ -104,7 +104,7 @@ func TestServiceExecuteCurrentCapturesExecutedRequestSnapshot(t *testing.T) {
 	draft.BodyMediaType = "application/json"
 	draft.BodyRaw = `{"name":"fido"}`
 
-	result := NewService(nil, nil).ExecuteCurrent(context.Background(), CloneExecutionSession(session))
+	result := NewService(nil, nil, nil, nil).ExecuteCurrent(context.Background(), CloneExecutionSession(session))
 	if got := result.Snapshot.ServerURL; got != server.URL {
 		t.Fatalf("expected snapshot server url, got %q", got)
 	}
@@ -233,9 +233,6 @@ func TestRestoreHistoryRequestRestoresCurrentOperationInputs(t *testing.T) {
 				BodyMediaType:   "application/json",
 				BodyRaw:         `{"name":"fido"}`,
 			},
-			AuthState: map[string]model.AuthValue{
-				"api_key": {Type: model.AuthSchemeValueTypeAPIKey, APIKey: "restored"},
-			},
 		},
 	})
 	if !ok {
@@ -256,8 +253,8 @@ func TestRestoreHistoryRequestRestoresCurrentOperationInputs(t *testing.T) {
 	if got := session.RequestDrafts[currentDraftKey].BodyRaw; got != `{"name":"fido"}` {
 		t.Fatalf("expected current draft body restore, got %q", got)
 	}
-	if got := session.AuthState["api_key"].APIKey; got != "restored" {
-		t.Fatalf("expected auth state restore, got %q", got)
+	if got := session.AuthState["api_key"].APIKey; got != "current" {
+		t.Fatalf("expected history restore to leave session auth unchanged, got %q", got)
 	}
 	if got := session.RequestDrafts[otherDraftKey].QueryParams["check"]; got != "keep" {
 		t.Fatalf("expected unrelated draft values to stay unchanged, got %q", got)

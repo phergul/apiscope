@@ -91,6 +91,34 @@ func TestStartEditReturnsServerCycleAction(t *testing.T) {
 	}
 }
 
+func TestStartEditReturnsFieldEditorStateForEnvironmentBinding(t *testing.T) {
+	t.Parallel()
+
+	got := StartEdit(
+		&model.Operation{Key: model.NewOperationKey("GET", "/pets")},
+		nil,
+		[]RowDescriptor{{
+			ID:       "environment:binding:api_key:api_key",
+			Kind:     RowKindEnvironmentBinding,
+			Value:    "API_KEY_ENV",
+			Editable: true,
+		}},
+		0,
+		nil,
+		nil,
+	)
+
+	if got.Kind != model.RequestEditKindField {
+		t.Fatalf("expected field edit kind, got %q", got.Kind)
+	}
+	if got.Buffer != "API_KEY_ENV" {
+		t.Fatalf("expected env var name to seed edit buffer, got %q", got.Buffer)
+	}
+	if !got.FocusField {
+		t.Fatal("expected binding editor to request focus")
+	}
+}
+
 func TestCycleServerURLAdvancesSelectedServer(t *testing.T) {
 	t.Parallel()
 

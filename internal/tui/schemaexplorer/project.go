@@ -284,13 +284,7 @@ func recursiveSchema(schema *model.Schema, ancestorRefs []string) bool {
 	}
 
 	ref := strings.TrimSpace(schema.Ref)
-	for _, ancestorRef := range ancestorRefs {
-		if ancestorRef == ref {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(ancestorRefs, ref)
 }
 
 func nextAncestorRefs(ancestorRefs []string, schema *model.Schema) []string {

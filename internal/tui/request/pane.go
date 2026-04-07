@@ -30,22 +30,24 @@ type SupportState struct {
 
 // PaneInput contains the root-owned request pane state needed to project a render model.
 type PaneInput struct {
-	LoadInFlight      bool
-	Selected          *model.Operation
-	Draft             *model.RequestDraft
-	Security          *model.SecurityRequirement
-	Servers           []model.Server
-	SelectedServerURL string
-	SecuritySchemes   map[string]model.SecurityScheme
-	AuthState         map[string]model.AuthValue
-	ActiveSection     string
-	ActiveRow         int
-	ScrollOffset      int
-	Validation        ValidationState
-	Support           SupportState
-	Editor            EditorInput
-	ContentWidth      int
-	ContentHeight     int
+	LoadInFlight           bool
+	Selected               *model.Operation
+	Draft                  *model.RequestDraft
+	Security               *model.SecurityRequirement
+	Servers                []model.Server
+	SelectedServerURL      string
+	SecuritySchemes        map[string]model.SecurityScheme
+	AuthState              map[string]model.AuthValue
+	Environments           []model.SavedEnvironment
+	AppliedEnvironmentName string
+	ActiveSection          string
+	ActiveRow              int
+	ScrollOffset           int
+	Validation             ValidationState
+	Support                SupportState
+	Editor                 EditorInput
+	ContentWidth           int
+	ContentHeight          int
 }
 
 // PaneProjection contains the rendered request pane data.
@@ -81,7 +83,7 @@ func projectPaneData(input PaneInput) (Data, EditorState) {
 
 	activeSection := ResolveActiveSection(input.ActiveSection, input.Selected, input.Security, input.Servers)
 	sections := AvailableSections(input.Selected, input.Security, input.Servers)
-	rows := ActiveRows(input.Selected, input.Draft, activeSection, input.Security, input.Servers, input.SelectedServerURL, input.SecuritySchemes, input.AuthState)
+	rows := ActiveRows(input.Selected, input.Draft, activeSection, input.Security, input.Servers, input.SelectedServerURL, input.SecuritySchemes, input.AuthState, input.Environments, input.AppliedEnvironmentName)
 	editorState := BuildEditorState(input.Editor, rows, input.ActiveRow, input.Selected, input.Draft)
 
 	data.Sections = sections

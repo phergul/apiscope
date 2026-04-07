@@ -20,6 +20,11 @@ func TestMoveActiveSectionUsesAvailableRequestSections(t *testing.T) {
 	if got != SectionBody {
 		t.Fatalf("expected section movement to advance to Body, got %q", got)
 	}
+
+	got = MoveActiveSection(SectionBody, 1, selected, nil, nil)
+	if got != SectionEnvironment {
+		t.Fatalf("expected section movement to advance to Environment, got %q", got)
+	}
 }
 
 func TestAvailableSectionsIncludesServerWhenMultipleTopLevelServersExist(t *testing.T) {
@@ -33,10 +38,13 @@ func TestAvailableSectionsIncludesServerWhenMultipleTopLevelServersExist(t *test
 		{URL: "https://api.example.com"},
 		{URL: "https://staging.example.com"},
 	})
-	if len(sections) != 2 {
-		t.Fatalf("expected server and body sections, got %#v", sections)
+	if len(sections) != 3 {
+		t.Fatalf("expected body, environment, and server sections, got %#v", sections)
 	}
-	if sections[1] != SectionServer {
+	if sections[1] != SectionEnvironment {
+		t.Fatalf("expected environment section before server, got %#v", sections)
+	}
+	if sections[2] != SectionServer {
 		t.Fatalf("expected server section last, got %#v", sections)
 	}
 }
@@ -52,10 +60,13 @@ func TestAvailableSectionsPlacesFormBeforeBodyAndOmitsBodyForFormOnlyOperations(
 	}
 
 	sections := AvailableSections(selected, nil, nil)
-	if len(sections) != 1 {
-		t.Fatalf("expected only form section, got %#v", sections)
+	if len(sections) != 2 {
+		t.Fatalf("expected form and environment sections, got %#v", sections)
 	}
 	if sections[0] != SectionForm {
 		t.Fatalf("expected form section, got %#v", sections)
+	}
+	if sections[1] != SectionEnvironment {
+		t.Fatalf("expected environment section after form, got %#v", sections)
 	}
 }

@@ -11,13 +11,13 @@ import (
 const ValidationSectionAuth = "Auth"
 
 // AuthField identifies one editable field for a supported auth scheme.
-type AuthField string
+type AuthField = model.AuthField
 
 const (
-	AuthFieldAPIKey      AuthField = "api_key"
-	AuthFieldBearerToken AuthField = "bearer_token"
-	AuthFieldUsername    AuthField = "username"
-	AuthFieldPassword    AuthField = "password"
+	AuthFieldAPIKey      = model.AuthFieldAPIKey
+	AuthFieldBearerToken = model.AuthFieldBearerToken
+	AuthFieldUsername    = model.AuthFieldUsername
+	AuthFieldPassword    = model.AuthFieldPassword
 )
 
 // EffectiveSecurityRequirement returns the operation security requirement, falling back
@@ -57,6 +57,14 @@ func AuthValue(session model.SessionState, schemeName string) model.AuthValue {
 // SetAuthField stores or clears one auth field value for the requested scheme.
 func SetAuthField(session *model.SessionState, scheme model.SecurityScheme, field AuthField, value string) {
 	state := EnsureAuthState(session)
+	if state == nil {
+		return
+	}
+
+	setAuthFieldValue(state, scheme, field, value)
+}
+
+func setAuthFieldValue(state map[string]model.AuthValue, scheme model.SecurityScheme, field model.AuthField, value string) {
 	if state == nil {
 		return
 	}

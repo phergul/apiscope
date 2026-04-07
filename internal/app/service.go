@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"os"
+	"time"
 
 	"github.com/phergul/apiscope/internal/logging"
 	"github.com/phergul/apiscope/internal/model"
+	"github.com/phergul/apiscope/internal/persist"
 	"github.com/phergul/apiscope/internal/spec"
 	"github.com/phergul/apiscope/internal/transport"
 )
@@ -16,23 +19,23 @@ type specLoader interface {
 }
 
 type Service struct {
-	loader   specLoader
-	executor *transport.Executor
-	logger   *slog.Logger
+	loader    specLoader
+	executor  *transport.Executor
+	store     *persist.Store
+	logger    *slog.Logger
+	now       func() time.Time
+	lookupEnv func(string) (string, bool)
 }
 
 type LoadResult struct {
-	Session model.SessionState
-	View    model.ViewState
+	Session      model.SessionState
+	View         model.ViewState
+	Environments []model.SavedEnvironment
+	Notice       string
 }
 
-// NewService builds an app service with the default transport executor.
-func NewService(loader specLoader, logger *slog.Logger) *Service {
-	return NewServiceWithExecutor(loader, nil, logger)
-}
-
-// NewServiceWithExecutor builds an app service with the provided loader and executor.
-func NewServiceWithExecutor(loader specLoader, executor *transport.Executor, logger *slog.Logger) *Service {
+// NewService builds an app service with the provided dependencies.
+func NewService(loader specLoader, executor *transport.Executor, store *persist.Store, logger *slog.Logger) *Service {
 	logger = logging.OrNop(logger).With("component", "app")
 	if loader == nil {
 		loader = spec.NewLoader(nil, logger)
@@ -42,9 +45,12 @@ func NewServiceWithExecutor(loader specLoader, executor *transport.Executor, log
 	}
 
 	return &Service{
-		loader:   loader,
-		executor: executor,
-		logger:   logger,
+		loader:    loader,
+		executor:  executor,
+		store:     store,
+		logger:    logger,
+		now:       time.Now,
+		lookupEnv: os.LookupEnv,
 	}
 }
 
@@ -66,6 +72,11 @@ func (s *Service) LoadSource(ctx context.Context, rawSource string) (LoadResult,
 	}
 
 	result := newLoadResult(apiSpec, rawSource)
+	result.Session.PersistenceScopeKey = model.NewPersistenceScopeKey(rawSource, apiSpec.SourceFamily)
+	result.View.ActiveExecuteRequestID = result.Session.ActiveExecRequestID
+	if result.Notice = s.hydratePersistedState(&result, rawSource, apiSpec); result.Notice == "" {
+		result.View.ActiveExecuteRequestID = result.Session.ActiveExecRequestID
+	}
 	s.logger.Info(
 		"load source completed",
 		"event", "load_source_complete",

@@ -157,7 +157,7 @@ func (m *Model) detailsPaneTitleRight() string {
 		return ""
 	}
 	if schemaexplorerui.Available(m.resolvedSelectedOperation()) {
-		return "Open schemas s"
+		return "Open schemas 's'"
 	}
 
 	return ""

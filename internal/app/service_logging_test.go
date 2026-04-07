@@ -16,7 +16,7 @@ func TestServiceLoadSourceLogsFailure(t *testing.T) {
 
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	service := NewService(&stubLoader{err: errors.New("boom")}, logger)
+	service := NewService(&stubLoader{err: errors.New("boom")}, nil, nil, logger)
 
 	_, err := service.LoadSource(context.Background(), "broken.yaml")
 	if err == nil {
@@ -50,7 +50,7 @@ func TestServiceExecuteCurrentLogsValidationFailure(t *testing.T) {
 		RequestDrafts: map[model.DraftKey]*model.RequestDraft{},
 	}
 
-	NewService(nil, logger).ExecuteCurrent(context.Background(), session)
+	NewService(nil, nil, nil, logger).ExecuteCurrent(context.Background(), session)
 	if !strings.Contains(buf.String(), `"event":"execute_validation_failed"`) {
 		t.Fatalf("expected validation failure log, got %s", buf.String())
 	}

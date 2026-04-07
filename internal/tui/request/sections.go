@@ -39,11 +39,21 @@ func AvailableSections(selected *model.Operation, security *model.SecurityRequir
 	if security != nil && len(security.Alternatives) > 0 {
 		sections = append(sections, SectionAuth)
 	}
-	if len(servers) > 1 {
+	if len(servers) > 1 || hasServerVariables(servers) {
 		sections = append(sections, SectionServer)
 	}
 
 	return sections
+}
+
+func hasServerVariables(servers []model.Server) bool {
+	for _, server := range servers {
+		if len(server.Variables) > 0 {
+			return true
+		}
+	}
+
+	return false
 }
 
 // showBodySection reports whether the request pane should show the raw body editor.

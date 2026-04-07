@@ -174,7 +174,10 @@ func (m *Model) requestValidationState(activeSection string) requestui.Validatio
 // requestSupportState flattens request support notes into request-pane inputs.
 func (m *Model) requestSupportState(activeSection string) requestui.SupportState {
 	selected := m.resolvedSelectedOperation()
-	notes := app.ProjectRequestSupportNotes(selected)
+	notes := append(
+		app.ProjectRequestSupportNotes(selected),
+		app.ProjectCapabilityRequestSupportNotes(m.session.Spec, selected, app.EnsureRequestDraft(&m.session, selected), m.topLevelServers())...,
+	)
 	if len(notes) == 0 {
 		return requestui.SupportState{}
 	}
@@ -318,6 +321,10 @@ func (m *Model) beginRequestEdit() {
 	}
 	if start.CycleBodyMediaType {
 		requestui.CycleBodyMediaType(&m.session, selected)
+		return
+	}
+	if start.CycleBodyExample {
+		requestui.CycleBodyExample(&m.session, selected)
 		return
 	}
 	if start.CycleServerURL {

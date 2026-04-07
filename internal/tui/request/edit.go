@@ -15,6 +15,7 @@ type EditStart struct {
 	ResetScroll                  bool
 	CycleServerURL               bool
 	CycleBodyMediaType           bool
+	CycleBodyExample             bool
 	ApplyEnvironmentName         string
 	ConfirmDeleteEnvironmentName string
 }
@@ -89,6 +90,8 @@ func StartEdit(
 		}
 	case RowKindBodyMediaType:
 		return EditStart{CycleBodyMediaType: true}
+	case RowKindBodyExample:
+		return EditStart{CycleBodyExample: true}
 	case RowKindBodyText:
 		buffer := ""
 		if draft != nil {
@@ -104,6 +107,11 @@ func StartEdit(
 	default:
 		return EditStart{}
 	}
+}
+
+// CycleBodyExample advances the selected named request-body example for the current draft.
+func CycleBodyExample(session *model.SessionState, selected *model.Operation) bool {
+	return app.CycleDraftBodyExample(session, selected)
 }
 
 // SaveEdit persists the current request editor buffer back into session state.

@@ -16,6 +16,7 @@ const (
 	RowKindAuthOption         RowKind = "auth_option"
 	RowKindParameter          RowKind = "parameter"
 	RowKindBodyMediaType      RowKind = "body_media_type"
+	RowKindBodyExample        RowKind = "body_example"
 	RowKindBodyText           RowKind = "body_text"
 	RowKindAuthField          RowKind = "auth_field"
 	RowKindAuthInfo           RowKind = "auth_info"
@@ -72,7 +73,7 @@ func ActiveRows(
 	case SectionServer:
 		return serverRows(servers, selectedServerURL)
 	case SectionBody:
-		return bodyRows(selected.RequestBody, draft)
+		return bodyRows(selected, draft)
 	case SectionEnvironment:
 		return environmentRows(security, securitySchemes, environments, appliedEnvironmentName)
 	case SectionAuth:
@@ -84,7 +85,10 @@ func ActiveRows(
 
 // serverRows builds the request-pane row used to switch between top-level spec servers.
 func serverRows(servers []model.Server, selectedServerURL string) []RowDescriptor {
-	if len(servers) <= 1 {
+	if len(servers) == 0 {
+		return nil
+	}
+	if len(servers) == 1 && len(servers[0].Variables) == 0 {
 		return nil
 	}
 
@@ -105,6 +109,8 @@ func serverRows(servers []model.Server, selectedServerURL string) []RowDescripto
 	meta := "spec server"
 	if strings.TrimSpace(selectedDescription) != "" {
 		meta = selectedDescription
+	} else if len(servers) == 1 && len(servers[0].Variables) > 0 {
+		meta = "templated server"
 	}
 
 	return []RowDescriptor{{
@@ -115,7 +121,7 @@ func serverRows(servers []model.Server, selectedServerURL string) []RowDescripto
 		Label:            "Base URL",
 		Meta:             meta,
 		Value:            selected,
-		Editable:         true,
+		Editable:         len(servers) > 1,
 	}}
 }
 
@@ -180,31 +186,58 @@ func DraftParameterValue(draft *model.RequestDraft, parameter model.Parameter) s
 }
 
 // bodyRows returns the editable request-body rows for the active request section.
-func bodyRows(body *model.RequestBodySpec, draft *model.RequestDraft) []RowDescriptor {
-	if body == nil {
+func bodyRows(selected *model.Operation, draft *model.RequestDraft) []RowDescriptor {
+	if selected == nil || selected.RequestBody == nil {
 		return nil
 	}
 
-	mediaType := DraftBodyMediaType(&model.Operation{RequestBody: body}, draft)
-
-	return []RowDescriptor{
+	mediaType := DraftBodyMediaType(selected, draft)
+	bodyFields := app.ProjectBodyFieldParameters(selected, draft)
+	rows := []RowDescriptor{
 		{
 			ID:               "body:media_type",
 			Kind:             RowKindBodyMediaType,
 			ValidationTarget: app.ValidationTargetBodyMediaType,
 			Label:            "Media type",
 			Value:            mediaType,
-			Editable:         len(body.Content) > 0,
-		},
-		{
-			ID:               "body:raw",
-			Kind:             RowKindBodyText,
-			ValidationTarget: app.ValidationTargetBodyRaw,
-			Label:            "Body",
-			Value:            BodyPreview(draft),
-			Editable:         true,
+			Editable:         len(selected.RequestBody.Content) > 0,
 		},
 	}
+
+	if len(bodyFields) == 0 {
+		if exampleName := app.DraftBodyExampleName(selected, draft); exampleName != "" {
+			exampleNames := app.DraftBodyExampleNames(selected, draft)
+			meta := "named example"
+			if len(exampleNames) > 1 {
+				meta = fmt.Sprintf("%d examples", len(exampleNames))
+			}
+			rows = append(rows, RowDescriptor{
+				ID:               "body:example",
+				Kind:             RowKindBodyExample,
+				ValidationTarget: "body:example",
+				Label:            "Example",
+				Meta:             meta,
+				Value:            exampleName,
+				Editable:         len(exampleNames) > 1,
+			})
+		}
+	}
+
+	if len(bodyFields) > 0 {
+		rows = append(rows, parameterRows(bodyFields, draft)...)
+		return rows
+	}
+
+	rows = append(rows, RowDescriptor{
+		ID:               "body:raw",
+		Kind:             RowKindBodyText,
+		ValidationTarget: app.ValidationTargetBodyRaw,
+		Label:            "Body",
+		Value:            BodyPreview(draft),
+		Editable:         true,
+	})
+
+	return rows
 }
 
 func DraftBodyMediaType(operation *model.Operation, draft *model.RequestDraft) string {

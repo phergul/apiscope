@@ -204,6 +204,166 @@ func TestPrepareRequestSerializesMultipartFileUpload(t *testing.T) {
 	}
 }
 
+func TestPrepareRequestSerializesMultipartRequestBodyFields(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	uploadPath := filepath.Join(tempDir, "avatar.txt")
+	if err := os.WriteFile(uploadPath, []byte("hello file"), 0o600); err != nil {
+		t.Fatalf("WriteFile returned error: %v", err)
+	}
+
+	executor := NewExecutor(nil, nil)
+	operation := &model.Operation{
+		Method: "POST",
+		Path:   "/upload",
+		RequestBody: &model.RequestBodySpec{
+			Content: []model.MediaTypeSpec{{MediaType: "multipart/form-data"}},
+		},
+	}
+	draft := &model.RequestDraft{
+		BodyMediaType:  "multipart/form-data",
+		FormParams:     map[string]string{"description": "avatar"},
+		FormFileParams: map[string]string{"file": uploadPath},
+	}
+
+	request, err := executor.PrepareRequest(operation, draft, "https://api.example.com", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("PrepareRequest returned error: %v", err)
+	}
+	mediaType, params, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+	if err != nil {
+		t.Fatalf("ParseMediaType returned error: %v", err)
+	}
+	if mediaType != "multipart/form-data" {
+		t.Fatalf("expected multipart request body content type, got %q", mediaType)
+	}
+
+	reader := multipart.NewReader(request.Body, params["boundary"])
+	parts := map[string]string{}
+	filenames := map[string]string{}
+	for {
+		part, err := reader.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("NextPart returned error: %v", err)
+		}
+		body, err := io.ReadAll(part)
+		if err != nil {
+			t.Fatalf("ReadAll returned error: %v", err)
+		}
+		parts[part.FormName()] = string(body)
+		filenames[part.FormName()] = part.FileName()
+	}
+	if got := parts["description"]; got != "avatar" {
+		t.Fatalf("expected multipart request-body scalar field, got %q", got)
+	}
+	if got := parts["file"]; got != "hello file" {
+		t.Fatalf("expected multipart request-body file part, got %q", got)
+	}
+	if got := filenames["file"]; got != "avatar.txt" {
+		t.Fatalf("expected multipart request-body filename avatar.txt, got %q", got)
+	}
+}
+
+func TestPrepareRequestSerializesStructuredMultipartRequestBodyFieldAsJSONPart(t *testing.T) {
+	t.Parallel()
+
+	executor := NewExecutor(nil, nil)
+	operation := &model.Operation{
+		Method: "POST",
+		Path:   "/upload",
+		RequestBody: &model.RequestBodySpec{
+			Content: []model.MediaTypeSpec{{
+				MediaType: "multipart/form-data",
+				Schema: &model.Schema{
+					Type: "object",
+					Properties: map[string]*model.Schema{
+						"metadata": {
+							Type: "object",
+							Properties: map[string]*model.Schema{
+								"region": {Type: "string"},
+							},
+						},
+					},
+				},
+			}},
+		},
+	}
+	draft := &model.RequestDraft{
+		BodyMediaType: "multipart/form-data",
+		FormParams:    map[string]string{"metadata": `{"region":"ie"}`},
+	}
+
+	request, err := executor.PrepareRequest(operation, draft, "https://api.example.com", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("PrepareRequest returned error: %v", err)
+	}
+	mediaType, params, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+	if err != nil {
+		t.Fatalf("ParseMediaType returned error: %v", err)
+	}
+	if mediaType != "multipart/form-data" {
+		t.Fatalf("expected multipart request body content type, got %q", mediaType)
+	}
+
+	reader := multipart.NewReader(request.Body, params["boundary"])
+	part, err := reader.NextPart()
+	if err != nil {
+		t.Fatalf("NextPart returned error: %v", err)
+	}
+	body, err := io.ReadAll(part)
+	if err != nil {
+		t.Fatalf("ReadAll returned error: %v", err)
+	}
+	if got := part.FormName(); got != "metadata" {
+		t.Fatalf("expected structured multipart field name, got %q", got)
+	}
+	if got := part.Header.Get("Content-Type"); got != "application/json" {
+		t.Fatalf("expected structured multipart field content type, got %q", got)
+	}
+	if got := string(body); got != `{"region":"ie"}` {
+		t.Fatalf("expected structured multipart field body, got %q", got)
+	}
+	if _, err := reader.NextPart(); err != io.EOF {
+		t.Fatalf("expected one structured multipart field part, got %v", err)
+	}
+}
+
+func TestPrepareRequestSerializesUrlencodedRequestBodyFields(t *testing.T) {
+	t.Parallel()
+
+	executor := NewExecutor(nil, nil)
+	operation := &model.Operation{
+		Method: "POST",
+		Path:   "/submit",
+		RequestBody: &model.RequestBodySpec{
+			Content: []model.MediaTypeSpec{{MediaType: "application/x-www-form-urlencoded"}},
+		},
+	}
+	draft := &model.RequestDraft{
+		BodyMediaType: "application/x-www-form-urlencoded",
+		FormParams:    map[string]string{"attachment": "inline-data"},
+	}
+
+	request, err := executor.PrepareRequest(operation, draft, "https://api.example.com", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("PrepareRequest returned error: %v", err)
+	}
+	if got := request.Header.Get("Content-Type"); got != "application/x-www-form-urlencoded" {
+		t.Fatalf("expected urlencoded request-body content type, got %q", got)
+	}
+	body, err := io.ReadAll(request.Body)
+	if err != nil {
+		t.Fatalf("ReadAll returned error: %v", err)
+	}
+	if got := string(body); got != "attachment=inline-data" {
+		t.Fatalf("expected urlencoded request-body fields, got %q", got)
+	}
+}
+
 func TestPrepareRequestReturnsClearErrorForUnreadableMultipartFilePath(t *testing.T) {
 	t.Parallel()
 

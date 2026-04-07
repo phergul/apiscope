@@ -70,3 +70,20 @@ func TestAvailableSectionsPlacesFormBeforeBodyAndOmitsBodyForFormOnlyOperations(
 		t.Fatalf("expected environment section after form, got %#v", sections)
 	}
 }
+
+func TestAvailableSectionsIncludesServerForTemplatedServerVariables(t *testing.T) {
+	t.Parallel()
+
+	sections := AvailableSections(&model.Operation{}, nil, []model.Server{{
+		URL: "https://{env}.example.com",
+		Variables: map[string]model.ServerVariable{
+			"env": {Default: "api"},
+		},
+	}})
+	if len(sections) != 2 {
+		t.Fatalf("expected environment and server sections, got %#v", sections)
+	}
+	if sections[0] != SectionEnvironment || sections[1] != SectionServer {
+		t.Fatalf("expected environment then server sections, got %#v", sections)
+	}
+}

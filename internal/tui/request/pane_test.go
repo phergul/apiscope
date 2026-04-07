@@ -102,6 +102,179 @@ func TestProjectPaneBuildsServerSwitchRow(t *testing.T) {
 	}
 }
 
+func TestProjectPaneBuildsReadOnlyTemplatedServerRow(t *testing.T) {
+	t.Parallel()
+
+	projection := ProjectPane(PaneInput{
+		Selected: &model.Operation{},
+		Servers: []model.Server{{
+			URL: "https://{env}.example.com",
+			Variables: map[string]model.ServerVariable{
+				"env": {Default: "api"},
+			},
+		}},
+		SelectedServerURL: "https://{env}.example.com",
+		ActiveSection:     SectionServer,
+	})
+
+	if projection.Data.ActiveSection != SectionServer {
+		t.Fatalf("expected server section, got %q", projection.Data.ActiveSection)
+	}
+	if len(projection.Data.Rows) != 1 {
+		t.Fatalf("expected one templated server row, got %#v", projection.Data.Rows)
+	}
+	if projection.Data.Rows[0].Editable {
+		t.Fatalf("expected templated server row to stay read-only, got %#v", projection.Data.Rows[0])
+	}
+	if projection.Data.Rows[0].Meta != "templated server" {
+		t.Fatalf("expected templated server meta, got %#v", projection.Data.Rows[0])
+	}
+}
+
+func TestProjectPaneBuildsBodyExampleRowWhenNamedExamplesExist(t *testing.T) {
+	t.Parallel()
+
+	projection := ProjectPane(PaneInput{
+		Selected: &model.Operation{
+			RequestBody: &model.RequestBodySpec{
+				Content: []model.MediaTypeSpec{{
+					MediaType: "application/json",
+					Examples: map[string]model.Example{
+						"a-first":  {Value: map[string]any{"name": "first"}},
+						"b-second": {Value: map[string]any{"name": "second"}},
+					},
+				}},
+			},
+		},
+		Draft:         &model.RequestDraft{BodyMediaType: "application/json", SelectedExamples: map[string]string{"body:application/json": "b-second"}},
+		ActiveSection: SectionBody,
+	})
+
+	if len(projection.Data.Rows) != 3 {
+		t.Fatalf("expected media type, example, and body rows, got %#v", projection.Data.Rows)
+	}
+	if projection.Data.Rows[1].Kind != RowKindBodyExample {
+		t.Fatalf("expected body example row, got %#v", projection.Data.Rows[1])
+	}
+	if projection.Data.Rows[1].Value != "b-second" || !projection.Data.Rows[1].Editable {
+		t.Fatalf("expected editable selected example row, got %#v", projection.Data.Rows[1])
+	}
+}
+
+func TestProjectPaneBuildsMultipartBodyFieldRows(t *testing.T) {
+	t.Parallel()
+
+	projection := ProjectPane(PaneInput{
+		Selected: &model.Operation{
+			RequestBody: &model.RequestBodySpec{
+				Content: []model.MediaTypeSpec{{
+					MediaType: "multipart/form-data",
+					Schema: &model.Schema{
+						Type:     "object",
+						Required: []string{"description", "file"},
+						Properties: map[string]*model.Schema{
+							"description": {Type: "string"},
+							"file":        {Type: "string", Format: "binary"},
+						},
+					},
+				}},
+			},
+		},
+		Draft: &model.RequestDraft{
+			BodyMediaType:  "multipart/form-data",
+			FormParams:     map[string]string{"description": "avatar"},
+			FormFileParams: map[string]string{"file": "/tmp/demo.txt"},
+		},
+		ActiveSection: SectionBody,
+	})
+
+	if len(projection.Data.Rows) != 3 {
+		t.Fatalf("expected media type plus multipart field rows, got %#v", projection.Data.Rows)
+	}
+	if projection.Data.Rows[1].Label != "description" || projection.Data.Rows[1].Value != "avatar" {
+		t.Fatalf("expected multipart scalar row, got %#v", projection.Data.Rows[1])
+	}
+	if projection.Data.Rows[2].Label != "file" || projection.Data.Rows[2].Meta != "required, file path" {
+		t.Fatalf("expected multipart file row, got %#v", projection.Data.Rows[2])
+	}
+}
+
+func TestProjectPaneBuildsStructuredMultipartBodyFieldRow(t *testing.T) {
+	t.Parallel()
+
+	projection := ProjectPane(PaneInput{
+		Selected: &model.Operation{
+			RequestBody: &model.RequestBodySpec{
+				Content: []model.MediaTypeSpec{{
+					MediaType: "multipart/form-data",
+					Schema: &model.Schema{
+						Type: "object",
+						Properties: map[string]*model.Schema{
+							"metadata": {
+								Type: "object",
+								Properties: map[string]*model.Schema{
+									"region": {Type: "string"},
+								},
+							},
+						},
+					},
+				}},
+			},
+		},
+		Draft: &model.RequestDraft{
+			BodyMediaType: "multipart/form-data",
+			FormParams:    map[string]string{"metadata": "{\"region\":\"ie\"}"},
+		},
+		ActiveSection: SectionBody,
+	})
+
+	if len(projection.Data.Rows) != 2 {
+		t.Fatalf("expected media type plus structured multipart field row, got %#v", projection.Data.Rows)
+	}
+	if projection.Data.Rows[1].Label != "metadata" || projection.Data.Rows[1].Meta != "optional, object" {
+		t.Fatalf("expected structured multipart row, got %#v", projection.Data.Rows[1])
+	}
+	if projection.Data.Rows[1].Value != "{\"region\":\"ie\"}" {
+		t.Fatalf("expected structured multipart row value, got %#v", projection.Data.Rows[1])
+	}
+}
+
+func TestProjectPaneBuildsUrlencodedBodyFieldRows(t *testing.T) {
+	t.Parallel()
+
+	projection := ProjectPane(PaneInput{
+		Selected: &model.Operation{
+			RequestBody: &model.RequestBodySpec{
+				Content: []model.MediaTypeSpec{{
+					MediaType: "application/x-www-form-urlencoded",
+					Schema: &model.Schema{
+						Type:     "object",
+						Required: []string{"attachment"},
+						Properties: map[string]*model.Schema{
+							"attachment": {Type: "string", Format: "binary"},
+						},
+					},
+				}},
+			},
+		},
+		Draft: &model.RequestDraft{
+			BodyMediaType: "application/x-www-form-urlencoded",
+			FormParams:    map[string]string{"attachment": "inline-data"},
+		},
+		ActiveSection: SectionBody,
+	})
+
+	if len(projection.Data.Rows) != 2 {
+		t.Fatalf("expected media type plus urlencoded field row, got %#v", projection.Data.Rows)
+	}
+	if projection.Data.Rows[1].Label != "attachment" || projection.Data.Rows[1].Meta != "required, string/binary" {
+		t.Fatalf("expected scalar urlencoded field row, got %#v", projection.Data.Rows[1])
+	}
+	if !projection.Data.Rows[1].Editable || projection.Data.Rows[1].Value != "inline-data" {
+		t.Fatalf("expected editable urlencoded field value, got %#v", projection.Data.Rows[1])
+	}
+}
+
 func TestProjectPaneBuildsAlternativeBlocksWithoutDeduplicatingSchemes(t *testing.T) {
 	t.Parallel()
 

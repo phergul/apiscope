@@ -22,6 +22,7 @@ func seedRequestDraft(draft *model.RequestDraft, operation *model.Operation) {
 	if strings.TrimSpace(draft.BodyMediaType) == "" {
 		draft.BodyMediaType = defaultDraftBodyMediaType(operation)
 	}
+	seedDraftBodyFields(draft, operation)
 	seedDraftBody(draft, operation)
 }
 
@@ -80,8 +81,11 @@ func seedDraftBody(draft *model.RequestDraft, operation *model.Operation) {
 	if draft == nil || operation == nil || strings.TrimSpace(draft.BodyRaw) != "" {
 		return
 	}
+	if len(ProjectBodyFieldParameters(operation, draft)) > 0 {
+		return
+	}
 
-	body, exampleName, ok := seededRequestBody(operation, draft.BodyMediaType)
+	body, exampleName, ok := seededRequestBody(operation, draft, draft.BodyMediaType)
 	if !ok {
 		return
 	}
@@ -95,17 +99,17 @@ func shouldReplaceSeededBody(operation *model.Operation, draft *model.RequestDra
 		return true
 	}
 
-	seeded, _, ok := seededRequestBody(operation, draft.BodyMediaType)
+	seeded, _, ok := seededRequestBody(operation, draft, draft.BodyMediaType)
 	return ok && draft.BodyRaw == seeded
 }
 
-func seededRequestBody(operation *model.Operation, mediaType string) (string, string, bool) {
+func seededRequestBody(operation *model.Operation, draft *model.RequestDraft, mediaType string) (string, string, bool) {
 	spec, ok := requestBodyMediaType(operation, mediaType)
 	if !ok {
 		return "", "", false
 	}
 
-	value, exampleName, ok := seededMediaTypeValue(spec)
+	value, exampleName, ok := seededMediaTypeValue(spec, selectedBodyExampleName(draft, mediaType))
 	if !ok {
 		return "", "", false
 	}
@@ -137,26 +141,47 @@ func requestBodyMediaType(operation *model.Operation, mediaType string) (model.M
 	return model.MediaTypeSpec{}, false
 }
 
-func seededMediaTypeValue(spec model.MediaTypeSpec) (any, string, bool) {
+func seededMediaTypeValue(spec model.MediaTypeSpec, preferredExampleName string) (any, string, bool) {
 	if spec.Example != nil {
 		return spec.Example, "", true
 	}
-	if len(spec.Examples) > 0 {
-		names := make([]string, 0, len(spec.Examples))
-		for name := range spec.Examples {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		for _, name := range names {
-			example := spec.Examples[name]
-			if example.Value != nil {
-				return example.Value, name, true
+	if names := mediaTypeExampleNames(spec); len(names) > 0 {
+		preferred := strings.TrimSpace(preferredExampleName)
+		if preferred != "" {
+			if example, ok := spec.Examples[preferred]; ok && example.Value != nil {
+				return example.Value, preferred, true
 			}
 		}
+		first := names[0]
+		return spec.Examples[first].Value, first, true
 	}
 
 	value, ok := schemaSeedValue(spec.Schema)
 	return value, "", ok
+}
+
+func mediaTypeExampleNames(spec model.MediaTypeSpec) []string {
+	if len(spec.Examples) == 0 {
+		return nil
+	}
+
+	names := make([]string, 0, len(spec.Examples))
+	for name, example := range spec.Examples {
+		if example.Value == nil {
+			continue
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func selectedBodyExampleName(draft *model.RequestDraft, mediaType string) string {
+	if draft == nil || strings.TrimSpace(mediaType) == "" || len(draft.SelectedExamples) == 0 {
+		return ""
+	}
+
+	return strings.TrimSpace(draft.SelectedExamples["body:"+mediaType])
 }
 
 func firstStructuredSeedValue(example, defaultValue any, schema *model.Schema) (any, bool) {

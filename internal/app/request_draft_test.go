@@ -206,6 +206,118 @@ func TestEnsureRequestDraftSeedsBodyFromSchemaDefaults(t *testing.T) {
 	}
 }
 
+func TestEnsureRequestDraftSeedsMultipartBodyFieldsFromSchemaDefaults(t *testing.T) {
+	t.Parallel()
+
+	session := model.SessionState{
+		SpecFingerprint: "spec-123",
+		RequestDrafts:   make(map[model.DraftKey]*model.RequestDraft),
+	}
+	operation := &model.Operation{
+		Key: model.NewOperationKey("POST", "/upload"),
+		RequestBody: &model.RequestBodySpec{
+			Content: []model.MediaTypeSpec{{
+				MediaType: "multipart/form-data",
+				Schema: &model.Schema{
+					Type:     "object",
+					Required: []string{"description", "file"},
+					Properties: map[string]*model.Schema{
+						"description": {Type: "string", Default: "avatar"},
+						"file":        {Type: "string", Format: "binary"},
+					},
+				},
+			}},
+		},
+	}
+
+	draft := EnsureRequestDraft(&session, operation)
+
+	if got := draft.BodyMediaType; got != "multipart/form-data" {
+		t.Fatalf("expected multipart body media type, got %q", got)
+	}
+	if got := draft.FormParams["description"]; got != "avatar" {
+		t.Fatalf("expected multipart scalar default to seed form params, got %q", got)
+	}
+	if got := draft.FormFileParams["file"]; got != "" {
+		t.Fatalf("expected multipart file input to stay unset, got %q", got)
+	}
+	if got := draft.BodyRaw; got != "" {
+		t.Fatalf("expected multipart field body to avoid raw body seeding, got %q", got)
+	}
+}
+
+func TestEnsureRequestDraftSeedsMultipartStructuredBodyFieldAsJSON(t *testing.T) {
+	t.Parallel()
+
+	session := model.SessionState{
+		SpecFingerprint: "spec-123",
+		RequestDrafts:   make(map[model.DraftKey]*model.RequestDraft),
+	}
+	operation := &model.Operation{
+		Key: model.NewOperationKey("POST", "/upload"),
+		RequestBody: &model.RequestBodySpec{
+			Content: []model.MediaTypeSpec{{
+				MediaType: "multipart/form-data",
+				Schema: &model.Schema{
+					Type: "object",
+					Properties: map[string]*model.Schema{
+						"metadata": {
+							Type: "object",
+							Properties: map[string]*model.Schema{
+								"region": {Type: "string", Default: "ie"},
+							},
+						},
+					},
+				},
+			}},
+		},
+	}
+
+	draft := EnsureRequestDraft(&session, operation)
+	if got := draft.FormParams["metadata"]; got != "{\n  \"region\": \"ie\"\n}" {
+		t.Fatalf("expected structured multipart field to seed as JSON, got %q", got)
+	}
+}
+
+func TestEnsureRequestDraftSeedsUrlencodedBodyFieldsWithoutFileInputMode(t *testing.T) {
+	t.Parallel()
+
+	session := model.SessionState{
+		SpecFingerprint: "spec-123",
+		RequestDrafts:   make(map[model.DraftKey]*model.RequestDraft),
+	}
+	operation := &model.Operation{
+		Key: model.NewOperationKey("POST", "/submit"),
+		RequestBody: &model.RequestBodySpec{
+			Content: []model.MediaTypeSpec{{
+				MediaType: "application/x-www-form-urlencoded",
+				Schema: &model.Schema{
+					Type:     "object",
+					Required: []string{"attachment"},
+					Properties: map[string]*model.Schema{
+						"attachment": {Type: "string", Format: "binary", Default: "inline-data"},
+					},
+				},
+			}},
+		},
+	}
+
+	draft := EnsureRequestDraft(&session, operation)
+	params := ProjectBodyFieldParameters(operation, draft)
+	if len(params) != 1 {
+		t.Fatalf("expected one urlencoded body field, got %#v", params)
+	}
+	if params[0].FormInputKind != model.FormInputKindValue {
+		t.Fatalf("expected urlencoded field to stay scalar, got %#v", params[0])
+	}
+	if got := draft.FormParams["attachment"]; got != "inline-data" {
+		t.Fatalf("expected urlencoded default to seed scalar form param, got %q", got)
+	}
+	if got := draft.FormFileParams["attachment"]; got != "" {
+		t.Fatalf("expected urlencoded field to avoid file-path storage, got %q", got)
+	}
+}
+
 func TestEnsureRequestDraftReusesExistingDraft(t *testing.T) {
 	t.Parallel()
 
@@ -382,5 +494,69 @@ func TestSetDraftBodyMediaTypePreservesUserEditedBody(t *testing.T) {
 	draft = SetDraftBodyMediaType(&session, operation, "application/xml")
 	if got := draft.BodyRaw; got != "{\"name\":\"custom\"}" {
 		t.Fatalf("expected user-edited body to be preserved, got %q", got)
+	}
+}
+
+func TestSetDraftBodyExampleAppliesSelectedNamedExample(t *testing.T) {
+	t.Parallel()
+
+	session := model.SessionState{
+		SpecFingerprint: "spec-123",
+		RequestDrafts:   make(map[model.DraftKey]*model.RequestDraft),
+	}
+	operation := &model.Operation{
+		Key: model.NewOperationKey("POST", "/pets"),
+		RequestBody: &model.RequestBodySpec{
+			Content: []model.MediaTypeSpec{{
+				MediaType: "application/json",
+				Examples: map[string]model.Example{
+					"a-first":  {Value: map[string]any{"name": "first"}},
+					"b-second": {Value: map[string]any{"name": "second"}},
+				},
+			}},
+		},
+	}
+
+	draft := SetDraftBodyExample(&session, operation, "b-second")
+	if got := draft.BodyRaw; got != "{\n  \"name\": \"second\"\n}" {
+		t.Fatalf("expected selected example body, got %q", got)
+	}
+	if got := draft.SelectedExamples["body:application/json"]; got != "b-second" {
+		t.Fatalf("expected selected example tracking, got %q", got)
+	}
+}
+
+func TestCycleDraftBodyExampleAdvancesNamedExampleSelection(t *testing.T) {
+	t.Parallel()
+
+	session := model.SessionState{
+		SpecFingerprint: "spec-123",
+		RequestDrafts:   make(map[model.DraftKey]*model.RequestDraft),
+	}
+	operation := &model.Operation{
+		Key: model.NewOperationKey("POST", "/pets"),
+		RequestBody: &model.RequestBodySpec{
+			Content: []model.MediaTypeSpec{{
+				MediaType: "application/json",
+				Examples: map[string]model.Example{
+					"a-first":  {Value: map[string]any{"name": "first"}},
+					"b-second": {Value: map[string]any{"name": "second"}},
+				},
+			}},
+		},
+	}
+
+	draft := EnsureRequestDraft(&session, operation)
+	if got := DraftBodyExampleName(operation, draft); got != "a-first" {
+		t.Fatalf("expected first example to seed selection, got %q", got)
+	}
+	if !CycleDraftBodyExample(&session, operation) {
+		t.Fatal("expected example cycle to succeed")
+	}
+	if got := DraftBodyExampleName(operation, draft); got != "b-second" {
+		t.Fatalf("expected example selection to advance, got %q", got)
+	}
+	if got := draft.BodyRaw; got != "{\n  \"name\": \"second\"\n}" {
+		t.Fatalf("expected cycled example body, got %q", got)
 	}
 }

@@ -67,6 +67,61 @@ func TestCycleBodyMediaTypeAdvancesDraftSelection(t *testing.T) {
 	}
 }
 
+func TestCycleBodyExampleAdvancesDraftSelection(t *testing.T) {
+	t.Parallel()
+
+	selected := &model.Operation{
+		Key: model.NewOperationKey("POST", "/pets"),
+		RequestBody: &model.RequestBodySpec{
+			Content: []model.MediaTypeSpec{{
+				MediaType: "application/json",
+				Examples: map[string]model.Example{
+					"a-first":  {Value: map[string]any{"name": "first"}},
+					"b-second": {Value: map[string]any{"name": "second"}},
+				},
+			}},
+		},
+	}
+	session := model.SessionState{
+		RequestDrafts: map[model.DraftKey]*model.RequestDraft{},
+	}
+	app.EnsureRequestDraft(&session, selected)
+
+	ok := CycleBodyExample(&session, selected)
+	if !ok {
+		t.Fatal("expected body example cycle to succeed")
+	}
+
+	draft := app.EnsureRequestDraft(&session, selected)
+	if got := draft.SelectedExamples["body:application/json"]; got != "b-second" {
+		t.Fatalf("expected body example to advance, got %q", got)
+	}
+}
+
+func TestStartEditReturnsBodyExampleCycleAction(t *testing.T) {
+	t.Parallel()
+
+	got := StartEdit(
+		&model.Operation{Key: model.NewOperationKey("POST", "/pets")},
+		nil,
+		[]RowDescriptor{{
+			ID:       "body:example",
+			Kind:     RowKindBodyExample,
+			Editable: true,
+		}},
+		0,
+		nil,
+		nil,
+	)
+
+	if !got.CycleBodyExample {
+		t.Fatal("expected body example row to trigger an example cycle action")
+	}
+	if got.Kind != model.RequestEditKindNone {
+		t.Fatalf("expected no editor to open for body example row, got %q", got.Kind)
+	}
+}
+
 func TestStartEditReturnsServerCycleAction(t *testing.T) {
 	t.Parallel()
 

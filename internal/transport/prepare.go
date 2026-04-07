@@ -5,8 +5,10 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -112,17 +114,25 @@ func prepareRequestBody(operation *model.Operation, draft *model.RequestDraft) (
 		return nil, "", nil
 	}
 
-	switch operation.FormBodyMediaType {
+	switch effectiveBodyMediaType(operation, draft) {
 	case "application/x-www-form-urlencoded":
-		return strings.NewReader(encodeFormParams(draft)), operation.FormBodyMediaType, nil
+		return strings.NewReader(encodeFormParams(draft)), "application/x-www-form-urlencoded", nil
 	case "multipart/form-data":
-		return encodeMultipartForm(draft)
+		return encodeMultipartForm(operation, draft)
 	default:
 		if draft != nil && draft.BodyRaw != "" {
 			return strings.NewReader(draft.BodyRaw), strings.TrimSpace(draft.BodyMediaType), nil
 		}
 		return nil, "", nil
 	}
+}
+
+func effectiveBodyMediaType(operation *model.Operation, draft *model.RequestDraft) string {
+	if draft != nil && strings.TrimSpace(draft.BodyMediaType) != "" {
+		return strings.TrimSpace(draft.BodyMediaType)
+	}
+
+	return strings.TrimSpace(operation.FormBodyMediaType)
 }
 
 // encodeFormParams serializes non-empty form values for urlencoded request bodies.
@@ -142,14 +152,21 @@ func encodeFormParams(draft *model.RequestDraft) string {
 	return values.Encode()
 }
 
-// encodeMultipartForm serializes scalar and file form inputs into a multipart request body.
-func encodeMultipartForm(draft *model.RequestDraft) (io.Reader, string, error) {
+// encodeMultipartForm serializes scalar, structured, and file form inputs into a multipart request body.
+func encodeMultipartForm(operation *model.Operation, draft *model.RequestDraft) (io.Reader, string, error) {
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
+	jsonFields := multipartJSONFields(operation, draft)
 
 	for _, key := range sortedKeys(draftFormValues(draft)) {
 		value := strings.TrimSpace(draft.FormParams[key])
 		if value == "" {
+			continue
+		}
+		if jsonFields[key] {
+			if err := writeMultipartJSONField(writer, key, value); err != nil {
+				return nil, "", err
+			}
 			continue
 		}
 		if err := writer.WriteField(key, value); err != nil {
@@ -172,6 +189,19 @@ func encodeMultipartForm(draft *model.RequestDraft) (io.Reader, string, error) {
 	}
 
 	return &body, writer.FormDataContentType(), nil
+}
+
+func writeMultipartJSONField(writer *multipart.Writer, fieldName, value string) error {
+	headers := make(textproto.MIMEHeader)
+	headers.Set("Content-Disposition", mime.FormatMediaType("form-data", map[string]string{"name": fieldName}))
+	headers.Set("Content-Type", "application/json")
+
+	part, err := writer.CreatePart(headers)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(part, strings.NewReader(value))
+	return err
 }
 
 func writeMultipartFile(writer *multipart.Writer, fieldName, path string) error {
@@ -214,6 +244,54 @@ func draftFileValues(draft *model.RequestDraft) map[string]string {
 	}
 
 	return draft.FormFileParams
+}
+
+func multipartJSONFields(operation *model.Operation, draft *model.RequestDraft) map[string]bool {
+	if operation == nil || operation.RequestBody == nil || len(operation.RequestBody.Content) == 0 {
+		return nil
+	}
+	if effectiveBodyMediaType(operation, draft) != "multipart/form-data" {
+		return nil
+	}
+
+	schema := multipartBodySchema(operation, draft)
+	if schema == nil || len(schema.Properties) == 0 {
+		return nil
+	}
+
+	fields := make(map[string]bool)
+	for name, property := range schema.Properties {
+		if multipartUsesJSONPart(property) {
+			fields[name] = true
+		}
+	}
+	if len(fields) == 0 {
+		return nil
+	}
+	return fields
+}
+
+func multipartBodySchema(operation *model.Operation, draft *model.RequestDraft) *model.Schema {
+	mediaType := effectiveBodyMediaType(operation, draft)
+	for _, content := range operation.RequestBody.Content {
+		if content.MediaType == mediaType {
+			return content.Schema
+		}
+	}
+	return nil
+}
+
+func multipartUsesJSONPart(schema *model.Schema) bool {
+	if schema == nil {
+		return false
+	}
+	if strings.TrimSpace(schema.Type) == "array" || strings.TrimSpace(schema.Type) == "object" {
+		return true
+	}
+	if len(schema.Properties) > 0 || schema.Items != nil || len(schema.OneOf) > 0 || len(schema.AnyOf) > 0 || len(schema.AllOf) > 0 {
+		return true
+	}
+	return false
 }
 
 func sortedKeys(values map[string]string) []string {

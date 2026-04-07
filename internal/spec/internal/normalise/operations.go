@@ -234,7 +234,9 @@ func normaliseRequestBody(requestBody *openapi3.RequestBodyRef) (*model.RequestB
 		return nil, nil
 	}
 
-	content, warnings := normaliseContent(requestBody.Value.Content)
+	content, warnings := normaliseContent(requestBody.Value.Content, func(mediaType string) string {
+		return "requestBody:" + mediaType
+	})
 	return &model.RequestBodySpec{
 		Description: requestBody.Value.Description,
 		Required:    requestBody.Value.Required,
@@ -260,7 +262,9 @@ func normaliseResponses(responses *openapi3.Responses) ([]model.ResponseSpec, []
 		if responseRef == nil || responseRef.Value == nil {
 			continue
 		}
-		content, contentWarnings := normaliseContent(responseRef.Value.Content)
+		content, contentWarnings := normaliseContent(responseRef.Value.Content, func(mediaType string) string {
+			return "response:" + code + ":" + mediaType
+		})
 		warnings = append(warnings, contentWarnings...)
 		headers, headerWarnings := normaliseResponseHeaders(responseRef.Value.Headers)
 		warnings = append(warnings, headerWarnings...)
@@ -305,7 +309,9 @@ func normaliseParameterModel(name string, in model.ParameterLocation, parameter 
 		return model.Parameter{}, nil
 	}
 
-	content, warnings := normaliseContent(parameter.Content)
+	content, warnings := normaliseContent(parameter.Content, func(mediaType string) string {
+		return fmt.Sprintf("parameter:%s:%s:%s", in, name, mediaType)
+	})
 	normalised := model.Parameter{
 		Name:                name,
 		In:                  in,
@@ -336,7 +342,7 @@ func normaliseParameterModel(name string, in model.ParameterLocation, parameter 
 	return normalised, warnings
 }
 
-func normaliseContent(content openapi3.Content) ([]model.MediaTypeSpec, []model.SpecWarning) {
+func normaliseContent(content openapi3.Content, warningPath func(string) string) ([]model.MediaTypeSpec, []model.SpecWarning) {
 	if len(content) == 0 {
 		return nil, nil
 	}
@@ -361,10 +367,14 @@ func normaliseContent(content openapi3.Content) ([]model.MediaTypeSpec, []model.
 			Examples:  normaliseExamples(mediaTypeValue.Examples),
 		})
 		if len(mediaTypeValue.Encoding) > 0 {
+			path := mediaType
+			if warningPath != nil {
+				path = warningPath(mediaType)
+			}
 			warnings = append(warnings, model.SpecWarning{
 				Code:    model.SpecWarningDowngradedFeature,
 				Message: fmt.Sprintf("encoding details for media type %q were not preserved in the normalised model", mediaType),
-				Path:    mediaType,
+				Path:    path,
 			})
 		}
 	}

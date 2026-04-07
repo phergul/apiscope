@@ -90,7 +90,21 @@ func ValidateRequest(operation *model.Operation, draft *model.RequestDraft) Requ
 				Message: "Select a media type for the request body.",
 			})
 		}
-		if draft == nil || strings.TrimSpace(draft.BodyRaw) == "" {
+		if bodyFields := ProjectBodyFieldParameters(operation, draft); len(bodyFields) > 0 {
+			for _, parameter := range bodyFields {
+				if !parameter.Required {
+					continue
+				}
+				if strings.TrimSpace(draftParameterValue(draft, parameter)) != "" {
+					continue
+				}
+				result.Issues = append(result.Issues, RequestValidationIssue{
+					Section: "Body",
+					Target:  string(parameter.In) + ":" + parameter.Name,
+					Message: "Required value missing.",
+				})
+			}
+		} else if draft == nil || strings.TrimSpace(draft.BodyRaw) == "" {
 			result.Issues = append(result.Issues, RequestValidationIssue{
 				Section: "Body",
 				Target:  ValidationTargetBodyRaw,

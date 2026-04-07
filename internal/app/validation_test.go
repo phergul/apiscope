@@ -66,3 +66,38 @@ func TestValidateRequestPassesWhenRequiredInputsArePresent(t *testing.T) {
 		t.Fatalf("expected validation to pass, got %#v", result.Issues)
 	}
 }
+
+func TestValidateRequestReportsRequiredMultipartBodyFields(t *testing.T) {
+	t.Parallel()
+
+	operation := &model.Operation{
+		RequestBody: &model.RequestBodySpec{
+			Required: true,
+			Content: []model.MediaTypeSpec{{
+				MediaType: "multipart/form-data",
+				Schema: &model.Schema{
+					Type:     "object",
+					Required: []string{"description", "file"},
+					Properties: map[string]*model.Schema{
+						"description": {Type: "string"},
+						"file":        {Type: "string", Format: "binary"},
+					},
+				},
+			}},
+		},
+	}
+
+	result := ValidateRequest(operation, &model.RequestDraft{BodyMediaType: "multipart/form-data"})
+	if len(result.MessagesForSection("Body")) != 2 {
+		t.Fatalf("expected multipart body field issues, got %#v", result.Issues)
+	}
+	if _, ok := result.IssueForTarget("form:description"); !ok {
+		t.Fatalf("expected description body-field issue, got %#v", result.Issues)
+	}
+	if _, ok := result.IssueForTarget("form:file"); !ok {
+		t.Fatalf("expected file body-field issue, got %#v", result.Issues)
+	}
+	if _, ok := result.IssueForTarget(ValidationTargetBodyRaw); ok {
+		t.Fatalf("expected raw body validation to be skipped for multipart fields, got %#v", result.Issues)
+	}
+}

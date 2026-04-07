@@ -909,6 +909,49 @@ paths:
 	}
 }
 
+func TestDocumentMarksRequestBodyEncodingWarningsWithRequestBodyPath(t *testing.T) {
+	t.Parallel()
+
+	spec, err := Document(mustResolvedOpenAPI3(t, `openapi: 3.0.3
+info:
+  title: Demo
+  version: 1.0.0
+paths:
+  /upload:
+    post:
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+            encoding:
+              file:
+                contentType: image/png
+      responses:
+        "200":
+          description: ok
+`))
+	if err != nil {
+		t.Fatalf("Document returned error: %v", err)
+	}
+
+	for _, warning := range spec.Warnings {
+		if !strings.Contains(warning.Message, `encoding details for media type "multipart/form-data"`) {
+			continue
+		}
+		if warning.Path != "requestBody:multipart/form-data" {
+			t.Fatalf("expected request-body warning path, got %#v", warning)
+		}
+		return
+	}
+	t.Fatalf("expected request-body encoding warning, got %#v", spec.Warnings)
+}
+
 func TestDocumentNormalisesEquivalentSwaggerAndOAS3SerialisationShapes(t *testing.T) {
 	t.Parallel()
 

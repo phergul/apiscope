@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/phergul/apiscope/internal/app"
 	"github.com/phergul/apiscope/internal/model"
 	detailsui "github.com/phergul/apiscope/internal/tui/details"
 	operationsui "github.com/phergul/apiscope/internal/tui/operations"
@@ -69,6 +70,7 @@ func (m *Model) projectDetailsPaneForSize(width, height int) detailsui.PaneProje
 	}
 	if m.session.Spec != nil {
 		data.Warnings = append([]model.SpecWarning{}, m.session.Spec.Warnings...)
+		data.Warnings = append(data.Warnings, app.ProjectCapabilityWarnings(m.session.Spec)...)
 	}
 
 	return detailsui.ProjectPane(data)

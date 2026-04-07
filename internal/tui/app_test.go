@@ -933,6 +933,70 @@ func TestModelCtrlRExecutesUrlencodedFormOperation(t *testing.T) {
 	}
 }
 
+func TestModelCtrlRExecutesOAS3UrlencodedRequestBodyOperation(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Method; got != http.MethodPost {
+			t.Fatalf("expected POST request, got %q", got)
+		}
+		if got := r.Header.Get("Content-Type"); got != "application/x-www-form-urlencoded" {
+			t.Fatalf("expected form content type, got %q", got)
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("ReadAll returned error: %v", err)
+		}
+		if got := string(body); got != "name=fido" {
+			t.Fatalf("expected urlencoded request-body fields, got %q", got)
+		}
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	m := newLoadedModelForNavigation()
+	m.service = app.NewService(nil, nil, nil, nil)
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.session.SelectedOperationKey = model.NewOperationKey("POST", "/pets")
+	m.session.SelectedServerURL = server.URL
+	m.session.Spec.Security = nil
+	m.session.Spec.Operations[1].RequestBody = &model.RequestBodySpec{
+		Required: true,
+		Content: []model.MediaTypeSpec{{
+			MediaType: "application/x-www-form-urlencoded",
+			Schema: &model.Schema{
+				Type:     "object",
+				Required: []string{"name"},
+				Properties: map[string]*model.Schema{
+					"name": {Type: "string"},
+				},
+			},
+		}},
+	}
+	m.session.Spec.Operations[1].Security = nil
+	m.panes.activeRequestSection = requestui.SectionBody
+
+	draft := m.ensureSelectedRequestDraft()
+	draft.BodyMediaType = "application/x-www-form-urlencoded"
+	draft.FormParams["name"] = "fido"
+
+	updatedModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlR})
+	updated := updatedModel.(*Model)
+	if cmd == nil {
+		t.Fatal("expected ctrl+r to execute OAS3 urlencoded request-body request")
+	}
+
+	msg := cmd()
+	updatedModel, _ = updated.Update(msg)
+	updated = updatedModel.(*Model)
+	if updated.session.LastResponse == nil {
+		t.Fatal("expected response after execution")
+	}
+	if updated.session.LastResponse.TransportError != "" {
+		t.Fatalf("expected successful execution, got %q", updated.session.LastResponse.TransportError)
+	}
+}
+
 func TestModelCtrlRExecutesMultipartFormOperation(t *testing.T) {
 	t.Parallel()
 
@@ -1079,6 +1143,86 @@ func TestModelCtrlRExecutesMultipartFileUploadOperation(t *testing.T) {
 	}
 	if got := updated.session.RequestHistory[len(updated.session.RequestHistory)-1].Request.Draft.FormFileParams["file"]; got != uploadPath {
 		t.Fatalf("expected request history snapshot to preserve file path, got %q", got)
+	}
+}
+
+func TestModelCtrlRExecutesStructuredMultipartRequestBodyOperation(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mediaType, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		if err != nil {
+			t.Fatalf("ParseMediaType returned error: %v", err)
+		}
+		if mediaType != "multipart/form-data" {
+			t.Fatalf("expected multipart form content type, got %q", mediaType)
+		}
+		reader := multipart.NewReader(r.Body, params["boundary"])
+		part, err := reader.NextPart()
+		if err != nil {
+			t.Fatalf("NextPart returned error: %v", err)
+		}
+		body, err := io.ReadAll(part)
+		if err != nil {
+			t.Fatalf("ReadAll returned error: %v", err)
+		}
+		if got := part.FormName(); got != "metadata" {
+			t.Fatalf("expected multipart field name, got %q", got)
+		}
+		if got := part.Header.Get("Content-Type"); got != "application/json" {
+			t.Fatalf("expected structured multipart part content type, got %q", got)
+		}
+		if got := string(body); got != `{"region":"ie"}` {
+			t.Fatalf("expected multipart field value, got %q", got)
+		}
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	m := newLoadedModelForNavigation()
+	m.service = app.NewService(nil, nil, nil, nil)
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.session.SelectedOperationKey = model.NewOperationKey("POST", "/pets")
+	m.session.SelectedServerURL = server.URL
+	m.session.Spec.Security = nil
+	m.session.Spec.Operations[1].RequestBody = &model.RequestBodySpec{
+		Required: true,
+		Content: []model.MediaTypeSpec{{
+			MediaType: "multipart/form-data",
+			Schema: &model.Schema{
+				Type: "object",
+				Properties: map[string]*model.Schema{
+					"metadata": {
+						Type: "object",
+						Properties: map[string]*model.Schema{
+							"region": {Type: "string"},
+						},
+					},
+				},
+			},
+		}},
+	}
+	m.session.Spec.Operations[1].Security = nil
+	m.panes.activeRequestSection = requestui.SectionBody
+
+	draft := m.ensureSelectedRequestDraft()
+	draft.BodyMediaType = "multipart/form-data"
+	draft.FormParams["metadata"] = `{"region":"ie"}`
+
+	updatedModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlR})
+	updated := updatedModel.(*Model)
+	if cmd == nil {
+		t.Fatal("expected ctrl+r to execute structured multipart request")
+	}
+
+	msg := cmd()
+	updatedModel, _ = updated.Update(msg)
+	updated = updatedModel.(*Model)
+	if updated.session.LastResponse == nil {
+		t.Fatal("expected response after execution")
+	}
+	if updated.session.LastResponse.TransportError != "" {
+		t.Fatalf("expected successful execution, got %q", updated.session.LastResponse.TransportError)
 	}
 }
 
@@ -2412,6 +2556,123 @@ func TestModelThemeKeysStillWorkFromHistoryPopup(t *testing.T) {
 	}
 }
 
+func TestModelDetailsPaneShowsCapabilityWarningsForSwaggerSpecs(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.session.Spec.SourceFamily = model.SourceFamilySwagger2
+	m.session.Spec.SourceVersion = "2.0"
+	m.session.Spec.Capabilities = model.CapabilitySet{
+		SupportsSwagger2Conversion: true,
+		SupportsRequestBodies:      true,
+		SupportsSecuritySchemes:    true,
+	}
+	m.panes.activeDetailsSection = detailsui.SectionWarnings
+
+	content := stripANSI(m.detailsPaneContent())
+	for _, snippet := range []string{
+		"cookie parameters are unavailable for Swagger 2.0 specs",
+		"server variables are unavailable for Swagger 2.0 specs",
+	} {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected capability warning %q, got %q", snippet, content)
+		}
+	}
+}
+
+func TestModelRequestPaneShowsServerVariableSupportNote(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.session.Spec.Capabilities = model.CapabilitySet{
+		SupportsOpenAPI3:         true,
+		SupportsCookieParameters: true,
+		SupportsRequestBodies:    true,
+		SupportsServerVariables:  true,
+		SupportsSecuritySchemes:  true,
+	}
+	m.session.Spec.Servers = []model.Server{{
+		URL: "https://{env}.example.com",
+		Variables: map[string]model.ServerVariable{
+			"env": {Default: "api"},
+		},
+	}}
+	m.session.SelectedServerURL = "https://{env}.example.com"
+	m.panes.activeRequestSection = requestui.SectionServer
+
+	content := stripANSI(m.requestPaneContent())
+	if !strings.Contains(content, "Server variables are not editable yet.") {
+		t.Fatalf("expected server-variable support note, got %q", content)
+	}
+}
+
+func TestModelRequestBodyExampleCyclesOnEnter(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.session.Spec.Capabilities = model.CapabilitySet{
+		SupportsOpenAPI3:         true,
+		SupportsCookieParameters: true,
+		SupportsRequestBodies:    true,
+		SupportsServerVariables:  true,
+		SupportsSecuritySchemes:  true,
+	}
+	selected := &m.session.Spec.Operations[0]
+	selected.RequestBody = &model.RequestBodySpec{
+		Content: []model.MediaTypeSpec{{
+			MediaType: "application/json",
+			Examples: map[string]model.Example{
+				"a-first":  {Value: map[string]any{"name": "first"}},
+				"b-second": {Value: map[string]any{"name": "second"}},
+			},
+		}},
+	}
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.panes.activeRequestSection = requestui.SectionBody
+	m.viewState.RequestActiveRow = 1
+	m.ensureSelectedRequestDraft()
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated := updatedModel.(*Model)
+	draft := updated.ensureSelectedRequestDraft()
+	if got := draft.SelectedExamples["body:application/json"]; got != "b-second" {
+		t.Fatalf("expected body example to cycle to b-second, got %q", got)
+	}
+	if got := draft.BodyRaw; got != "{\n  \"name\": \"second\"\n}" {
+		t.Fatalf("expected body to reseed from selected example, got %q", got)
+	}
+}
+
+func TestModelRequestPaneShowsBodyEncodingSupportNote(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.session.Spec.Capabilities = model.CapabilitySet{
+		SupportsOpenAPI3:         true,
+		SupportsCookieParameters: true,
+		SupportsRequestBodies:    true,
+		SupportsServerVariables:  true,
+		SupportsSecuritySchemes:  true,
+	}
+	m.session.Spec.Warnings = []model.SpecWarning{{
+		Code:    model.SpecWarningDowngradedFeature,
+		Message: `encoding details for media type "multipart/form-data" were not preserved in the normalised model`,
+		Path:    "requestBody:multipart/form-data",
+	}}
+	selected := &m.session.Spec.Operations[0]
+	selected.RequestBody = &model.RequestBodySpec{
+		Content: []model.MediaTypeSpec{{MediaType: "multipart/form-data"}},
+	}
+	m.panes.activeRequestSection = requestui.SectionBody
+	draft := m.ensureSelectedRequestDraft()
+	draft.BodyMediaType = "multipart/form-data"
+
+	content := stripANSI(m.requestPaneContent())
+	if !strings.Contains(content, "Body encoding details are not preserved yet.") {
+		t.Fatalf("expected body-encoding support note, got %q", content)
+	}
+}
+
 func TestModelQuestionMarkOpensBlockingLoadErrorHelp(t *testing.T) {
 	t.Parallel()
 
@@ -2715,6 +2976,13 @@ func newLoadedModelForNavigation() *Model {
 				Type:   model.SecuritySchemeTypeHTTP,
 				Scheme: model.HTTPAuthSchemeBearer,
 			},
+		},
+		Capabilities: model.CapabilitySet{
+			SupportsOpenAPI3:         true,
+			SupportsCookieParameters: true,
+			SupportsRequestBodies:    true,
+			SupportsServerVariables:  true,
+			SupportsSecuritySchemes:  true,
 		},
 		Operations: []model.Operation{
 			{

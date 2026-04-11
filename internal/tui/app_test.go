@@ -113,6 +113,18 @@ func TestNewModelAppliesPersistedThemeBeforeFirstFrame(t *testing.T) {
 	}
 }
 
+func TestNewModelPanicsWhenServiceIsNil(t *testing.T) {
+	t.Parallel()
+
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected nil service to panic")
+		}
+	}()
+
+	_ = NewModel(nil, "demo.yaml")
+}
+
 func TestModelUpdatesFocusFromNumberKeys(t *testing.T) {
 	t.Parallel()
 
@@ -2689,6 +2701,64 @@ func TestModelQuestionMarkOpensBlockingLoadErrorHelp(t *testing.T) {
 	}
 }
 
+func TestModelCOpensCurlExportPopup(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.session.SelectedServerURL = "https://api.example.com"
+	m.session.AuthState = map[string]model.AuthValue{
+		"api_key": {Type: model.AuthSchemeValueTypeAPIKey, APIKey: "secret"},
+	}
+	draft := m.ensureSelectedRequestDraft()
+	draft.PathParams["petId"] = "abc"
+	draft.BodyMediaType = "application/json"
+	draft.BodyRaw = `{"name":"fido"}`
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	updated := updatedModel.(*Model)
+	if !updated.curlPopupOpen() {
+		t.Fatal("expected curl popup to open")
+	}
+	if updated.viewState.Notice != "Curl export ready" {
+		t.Fatalf("expected curl export notice, got %q", updated.viewState.Notice)
+	}
+	view := stripANSI(updated.View())
+	for _, snippet := range []string{"Curl export", "-X 'GET'", "https://api.example.com/pets"} {
+		if !strings.Contains(view, snippet) {
+			t.Fatalf("expected curl popup snippet %q, got %q", snippet, view)
+		}
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated = updatedModel.(*Model)
+	if updated.curlPopupOpen() {
+		t.Fatal("expected esc to close curl popup")
+	}
+}
+
+func TestModelCurlExportShowsValidationInRequestPane(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	updated := updatedModel.(*Model)
+	if updated.curlPopupOpen() {
+		t.Fatal("expected curl popup to stay closed when validation fails")
+	}
+	if updated.viewState.Notice != "Curl export validation failed" {
+		t.Fatalf("expected curl validation notice, got %q", updated.viewState.Notice)
+	}
+	if updated.panes.activeRequestSection != "Path" {
+		t.Fatalf("expected request section to focus first missing field, got %q", updated.panes.activeRequestSection)
+	}
+	if !updated.requestUI.validation.HasIssues() {
+		t.Fatal("expected curl export validation issues to be stored")
+	}
+}
+
 func TestModelRequestDraftPersistsAcrossOperationAndFilterChanges(t *testing.T) {
 	t.Parallel()
 
@@ -3032,6 +3102,7 @@ func newLoadedModelForNavigation() *Model {
 	}
 
 	return &Model{
+		service: app.NewService(nil, nil, nil, nil),
 		panes: paneState{
 			activeDetailsSection:  detailsui.SectionSummary,
 			activeRequestSection:  "Path",

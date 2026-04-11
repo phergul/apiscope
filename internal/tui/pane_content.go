@@ -166,7 +166,7 @@ func (m *Model) detailsPaneTitleRight() string {
 // paneOuterFocused reports whether a shell pane should render its focused border state.
 func (m *Model) paneOuterFocused(pane model.FocusedPane) bool {
 	// shell-level popups take the only visible focus ring while they are open.
-	if m.historyPopupOpen() || m.helpOverlayOpen() {
+	if m.historyPopupOpen() || m.curlPopupOpen() || m.helpOverlayOpen() {
 		return false
 	}
 

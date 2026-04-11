@@ -44,6 +44,9 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.requestEditActive() {
 		return m.updateRequestEditKey(msg)
 	}
+	if m.curlPopupOpen() {
+		return m.updateCurlPopupKey(msg)
+	}
 	if m.historyPopupOpen() {
 		return m.updateHistoryPopupKey(msg)
 	}
@@ -64,6 +67,9 @@ func (m *Model) updateGlobalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		if cmd := m.executeCurrentRequest(); cmd != nil {
 			return m, cmd, true
 		}
+		return m, nil, true
+	case "c":
+		m.exportCurrentCurl()
 		return m, nil, true
 	case "p":
 		m.openHistoryPopup()

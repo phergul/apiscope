@@ -74,6 +74,12 @@ type helpUIState struct {
 	view widgets.HelpView
 }
 
+// curlUIState groups the root-owned curl export popup state.
+type curlUIState struct {
+	open    bool
+	command string
+}
+
 // Model is the root Bubble Tea model for the TUI shell.
 type Model struct {
 	service          *app.Service
@@ -86,6 +92,7 @@ type Model struct {
 	persisted        persistedState
 	historyUI        historyUIState
 	helpUI           helpUIState
+	curlUI           curlUIState
 	schemaExplorerUI schemaExplorerUIState
 }
 
@@ -111,7 +118,7 @@ func (p *Program) Run() error {
 // NewModel builds the root TUI model with default shell and pane state.
 func NewModel(service *app.Service, source string) *Model {
 	if service == nil {
-		service = app.NewService(nil, nil, nil, nil)
+		panic("tui.NewModel requires a non-nil service")
 	}
 
 	filterInput := widgets.NewTextInput()

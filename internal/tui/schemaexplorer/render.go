@@ -13,10 +13,10 @@ const (
 	openMarker         = "[-]"
 	closedMarker       = "[+]"
 	leafMarker         = "   "
-	treeGuideSegment   = "│  "
-	treeBlankSegment   = "   "
-	treeBranchSegment  = "├─ "
-	treeLastBranchLine = "└─ "
+	treeEmptySegment   = "   "
+	treeGuideSegment   = " │ "
+	treeBranchSegment  = " ├─"
+	treeLastBranchLine = " └─"
 )
 
 // Render draws the two-column schema explorer body for the current shell mode.
@@ -114,12 +114,15 @@ func renderTreePrefix(row visibleRow) string {
 
 	chrome := treeMarkerStyle()
 	var builder strings.Builder
-	for _, ancestorHasNext := range row.AncestorHasNext {
+	for index, ancestorHasNext := range row.AncestorHasNext {
+		if index == 0 {
+			continue
+		}
 		if ancestorHasNext {
 			builder.WriteString(chrome.Render(treeGuideSegment))
 			continue
 		}
-		builder.WriteString(treeBlankSegment)
+		builder.WriteString(chrome.Render(treeEmptySegment))
 	}
 	if row.HasNextSibling {
 		builder.WriteString(chrome.Render(treeBranchSegment))

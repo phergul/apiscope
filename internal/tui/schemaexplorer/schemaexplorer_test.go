@@ -265,10 +265,52 @@ func TestRenderUsesBoxDrawingTreeGuides(t *testing.T) {
 	})
 
 	content := ansi.Strip(projected.Data.LeftBody)
-	for _, snippet := range []string{"├─", "└─", "│  "} {
+	for _, snippet := range []string{"├─", "└─"} {
 		if !strings.Contains(content, snippet) {
 			t.Fatalf("expected tree to include %q, got %q", snippet, content)
 		}
+	}
+}
+
+func TestRenderTreePrefixPreservesDepthForAncestorsWithoutNextSibling(t *testing.T) {
+	t.Parallel()
+
+	prefix := ansi.Strip(renderTreePrefix(visibleRow{
+		Depth:           3,
+		AncestorHasNext: []bool{false, true, false},
+		HasNextSibling:  false,
+	}))
+
+	if prefix != " │     └─" {
+		t.Fatalf("expected depth-preserving prefix, got %q", prefix)
+	}
+}
+
+func TestRenderTreePrefixDoesNotIndentFirstLevelByParentColumn(t *testing.T) {
+	t.Parallel()
+
+	prefix := ansi.Strip(renderTreePrefix(visibleRow{
+		Depth:           1,
+		AncestorHasNext: []bool{false},
+		HasNextSibling:  true,
+	}))
+
+	if prefix != " ├─" {
+		t.Fatalf("expected first-level rows to branch from marker center, got %q", prefix)
+	}
+}
+
+func TestRenderTreePrefixShowsGuideWhenParentHasNextSibling(t *testing.T) {
+	t.Parallel()
+
+	prefix := ansi.Strip(renderTreePrefix(visibleRow{
+		Depth:           2,
+		AncestorHasNext: []bool{false, true},
+		HasNextSibling:  false,
+	}))
+
+	if prefix != " │  └─" {
+		t.Fatalf("expected parent guide column for continuing siblings, got %q", prefix)
 	}
 }
 

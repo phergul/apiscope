@@ -452,8 +452,6 @@ func (m *Model) maxRequestEditScrollOffset() int {
 // updateRequestEditKey handles key input while the request editor is active.
 func (m *Model) updateRequestEditKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "ctrl+c", "q":
-		return m, tea.Quit
 	case "esc":
 		m.cancelRequestEdit()
 	case "ctrl+s":
@@ -497,17 +495,7 @@ func (m *Model) executeCurrentRequest() tea.Cmd {
 
 	validation := app.ValidateExecutableRequest(m.session, selected, app.EnsureRequestDraft(&m.session, selected))
 	if validation.HasIssues() {
-		m.requestUI.validation = validation
-		if issue, ok := validation.FirstIssue(); ok {
-			m.panes.activeRequestSection = issue.Section
-			if index := requestui.RowIndexByID(m.activeRequestRows(), issue.Target); index >= 0 {
-				m.viewState.RequestActiveRow = index
-			}
-			m.ensureActiveRequestRowVisible()
-		}
-		m.viewState.FocusedPane = model.FocusedPaneRequest
-		m.viewState.ExpandedRightPane = model.FocusedPaneRequest
-		m.viewState.Notice = "Request validation failed"
+		m.applyRequestValidation(validation, "Request validation failed")
 		return nil
 	}
 

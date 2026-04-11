@@ -485,6 +485,98 @@ func TestPrepareRequestAppliesQueryAPIKey(t *testing.T) {
 	}
 }
 
+func TestExportCurlRendersJSONRequest(t *testing.T) {
+	t.Parallel()
+
+	executor := NewExecutor(nil, nil)
+	command, err := executor.ExportCurl(
+		&model.Operation{Method: "POST", Path: "/pets"},
+		&model.RequestDraft{
+			BodyMediaType: "application/json",
+			BodyRaw:       `{"name":"fido"}`,
+			HeaderParams:  map[string]string{"X-Trace-ID": "trace-1"},
+		},
+		"https://api.example.com",
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("ExportCurl returned error: %v", err)
+	}
+	for _, snippet := range []string{
+		"curl \\",
+		"-X 'POST'",
+		"-H 'Content-Type: application/json'",
+		"-H 'X-Trace-Id: trace-1'",
+		"--data-raw '{\"name\":\"fido\"}'",
+		"'https://api.example.com/pets'",
+	} {
+		if !strings.Contains(command, snippet) {
+			t.Fatalf("expected curl snippet %q, got %q", snippet, command)
+		}
+	}
+}
+
+func TestExportCurlRendersMultipartFormParts(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	uploadPath := filepath.Join(tempDir, "avatar.txt")
+	if err := os.WriteFile(uploadPath, []byte("hello file"), 0o600); err != nil {
+		t.Fatalf("WriteFile returned error: %v", err)
+	}
+
+	executor := NewExecutor(nil, nil)
+	command, err := executor.ExportCurl(
+		&model.Operation{
+			Method: "POST",
+			Path:   "/upload",
+			RequestBody: &model.RequestBodySpec{
+				Content: []model.MediaTypeSpec{{
+					MediaType: "multipart/form-data",
+					Schema: &model.Schema{
+						Type: "object",
+						Properties: map[string]*model.Schema{
+							"description": {Type: "string"},
+							"metadata": {
+								Type:       "object",
+								Properties: map[string]*model.Schema{"region": {Type: "string"}},
+							},
+							"file": {Type: "string", Format: "binary"},
+						},
+					},
+				}},
+			},
+		},
+		&model.RequestDraft{
+			BodyMediaType:  "multipart/form-data",
+			FormParams:     map[string]string{"description": "avatar", "metadata": `{"region":"ie"}`},
+			FormFileParams: map[string]string{"file": uploadPath},
+		},
+		"https://api.example.com",
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("ExportCurl returned error: %v", err)
+	}
+	for _, snippet := range []string{
+		"-F 'description=avatar'",
+		"-F 'metadata={\"region\":\"ie\"};type=application/json'",
+		"-F 'file=@" + uploadPath + "'",
+		"'https://api.example.com/upload'",
+	} {
+		if !strings.Contains(command, snippet) {
+			t.Fatalf("expected multipart curl snippet %q, got %q", snippet, command)
+		}
+	}
+	if strings.Contains(command, "boundary=") {
+		t.Fatalf("expected curl export to avoid prepared multipart boundary header, got %q", command)
+	}
+}
+
 func TestExecuteCapturesHTTPResponseAndPrettyPrintsJSON(t *testing.T) {
 	t.Parallel()
 

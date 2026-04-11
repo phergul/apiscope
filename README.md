@@ -2,6 +2,8 @@
 
 `apiscope` is a terminal API explorer for Swagger 2.0 and OpenAPI 3.x specs.
 
+![apiscope screenshot](.github/assets/apiscope.png)
+
 ## Features
 
 - Load API specs from a local file path or URL.

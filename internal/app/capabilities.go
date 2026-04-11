@@ -47,16 +47,6 @@ func ProjectCapabilityRequestSupportNotes(apiSpec *model.APISpec, operation *mod
 			Detail:   "This OpenAPI 3.x spec defines templated server URLs. Pane 3 can show the current template, but it cannot edit server variable values yet.",
 		})
 	}
-	if apiSpec.Capabilities.SupportsOpenAPI3 && currentBodyMediaTypeHasEncodingWarning(apiSpec, operation, draft) {
-		notes = append(notes, RequestSupportNote{
-			Section:  "Body",
-			Target:   ValidationTargetBodyMediaType,
-			Severity: RequestSupportSeverityDowngraded,
-			Summary:  "Body encoding details are not preserved yet.",
-			Detail:   "This media type uses OpenAPI encoding metadata. Pane 3 can edit the raw body, but it cannot preserve or author those per-part encoding rules yet.",
-		})
-	}
-
 	return notes
 }
 
@@ -89,43 +79,4 @@ func hasServerVariables(servers []model.Server) bool {
 	}
 
 	return false
-}
-
-func currentBodyMediaTypeHasEncodingWarning(apiSpec *model.APISpec, operation *model.Operation, draft *model.RequestDraft) bool {
-	if apiSpec == nil {
-		return false
-	}
-
-	mediaType, ok := currentBodyMediaType(operation, draft)
-	if !ok {
-		return false
-	}
-
-	path := "requestBody:" + mediaType
-	for _, warning := range apiSpec.Warnings {
-		if warning.Path != path {
-			continue
-		}
-		if strings.Contains(warning.Message, "encoding details for media type") {
-			return true
-		}
-	}
-
-	return false
-}
-
-func currentBodyMediaType(operation *model.Operation, draft *model.RequestDraft) (string, bool) {
-	if operation == nil || operation.RequestBody == nil || len(operation.RequestBody.Content) == 0 {
-		return "", false
-	}
-
-	mediaType := strings.TrimSpace(operation.SelectedContentType)
-	if draft != nil && strings.TrimSpace(draft.BodyMediaType) != "" {
-		mediaType = strings.TrimSpace(draft.BodyMediaType)
-	}
-	if mediaType == "" {
-		mediaType = operation.RequestBody.Content[0].MediaType
-	}
-
-	return mediaType, true
 }

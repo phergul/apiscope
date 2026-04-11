@@ -153,6 +153,27 @@ func (m *Model) saveAuthField(row requestui.RowDescriptor, buffer string) bool {
 	return true
 }
 
+func (m *Model) saveBodyPartEncoding(row requestui.RowDescriptor, contentType string) bool {
+	if row.Kind != requestui.RowKindBodyPartEncoding {
+		return false
+	}
+
+	label := strings.TrimSuffix(strings.TrimSpace(row.Label), " content type")
+	if label == "" {
+		return false
+	}
+
+	if app.SetDraftBodyPartContentType(&m.session, m.resolvedSelectedOperation(), label, contentType) == nil {
+		return false
+	}
+	if strings.TrimSpace(contentType) == "" {
+		m.viewState.Notice = "Cleared part content type: " + label
+	} else {
+		m.viewState.Notice = "Saved part content type: " + label
+	}
+	return true
+}
+
 func (m *Model) toggleAuthFieldSourceMode() bool {
 	row, ok := activeRequestRow(m.activeRequestRows(), m.viewState.RequestActiveRow)
 	if !ok || row.Kind != requestui.RowKindAuthField || m.viewState.RequestEditKind != model.RequestEditKindField {
@@ -231,6 +252,10 @@ func isEnvironmentDeleteTarget(target string) bool {
 
 func isEnvironmentBindingTarget(target string) bool {
 	return strings.HasPrefix(target, "environment:binding:")
+}
+
+func isBodyEncodingTarget(target string) bool {
+	return strings.HasPrefix(target, app.ValidationTargetBodyEncodingPrefix)
 }
 
 func shouldSyncAppliedEnvironment(row requestui.RowDescriptor) bool {

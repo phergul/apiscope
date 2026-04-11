@@ -332,6 +332,116 @@ func TestPrepareRequestSerializesStructuredMultipartRequestBodyFieldAsJSONPart(t
 	}
 }
 
+func TestPrepareRequestAppliesMultipartEncodingContentTypeAndHeaders(t *testing.T) {
+	t.Parallel()
+
+	executor := NewExecutor(nil, nil)
+	operation := &model.Operation{
+		Method: "POST",
+		Path:   "/upload",
+		RequestBody: &model.RequestBodySpec{
+			Content: []model.MediaTypeSpec{{
+				MediaType: "multipart/form-data",
+				Schema: &model.Schema{
+					Type: "object",
+					Properties: map[string]*model.Schema{
+						"metadata": {Type: "string"},
+					},
+				},
+				Encoding: map[string]model.MediaTypeEncoding{
+					"metadata": {
+						PropertyName: "metadata",
+						ContentType:  "application/merge-patch+json",
+						Headers: []model.Parameter{{
+							Name:    "X-Part-Trace",
+							Example: "trace-1",
+						}},
+					},
+				},
+			}},
+		},
+	}
+	draft := &model.RequestDraft{
+		BodyMediaType: "multipart/form-data",
+		FormParams:    map[string]string{"metadata": `{"region":"ie"}`},
+	}
+
+	request, err := executor.PrepareRequest(operation, draft, "https://api.example.com", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("PrepareRequest returned error: %v", err)
+	}
+	mediaType, params, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+	if err != nil {
+		t.Fatalf("ParseMediaType returned error: %v", err)
+	}
+	if mediaType != "multipart/form-data" {
+		t.Fatalf("expected multipart request body content type, got %q", mediaType)
+	}
+
+	reader := multipart.NewReader(request.Body, params["boundary"])
+	part, err := reader.NextPart()
+	if err != nil {
+		t.Fatalf("NextPart returned error: %v", err)
+	}
+	if got := part.FormName(); got != "metadata" {
+		t.Fatalf("expected metadata part, got %q", got)
+	}
+	if got := part.Header.Get("Content-Type"); got != "application/merge-patch+json" {
+		t.Fatalf("expected encoded part content type, got %q", got)
+	}
+	if got := part.Header.Get("X-Part-Trace"); got != "trace-1" {
+		t.Fatalf("expected encoded part header, got %q", got)
+	}
+	if _, err := reader.NextPart(); err != io.EOF {
+		t.Fatalf("expected one multipart part, got %v", err)
+	}
+}
+
+func TestPrepareRequestAppliesDraftMultipartEncodingOverride(t *testing.T) {
+	t.Parallel()
+
+	executor := NewExecutor(nil, nil)
+	operation := &model.Operation{
+		Method: "POST",
+		Path:   "/upload",
+		RequestBody: &model.RequestBodySpec{
+			Content: []model.MediaTypeSpec{{
+				MediaType: "multipart/form-data",
+				Schema:    &model.Schema{Type: "object", Properties: map[string]*model.Schema{"metadata": {Type: "string"}}},
+				Encoding: map[string]model.MediaTypeEncoding{
+					"metadata": {PropertyName: "metadata", ContentType: "application/merge-patch+json"},
+				},
+			}},
+		},
+	}
+	draft := &model.RequestDraft{
+		BodyMediaType:    "multipart/form-data",
+		FormParams:       map[string]string{"metadata": `{"region":"ie"}`},
+		BodyPartEncoding: map[string]string{"metadata": "application/json"},
+	}
+
+	request, err := executor.PrepareRequest(operation, draft, "https://api.example.com", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("PrepareRequest returned error: %v", err)
+	}
+	mediaType, params, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+	if err != nil {
+		t.Fatalf("ParseMediaType returned error: %v", err)
+	}
+	if mediaType != "multipart/form-data" {
+		t.Fatalf("expected multipart request body content type, got %q", mediaType)
+	}
+
+	reader := multipart.NewReader(request.Body, params["boundary"])
+	part, err := reader.NextPart()
+	if err != nil {
+		t.Fatalf("NextPart returned error: %v", err)
+	}
+	if got := part.Header.Get("Content-Type"); got != "application/json" {
+		t.Fatalf("expected draft override content type on multipart part, got %q", got)
+	}
+}
+
 func TestPrepareRequestSerializesUrlencodedRequestBodyFields(t *testing.T) {
 	t.Parallel()
 
@@ -574,6 +684,42 @@ func TestExportCurlRendersMultipartFormParts(t *testing.T) {
 	}
 	if strings.Contains(command, "boundary=") {
 		t.Fatalf("expected curl export to avoid prepared multipart boundary header, got %q", command)
+	}
+}
+
+func TestExportCurlRendersMultipartEncodingContentTypeOverrides(t *testing.T) {
+	t.Parallel()
+
+	executor := NewExecutor(nil, nil)
+	command, err := executor.ExportCurl(
+		&model.Operation{
+			Method: "POST",
+			Path:   "/upload",
+			RequestBody: &model.RequestBodySpec{
+				Content: []model.MediaTypeSpec{{
+					MediaType: "multipart/form-data",
+					Schema:    &model.Schema{Type: "object", Properties: map[string]*model.Schema{"metadata": {Type: "string"}}},
+					Encoding: map[string]model.MediaTypeEncoding{
+						"metadata": {PropertyName: "metadata", ContentType: "application/merge-patch+json"},
+					},
+				}},
+			},
+		},
+		&model.RequestDraft{
+			BodyMediaType:    "multipart/form-data",
+			FormParams:       map[string]string{"metadata": `{"region":"ie"}`},
+			BodyPartEncoding: map[string]string{"metadata": "application/json"},
+		},
+		"https://api.example.com",
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("ExportCurl returned error: %v", err)
+	}
+	if !strings.Contains(command, `-F 'metadata={"region":"ie"};type=application/json'`) {
+		t.Fatalf("expected curl multipart part to render draft encoding override, got %q", command)
 	}
 }
 

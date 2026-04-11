@@ -360,25 +360,91 @@ func normaliseContent(content openapi3.Content, warningPath func(string) string)
 		if mediaTypeValue == nil {
 			continue
 		}
+		encoding, encodingWarnings := normaliseMediaTypeEncoding(mediaTypeValue.Encoding, mediaType)
+		warnings = append(warnings, encodingWarnings...)
 		result = append(result, model.MediaTypeSpec{
 			MediaType: mediaType,
 			Schema:    normaliseSchema(mediaTypeValue.Schema),
 			Example:   mediaTypeValue.Example,
 			Examples:  normaliseExamples(mediaTypeValue.Examples),
+			Encoding:  encoding,
 		})
-		if len(mediaTypeValue.Encoding) > 0 {
-			path := mediaType
-			if warningPath != nil {
-				path = warningPath(mediaType)
-			}
-			warnings = append(warnings, model.SpecWarning{
-				Code:    model.SpecWarningDowngradedFeature,
-				Message: fmt.Sprintf("encoding details for media type %q were not preserved in the normalised model", mediaType),
-				Path:    path,
-			})
-		}
 	}
 	return result, warnings
+}
+
+func normaliseMediaTypeEncoding(encoding map[string]*openapi3.Encoding, mediaType string) (map[string]model.MediaTypeEncoding, []model.SpecWarning) {
+	if len(encoding) == 0 {
+		return nil, nil
+	}
+
+	names := make([]string, 0, len(encoding))
+	for name := range encoding {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	normalised := make(map[string]model.MediaTypeEncoding, len(names))
+	var warnings []model.SpecWarning
+	for _, name := range names {
+		value := encoding[name]
+		if value == nil {
+			continue
+		}
+		headers, headerWarnings := normaliseEncodingHeaders(value.Headers, mediaType, name)
+		warnings = append(warnings, headerWarnings...)
+		normalised[name] = model.MediaTypeEncoding{
+			PropertyName:  name,
+			ContentType:   strings.TrimSpace(value.ContentType),
+			Headers:       headers,
+			Style:         string(value.Style),
+			Explode:       value.Explode,
+			AllowReserved: value.AllowReserved,
+		}
+	}
+
+	if len(normalised) == 0 {
+		return nil, warnings
+	}
+
+	return normalised, warnings
+}
+
+func normaliseEncodingHeaders(headers openapi3.Headers, mediaType, property string) ([]model.Parameter, []model.SpecWarning) {
+	if len(headers) == 0 {
+		return nil, nil
+	}
+
+	names := make([]string, 0, len(headers))
+	for name := range headers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	result := make([]model.Parameter, 0, len(names))
+	var warnings []model.SpecWarning
+	for _, name := range names {
+		headerRef := headers[name]
+		if headerRef == nil || headerRef.Value == nil {
+			continue
+		}
+		normalised, headerWarnings := normaliseParameterModel(name, model.ParameterLocationHeader, &headerRef.Value.Parameter)
+		result = append(result, normalised)
+		warnings = append(warnings, headerWarnings...)
+	}
+	if len(result) > 0 {
+		return result, warnings
+	}
+
+	if len(names) > 0 {
+		warnings = append(warnings, model.SpecWarning{
+			Code:    model.SpecWarningDowngradedFeature,
+			Message: fmt.Sprintf("encoding headers for media type %q property %q could not be preserved", mediaType, property),
+			Path:    fmt.Sprintf("requestBody:%s:encoding:%s", mediaType, property),
+		})
+	}
+
+	return nil, warnings
 }
 
 func normaliseExamples(examples openapi3.Examples) map[string]model.Example {

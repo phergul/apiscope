@@ -22,6 +22,7 @@ func seedRequestDraft(draft *model.RequestDraft, operation *model.Operation) {
 	if strings.TrimSpace(draft.BodyMediaType) == "" {
 		draft.BodyMediaType = defaultDraftBodyMediaType(operation)
 	}
+	SeedDraftBodyPartEncoding(draft, operation)
 	seedDraftBodyFields(draft, operation)
 	seedDraftBody(draft, operation)
 }

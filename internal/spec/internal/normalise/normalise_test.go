@@ -909,7 +909,7 @@ paths:
 	}
 }
 
-func TestDocumentMarksRequestBodyEncodingWarningsWithRequestBodyPath(t *testing.T) {
+func TestDocumentPreservesRequestBodyEncodingForMultipartContent(t *testing.T) {
 	t.Parallel()
 
 	spec, err := Document(mustResolvedOpenAPI3(t, `openapi: 3.0.3
@@ -940,16 +940,24 @@ paths:
 		t.Fatalf("Document returned error: %v", err)
 	}
 
-	for _, warning := range spec.Warnings {
-		if !strings.Contains(warning.Message, `encoding details for media type "multipart/form-data"`) {
-			continue
-		}
-		if warning.Path != "requestBody:multipart/form-data" {
-			t.Fatalf("expected request-body warning path, got %#v", warning)
-		}
-		return
+	op := spec.Operations[0]
+	if op.RequestBody == nil || len(op.RequestBody.Content) != 1 {
+		t.Fatalf("expected multipart request body content, got %#v", op.RequestBody)
 	}
-	t.Fatalf("expected request-body encoding warning, got %#v", spec.Warnings)
+	mediaType := op.RequestBody.Content[0]
+	if len(mediaType.Encoding) != 1 {
+		t.Fatalf("expected one multipart encoding entry, got %#v", mediaType.Encoding)
+	}
+	encoding, ok := mediaType.Encoding["file"]
+	if !ok {
+		t.Fatalf("expected multipart encoding for file property, got %#v", mediaType.Encoding)
+	}
+	if encoding.ContentType != "image/png" {
+		t.Fatalf("expected encoding content type image/png, got %#v", encoding)
+	}
+	if len(spec.Warnings) != 0 {
+		t.Fatalf("expected no encoding downgrade warning once preserved, got %#v", spec.Warnings)
+	}
 }
 
 func TestDocumentNormalisesEquivalentSwaggerAndOAS3SerialisationShapes(t *testing.T) {

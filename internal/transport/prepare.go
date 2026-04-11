@@ -3,6 +3,7 @@ package transport
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"mime"
@@ -157,10 +158,21 @@ func encodeMultipartForm(operation *model.Operation, draft *model.RequestDraft) 
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 	jsonFields := multipartJSONFields(operation, draft)
+	encodingByField := multipartEncodingByField(operation, draft)
 
 	for _, key := range sortedKeys(draftFormValues(draft)) {
 		value := strings.TrimSpace(draft.FormParams[key])
 		if value == "" {
+			continue
+		}
+		if encoding, ok := encodingByField[key]; ok {
+			fallbackContentType := ""
+			if jsonFields[key] {
+				fallbackContentType = "application/json"
+			}
+			if err := writeMultipartEncodedField(writer, key, value, encoding, fallbackContentType); err != nil {
+				return nil, "", err
+			}
 			continue
 		}
 		if jsonFields[key] {
@@ -202,6 +214,69 @@ func writeMultipartJSONField(writer *multipart.Writer, fieldName, value string) 
 	}
 	_, err = io.Copy(part, strings.NewReader(value))
 	return err
+}
+
+func writeMultipartEncodedField(writer *multipart.Writer, fieldName, value string, encoding model.MediaTypeEncoding, fallbackContentType string) error {
+	headers := make(textproto.MIMEHeader)
+	headers.Set("Content-Disposition", mime.FormatMediaType("form-data", map[string]string{"name": fieldName}))
+
+	contentType := strings.TrimSpace(encoding.ContentType)
+	if contentType == "" {
+		contentType = strings.TrimSpace(fallbackContentType)
+	}
+	if contentType != "" {
+		headers.Set("Content-Type", contentType)
+	}
+
+	for _, header := range encoding.Headers {
+		name := textproto.CanonicalMIMEHeaderKey(strings.TrimSpace(header.Name))
+		if name == "" || name == "Content-Disposition" || name == "Content-Type" {
+			continue
+		}
+		value, ok := encodingHeaderValue(header)
+		if !ok || strings.TrimSpace(value) == "" {
+			continue
+		}
+		headers.Set(name, value)
+	}
+
+	part, err := writer.CreatePart(headers)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(part, strings.NewReader(value))
+	return err
+}
+
+func encodingHeaderValue(parameter model.Parameter) (string, bool) {
+	value := parameter.Example
+	if value == nil {
+		value = parameter.Default
+	}
+	if value == nil && parameter.Schema != nil {
+		if parameter.Schema.Example != nil {
+			value = parameter.Schema.Example
+		} else {
+			value = parameter.Schema.Default
+		}
+	}
+	if value == nil {
+		return "", false
+	}
+
+	switch typed := value.(type) {
+	case string:
+		return typed, true
+	case bool:
+		if typed {
+			return "true", true
+		}
+		return "false", true
+	case float32, float64, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+		return fmt.Sprint(typed), true
+	default:
+		return "", false
+	}
 }
 
 func writeMultipartFile(writer *multipart.Writer, fieldName, path string) error {
@@ -278,6 +353,60 @@ func multipartBodySchema(operation *model.Operation, draft *model.RequestDraft) 
 			return content.Schema
 		}
 	}
+	return nil
+}
+
+func multipartEncodingByField(operation *model.Operation, draft *model.RequestDraft) map[string]model.MediaTypeEncoding {
+	if operation == nil || operation.RequestBody == nil || len(operation.RequestBody.Content) == 0 {
+		return nil
+	}
+	if effectiveBodyMediaType(operation, draft) != "multipart/form-data" {
+		return nil
+	}
+
+	mediaType := effectiveBodyMediaType(operation, draft)
+	for _, content := range operation.RequestBody.Content {
+		if content.MediaType != mediaType || len(content.Encoding) == 0 {
+			continue
+		}
+		copy := make(map[string]model.MediaTypeEncoding, len(content.Encoding))
+		for name, encoding := range content.Encoding {
+			if draft != nil && draft.BodyPartEncoding != nil {
+				if override := strings.TrimSpace(draft.BodyPartEncoding[name]); override != "" {
+					encoding.ContentType = override
+				}
+			}
+			copy[name] = encoding
+		}
+		if draft != nil && draft.BodyPartEncoding != nil {
+			for name, override := range draft.BodyPartEncoding {
+				override = strings.TrimSpace(override)
+				if override == "" {
+					continue
+				}
+				encoding := copy[name]
+				encoding.PropertyName = name
+				encoding.ContentType = override
+				copy[name] = encoding
+			}
+		}
+		return copy
+	}
+
+	if draft != nil && draft.BodyPartEncoding != nil {
+		overrides := make(map[string]model.MediaTypeEncoding, len(draft.BodyPartEncoding))
+		for name, override := range draft.BodyPartEncoding {
+			override = strings.TrimSpace(override)
+			if override == "" {
+				continue
+			}
+			overrides[name] = model.MediaTypeEncoding{PropertyName: name, ContentType: override}
+		}
+		if len(overrides) > 0 {
+			return overrides
+		}
+	}
+
 	return nil
 }
 

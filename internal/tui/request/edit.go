@@ -99,6 +99,20 @@ func StartEdit(
 		}
 	case RowKindBodyMediaType:
 		return EditStart{CycleBodyMediaType: true}
+	case RowKindBodyPartEncoding:
+		if !row.Editable {
+			return EditStart{}
+		}
+		buffer := row.Value
+		if buffer == "<unset>" {
+			buffer = ""
+		}
+		return EditStart{
+			Kind:       model.RequestEditKindField,
+			Target:     row.ID,
+			Buffer:     buffer,
+			FocusField: true,
+		}
 	case RowKindBodyExample:
 		return EditStart{CycleBodyExample: true}
 	case RowKindBodyText:

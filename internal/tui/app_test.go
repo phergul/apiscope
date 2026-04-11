@@ -2954,7 +2954,7 @@ func TestModelRequestBodyExampleCyclesOnEnter(t *testing.T) {
 	}
 }
 
-func TestModelRequestPaneShowsBodyEncodingSupportNote(t *testing.T) {
+func TestModelRequestPaneDoesNotShowBodyEncodingDowngradeNoteWhenEncodingIsPreserved(t *testing.T) {
 	t.Parallel()
 
 	m := newLoadedModelForNavigation()
@@ -2965,22 +2965,20 @@ func TestModelRequestPaneShowsBodyEncodingSupportNote(t *testing.T) {
 		SupportsServerVariables:  true,
 		SupportsSecuritySchemes:  true,
 	}
-	m.session.Spec.Warnings = []model.SpecWarning{{
-		Code:    model.SpecWarningDowngradedFeature,
-		Message: `encoding details for media type "multipart/form-data" were not preserved in the normalised model`,
-		Path:    "requestBody:multipart/form-data",
-	}}
 	selected := &m.session.Spec.Operations[0]
 	selected.RequestBody = &model.RequestBodySpec{
-		Content: []model.MediaTypeSpec{{MediaType: "multipart/form-data"}},
+		Content: []model.MediaTypeSpec{{
+			MediaType: "multipart/form-data",
+			Encoding:  map[string]model.MediaTypeEncoding{"metadata": {PropertyName: "metadata", ContentType: "application/json"}},
+		}},
 	}
 	m.panes.activeRequestSection = requestui.SectionBody
 	draft := m.ensureSelectedRequestDraft()
 	draft.BodyMediaType = "multipart/form-data"
 
 	content := stripANSI(m.requestPaneContent())
-	if !strings.Contains(content, "Body encoding details are not preserved yet.") {
-		t.Fatalf("expected body-encoding support note, got %q", content)
+	if strings.Contains(content, "Body encoding details are not preserved yet.") {
+		t.Fatalf("expected preserved encoding to remove downgrade support note, got %q", content)
 	}
 }
 

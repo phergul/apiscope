@@ -17,6 +17,7 @@ type RequestDraft struct {
 	CookieParams     map[string]string `json:"cookie_params,omitempty"`
 	FormParams       map[string]string `json:"form_params,omitempty"`
 	FormFileParams   map[string]string `json:"form_file_params,omitempty"`
+	BodyPartEncoding map[string]string `json:"body_part_encoding,omitempty"`
 	BodyMediaType    string            `json:"body_media_type,omitempty"`
 	BodyRaw          string            `json:"body_raw,omitempty"`
 	SelectedExamples map[string]string `json:"selected_examples,omitempty"`

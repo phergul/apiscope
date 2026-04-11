@@ -387,6 +387,12 @@ func (m *Model) saveRequestEdit() {
 		}
 		return
 	}
+	if isBodyEncodingTarget(m.viewState.RequestEditTarget) {
+		if row, ok := activeRequestRow(m.activeRequestRows(), m.viewState.RequestActiveRow); ok && m.saveBodyPartEncoding(row, buffer) {
+			m.finishRequestEdit()
+		}
+		return
+	}
 	if row, ok := activeRequestRow(m.activeRequestRows(), m.viewState.RequestActiveRow); ok && row.Kind == requestui.RowKindAuthField && m.viewState.RequestEditKind == model.RequestEditKindField {
 		if m.saveAuthField(row, buffer) {
 			m.finishRequestEdit()

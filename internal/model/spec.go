@@ -152,6 +152,16 @@ type MediaTypeSpec struct {
 	Schema    *Schema
 	Example   any
 	Examples  map[string]Example
+	Encoding  map[string]MediaTypeEncoding
+}
+
+type MediaTypeEncoding struct {
+	PropertyName  string
+	ContentType   string
+	Headers       []Parameter
+	Style         string
+	Explode       *bool
+	AllowReserved bool
 }
 
 type Example struct {

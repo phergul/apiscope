@@ -31,6 +31,7 @@ func EnsureRequestDraft(session *model.SessionState, operation *model.Operation)
 		CookieParams:     make(map[string]string),
 		FormParams:       make(map[string]string),
 		FormFileParams:   make(map[string]string),
+		BodyPartEncoding: make(map[string]string),
 		SelectedExamples: make(map[string]string),
 	}
 	seedRequestDraft(draft, operation)
@@ -68,6 +69,7 @@ func SetDraftBodyMediaType(session *model.SessionState, operation *model.Operati
 
 	replaceBody := shouldReplaceSeededBody(operation, draft)
 	draft.BodyMediaType = strings.TrimSpace(mediaType)
+	SeedDraftBodyPartEncoding(draft, operation)
 	seedDraftBodyFields(draft, operation)
 	if replaceBody {
 		draft.BodyRaw = ""

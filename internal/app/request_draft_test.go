@@ -279,6 +279,65 @@ func TestEnsureRequestDraftSeedsMultipartStructuredBodyFieldAsJSON(t *testing.T)
 	}
 }
 
+func TestEnsureRequestDraftSeedsMultipartBodyPartEncodingDefaults(t *testing.T) {
+	t.Parallel()
+
+	session := model.SessionState{
+		SpecFingerprint: "spec-123",
+		RequestDrafts:   make(map[model.DraftKey]*model.RequestDraft),
+	}
+	operation := &model.Operation{
+		Key: model.NewOperationKey("POST", "/upload"),
+		RequestBody: &model.RequestBodySpec{
+			Content: []model.MediaTypeSpec{{
+				MediaType: "multipart/form-data",
+				Schema: &model.Schema{
+					Type: "object",
+					Properties: map[string]*model.Schema{
+						"metadata": {Type: "string"},
+					},
+				},
+				Encoding: map[string]model.MediaTypeEncoding{
+					"metadata": {PropertyName: "metadata", ContentType: "application/merge-patch+json"},
+				},
+			}},
+		},
+	}
+
+	draft := EnsureRequestDraft(&session, operation)
+	if got := draft.BodyPartEncoding["metadata"]; got != "application/merge-patch+json" {
+		t.Fatalf("expected multipart encoding default to seed draft override map, got %q", got)
+	}
+}
+
+func TestSetDraftBodyPartContentTypeStoresAndClearsOverride(t *testing.T) {
+	t.Parallel()
+
+	session := model.SessionState{SpecFingerprint: "spec-123", RequestDrafts: make(map[model.DraftKey]*model.RequestDraft)}
+	operation := &model.Operation{
+		Key: model.NewOperationKey("POST", "/upload"),
+		RequestBody: &model.RequestBodySpec{
+			Content: []model.MediaTypeSpec{{
+				MediaType: "multipart/form-data",
+				Schema:    &model.Schema{Type: "object", Properties: map[string]*model.Schema{"metadata": {Type: "string"}}},
+			}},
+		},
+	}
+
+	draft := SetDraftBodyPartContentType(&session, operation, "metadata", "application/json")
+	if draft == nil {
+		t.Fatal("expected draft to exist")
+	}
+	if got := draft.BodyPartEncoding["metadata"]; got != "application/json" {
+		t.Fatalf("expected stored content type override, got %q", got)
+	}
+
+	draft = SetDraftBodyPartContentType(&session, operation, "metadata", "")
+	if got := draft.BodyPartEncoding["metadata"]; got != "" {
+		t.Fatalf("expected cleared content type override, got %q", got)
+	}
+}
+
 func TestEnsureRequestDraftSeedsUrlencodedBodyFieldsWithoutFileInputMode(t *testing.T) {
 	t.Parallel()
 

@@ -22,6 +22,7 @@ const (
 	RowKindParameter          RowKind = "parameter"
 	RowKindBodyMediaType      RowKind = "body_media_type"
 	RowKindBodyExample        RowKind = "body_example"
+	RowKindBodyPartEncoding   RowKind = "body_part_encoding"
 	RowKindBodyText           RowKind = "body_text"
 	RowKindAuthField          RowKind = "auth_field"
 	RowKindAuthSource         RowKind = "auth_source"
@@ -241,6 +242,7 @@ func bodyRows(selected *model.Operation, draft *model.RequestDraft) []RowDescrip
 
 	if len(bodyFields) > 0 {
 		rows = append(rows, parameterRows(bodyFields, draft)...)
+		rows = append(rows, bodyEncodingRows(selected, draft)...)
 		return rows
 	}
 
@@ -254,6 +256,68 @@ func bodyRows(selected *model.Operation, draft *model.RequestDraft) []RowDescrip
 	})
 
 	return rows
+}
+
+func bodyEncodingRows(operation *model.Operation, draft *model.RequestDraft) []RowDescriptor {
+	if operation == nil || draft == nil {
+		return nil
+	}
+	if strings.TrimSpace(DraftBodyMediaType(operation, draft)) != "multipart/form-data" {
+		return nil
+	}
+
+	fields := app.ProjectBodyFieldParameters(operation, draft)
+	if len(fields) == 0 {
+		return nil
+	}
+
+	rows := make([]RowDescriptor, 0, len(fields))
+	for _, field := range fields {
+		defaultContentType := defaultMultipartContentType(operation, draft, field.Name)
+		override := app.DraftBodyPartContentType(draft, field.Name)
+		value := override
+		meta := "part content type"
+		if strings.TrimSpace(defaultContentType) != "" {
+			meta += ", default: " + defaultContentType
+			if strings.TrimSpace(value) == "" {
+				value = defaultContentType
+			}
+		}
+		if strings.TrimSpace(value) == "" {
+			value = "<unset>"
+		}
+
+		rows = append(rows, RowDescriptor{
+			ID:               app.ValidationTargetBodyEncodingPrefix + field.Name,
+			Kind:             RowKindBodyPartEncoding,
+			ValidationTarget: app.ValidationTargetBodyEncodingPrefix + field.Name,
+			Label:            field.Name + " content type",
+			Meta:             meta,
+			Value:            value,
+			Editable:         true,
+		})
+	}
+
+	return rows
+}
+
+func defaultMultipartContentType(operation *model.Operation, draft *model.RequestDraft, fieldName string) string {
+	if operation == nil || operation.RequestBody == nil || len(operation.RequestBody.Content) == 0 {
+		return ""
+	}
+	mediaType := DraftBodyMediaType(operation, draft)
+	for _, content := range operation.RequestBody.Content {
+		if content.MediaType != mediaType || len(content.Encoding) == 0 {
+			continue
+		}
+		encoding, ok := content.Encoding[fieldName]
+		if !ok {
+			return ""
+		}
+		return strings.TrimSpace(encoding.ContentType)
+	}
+
+	return ""
 }
 
 func DraftBodyMediaType(operation *model.Operation, draft *model.RequestDraft) string {

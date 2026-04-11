@@ -141,30 +141,24 @@ func TestProjectCapabilityRequestSupportNotesReportsTemplatedServers(t *testing.
 	}
 }
 
-func TestProjectCapabilityRequestSupportNotesReportsBodyEncodingWarning(t *testing.T) {
+func TestProjectCapabilityRequestSupportNotesDoesNotReportBodyEncodingWarningWhenEncodingIsPreserved(t *testing.T) {
 	t.Parallel()
 
 	notes := ProjectCapabilityRequestSupportNotes(&model.APISpec{
 		Capabilities: model.CapabilitySet{
 			SupportsOpenAPI3: true,
 		},
-		Warnings: []model.SpecWarning{{
-			Code:    model.SpecWarningDowngradedFeature,
-			Message: `encoding details for media type "multipart/form-data" were not preserved in the normalised model`,
-			Path:    "requestBody:multipart/form-data",
-		}},
 	}, &model.Operation{
 		RequestBody: &model.RequestBodySpec{
-			Content: []model.MediaTypeSpec{{MediaType: "multipart/form-data"}},
+			Content: []model.MediaTypeSpec{{
+				MediaType: "multipart/form-data",
+				Encoding: map[string]model.MediaTypeEncoding{
+					"metadata": {PropertyName: "metadata", ContentType: "application/json"},
+				},
+			}},
 		},
 	}, &model.RequestDraft{BodyMediaType: "multipart/form-data"}, nil)
-	if len(notes) != 1 {
-		t.Fatalf("expected one encoding note, got %#v", notes)
-	}
-	if notes[0].Summary != "Body encoding details are not preserved yet." {
-		t.Fatalf("unexpected encoding note %#v", notes[0])
-	}
-	if notes[0].Target != ValidationTargetBodyMediaType {
-		t.Fatalf("expected media-type target, got %#v", notes[0])
+	if len(notes) != 0 {
+		t.Fatalf("expected no encoding downgrade note once preserved, got %#v", notes)
 	}
 }

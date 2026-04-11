@@ -64,7 +64,7 @@ func TestBuildBrowseHelpViewUsesBrowseControls(t *testing.T) {
 	if help.Title != "Request help" {
 		t.Fatalf("expected request browse help title, got %q", help.Title)
 	}
-	for _, snippet := range []string{"Ctrl+R send request", "t / T switch theme", "Enter edit, save, load, apply, or cycle option"} {
+	for _, snippet := range []string{"Ctrl+R send request", "t / T switch theme", "Enter edit, save, load, apply, or cycle option", "Body multipart rows include per-part content-type editing"} {
 		if !strings.Contains(help.Body, snippet) {
 			t.Fatalf("expected request browse help to include %q, got %q", snippet, help.Body)
 		}

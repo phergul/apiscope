@@ -19,13 +19,14 @@ func TestCloneExecutionSessionCopiesMutableInputs(t *testing.T) {
 		SelectedServerURL: "https://api.example.com",
 		RequestDrafts: map[model.DraftKey]*model.RequestDraft{
 			draftKey: {
-				Key:             draftKey,
-				SpecFingerprint: "spec-1",
-				OperationKey:    operationKey,
-				ServerURL:       "https://api.example.com",
-				PathParams:      map[string]string{"petId": "abc"},
-				FormParams:      map[string]string{"name": "fido"},
-				FormFileParams:  map[string]string{"file": "/tmp/demo.txt"},
+				Key:              draftKey,
+				SpecFingerprint:  "spec-1",
+				OperationKey:     operationKey,
+				ServerURL:        "https://api.example.com",
+				PathParams:       map[string]string{"petId": "abc"},
+				FormParams:       map[string]string{"name": "fido"},
+				FormFileParams:   map[string]string{"file": "/tmp/demo.txt"},
+				BodyPartEncoding: map[string]string{"metadata": "application/json"},
 			},
 		},
 		AuthState: map[string]model.AuthValue{
@@ -37,6 +38,7 @@ func TestCloneExecutionSessionCopiesMutableInputs(t *testing.T) {
 	cloned.RequestDrafts[draftKey].PathParams["petId"] = "changed"
 	cloned.RequestDrafts[draftKey].FormParams["name"] = "spot"
 	cloned.RequestDrafts[draftKey].FormFileParams["file"] = "/tmp/other.txt"
+	cloned.RequestDrafts[draftKey].BodyPartEncoding["metadata"] = "text/plain"
 	cloned.AuthState["api_key"] = model.AuthValue{Type: model.AuthSchemeValueTypeAPIKey, APIKey: "other"}
 
 	if got := original.RequestDrafts[draftKey].PathParams["petId"]; got != "abc" {
@@ -47,6 +49,9 @@ func TestCloneExecutionSessionCopiesMutableInputs(t *testing.T) {
 	}
 	if got := original.RequestDrafts[draftKey].FormFileParams["file"]; got != "/tmp/demo.txt" {
 		t.Fatalf("expected original file draft to stay unchanged, got %q", got)
+	}
+	if got := original.RequestDrafts[draftKey].BodyPartEncoding["metadata"]; got != "application/json" {
+		t.Fatalf("expected original body-part encoding to stay unchanged, got %q", got)
 	}
 	if got := original.AuthState["api_key"].APIKey; got != "secret" {
 		t.Fatalf("expected original auth state to stay unchanged, got %q", got)

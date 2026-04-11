@@ -352,6 +352,32 @@ func TestSaveEditWritesAuthFieldToSessionState(t *testing.T) {
 	}
 }
 
+func TestStartEditReturnsFieldEditorStateForBodyPartEncoding(t *testing.T) {
+	t.Parallel()
+
+	got := StartEdit(
+		&model.Operation{Key: model.NewOperationKey("POST", "/upload")},
+		nil,
+		[]RowDescriptor{{
+			ID:       "body:encoding:metadata",
+			Kind:     RowKindBodyPartEncoding,
+			Label:    "metadata content type",
+			Value:    "application/json",
+			Editable: true,
+		}},
+		0,
+		nil,
+		nil,
+	)
+
+	if got.Kind != model.RequestEditKindField {
+		t.Fatalf("expected field edit kind, got %q", got.Kind)
+	}
+	if got.Target != "body:encoding:metadata" || got.Buffer != "application/json" {
+		t.Fatalf("expected encoding row to seed field edit state, got %#v", got)
+	}
+}
+
 func TestStartEditSeedsAuthFieldBufferFromEnvVarSourceWhenEnvMode(t *testing.T) {
 	t.Parallel()
 

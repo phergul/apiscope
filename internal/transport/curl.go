@@ -60,14 +60,16 @@ func renderCurlCommand(operation *model.Operation, draft *model.RequestDraft, re
 func renderMultipartCurlArgs(operation *model.Operation, draft *model.RequestDraft) []string {
 	lines := make([]string, 0, len(draftFormValues(draft))+len(draftFileValues(draft)))
 	jsonFields := multipartJSONFields(operation, draft)
+	encodingByField := multipartEncodingByField(operation, draft)
 	for _, key := range sortedKeys(draftFormValues(draft)) {
 		value := strings.TrimSpace(draft.FormParams[key])
 		if value == "" {
 			continue
 		}
 		field := key + "=" + value
-		if jsonFields[key] {
-			field += ";type=application/json"
+		contentType := multipartPartContentTypeForCurl(key, encodingByField, jsonFields)
+		if contentType != "" {
+			field += ";type=" + contentType
 		}
 		lines = append(lines, renderCurlFlag("-F", field))
 	}
@@ -76,9 +78,26 @@ func renderMultipartCurlArgs(operation *model.Operation, draft *model.RequestDra
 		if path == "" {
 			continue
 		}
-		lines = append(lines, renderCurlFlag("-F", key+"=@"+path))
+		field := key + "=@" + path
+		if contentType := multipartPartContentTypeForCurl(key, encodingByField, jsonFields); contentType != "" {
+			field += ";type=" + contentType
+		}
+		lines = append(lines, renderCurlFlag("-F", field))
 	}
 	return lines
+}
+
+func multipartPartContentTypeForCurl(field string, encodingByField map[string]model.MediaTypeEncoding, jsonFields map[string]bool) string {
+	if encoding, ok := encodingByField[field]; ok {
+		if contentType := strings.TrimSpace(encoding.ContentType); contentType != "" {
+			return contentType
+		}
+	}
+	if jsonFields[field] {
+		return "application/json"
+	}
+
+	return ""
 }
 
 func readRequestBody(request *http.Request) ([]byte, error) {

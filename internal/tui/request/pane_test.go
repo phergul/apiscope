@@ -189,14 +189,58 @@ func TestProjectPaneBuildsMultipartBodyFieldRows(t *testing.T) {
 		ActiveSection: SectionBody,
 	})
 
-	if len(projection.Data.Rows) != 3 {
-		t.Fatalf("expected media type plus multipart field rows, got %#v", projection.Data.Rows)
+	if len(projection.Data.Rows) != 5 {
+		t.Fatalf("expected media type, multipart fields, and per-field encoding rows, got %#v", projection.Data.Rows)
 	}
 	if projection.Data.Rows[1].Label != "description" || projection.Data.Rows[1].Value != "avatar" {
 		t.Fatalf("expected multipart scalar row, got %#v", projection.Data.Rows[1])
 	}
 	if projection.Data.Rows[2].Label != "file" || projection.Data.Rows[2].Meta != "required, file path" {
 		t.Fatalf("expected multipart file row, got %#v", projection.Data.Rows[2])
+	}
+	if projection.Data.Rows[3].Kind != RowKindBodyPartEncoding || projection.Data.Rows[3].Label != "description content type" {
+		t.Fatalf("expected description encoding row, got %#v", projection.Data.Rows[3])
+	}
+	if projection.Data.Rows[4].Kind != RowKindBodyPartEncoding || projection.Data.Rows[4].Label != "file content type" {
+		t.Fatalf("expected file encoding row, got %#v", projection.Data.Rows[4])
+	}
+}
+
+func TestProjectPaneBuildsMultipartBodyEncodingRowsWithDefaultsAndOverrides(t *testing.T) {
+	t.Parallel()
+
+	projection := ProjectPane(PaneInput{
+		Selected: &model.Operation{
+			RequestBody: &model.RequestBodySpec{
+				Content: []model.MediaTypeSpec{{
+					MediaType: "multipart/form-data",
+					Schema:    &model.Schema{Type: "object", Properties: map[string]*model.Schema{"metadata": {Type: "string"}}},
+					Encoding: map[string]model.MediaTypeEncoding{
+						"metadata": {PropertyName: "metadata", ContentType: "application/merge-patch+json"},
+					},
+				}},
+			},
+		},
+		Draft: &model.RequestDraft{
+			BodyMediaType:    "multipart/form-data",
+			FormParams:       map[string]string{"metadata": "{}"},
+			BodyPartEncoding: map[string]string{"metadata": "application/json"},
+		},
+		ActiveSection: SectionBody,
+	})
+
+	if len(projection.Data.Rows) != 3 {
+		t.Fatalf("expected media type, field row, and encoding row, got %#v", projection.Data.Rows)
+	}
+	encodingRow := projection.Data.Rows[2]
+	if encodingRow.Kind != RowKindBodyPartEncoding {
+		t.Fatalf("expected body-part encoding row, got %#v", encodingRow)
+	}
+	if encodingRow.Value != "application/json" {
+		t.Fatalf("expected encoding override value, got %#v", encodingRow)
+	}
+	if !strings.Contains(encodingRow.Meta, "default: application/merge-patch+json") {
+		t.Fatalf("expected encoding meta to include default content type, got %#v", encodingRow)
 	}
 }
 
@@ -229,14 +273,17 @@ func TestProjectPaneBuildsStructuredMultipartBodyFieldRow(t *testing.T) {
 		ActiveSection: SectionBody,
 	})
 
-	if len(projection.Data.Rows) != 2 {
-		t.Fatalf("expected media type plus structured multipart field row, got %#v", projection.Data.Rows)
+	if len(projection.Data.Rows) != 3 {
+		t.Fatalf("expected media type, structured multipart field row, and encoding row, got %#v", projection.Data.Rows)
 	}
 	if projection.Data.Rows[1].Label != "metadata" || projection.Data.Rows[1].Meta != "optional, object" {
 		t.Fatalf("expected structured multipart row, got %#v", projection.Data.Rows[1])
 	}
 	if projection.Data.Rows[1].Value != "{\"region\":\"ie\"}" {
 		t.Fatalf("expected structured multipart row value, got %#v", projection.Data.Rows[1])
+	}
+	if projection.Data.Rows[2].Kind != RowKindBodyPartEncoding || projection.Data.Rows[2].Label != "metadata content type" {
+		t.Fatalf("expected structured multipart encoding row, got %#v", projection.Data.Rows[2])
 	}
 }
 

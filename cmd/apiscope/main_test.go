@@ -1,4 +1,4 @@
-package main
+package apiscope
 
 import (
 	"bytes"
@@ -27,7 +27,7 @@ func TestRunMissingArgumentPrintsUsage(t *testing.T) {
 
 	var stderr bytes.Buffer
 
-	exitCode := run(nil, strings.NewReader(""), io.Discard, &stderr)
+	exitCode := Run(nil, strings.NewReader(""), io.Discard, &stderr)
 
 	if exitCode == 0 {
 		t.Fatal("expected non-zero exit code when spec source is missing")
@@ -59,7 +59,7 @@ func TestRunValidArgumentStartsProgram(t *testing.T) {
 		return program
 	}
 
-	exitCode := run([]string{"spec.yaml"}, strings.NewReader(""), io.Discard, io.Discard)
+	exitCode := Run([]string{"spec.yaml"}, strings.NewReader(""), io.Discard, io.Discard)
 
 	if exitCode != 0 {
 		t.Fatalf("expected zero exit code, got %d", exitCode)
@@ -92,7 +92,7 @@ func TestRunLoggerSetupFailureWarnsButContinues(t *testing.T) {
 	}
 
 	var stderr bytes.Buffer
-	exitCode := run([]string{"spec.yaml"}, strings.NewReader(""), io.Discard, &stderr)
+	exitCode := Run([]string{"spec.yaml"}, strings.NewReader(""), io.Discard, &stderr)
 	if exitCode != 0 {
 		t.Fatalf("expected zero exit code, got %d", exitCode)
 	}

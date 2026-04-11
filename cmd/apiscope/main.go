@@ -1,9 +1,8 @@
-package main
+package apiscope
 
 import (
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/phergul/apiscope/internal/app"
 	"github.com/phergul/apiscope/internal/logging"
@@ -22,11 +21,7 @@ var newProgram = func(service *app.Service, source string, input io.Reader, outp
 
 var newDiagnosticsLogger = logging.NewDefaultLogger
 
-func main() {
-	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
-}
-
-func run(args []string, input io.Reader, output, errOutput io.Writer) int {
+func Run(args []string, input io.Reader, output, errOutput io.Writer) int {
 	if len(args) != 1 {
 		fmt.Fprintln(errOutput, "usage: apiscope <spec-source>")
 		return 2

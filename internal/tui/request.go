@@ -136,10 +136,11 @@ func (m *Model) requestEditorInput() requestui.EditorInput {
 	m.ensureWidgetDefaults()
 
 	return requestui.EditorInput{
-		Kind:      m.viewState.RequestEditKind,
-		Buffer:    m.viewState.RequestEditBuffer,
-		FieldView: m.widgets.requestFieldInput.BareView(),
-		BodyView:  m.widgets.requestBodyInput.BareView(),
+		Kind:           m.viewState.RequestEditKind,
+		Buffer:         m.viewState.RequestEditBuffer,
+		AuthSourceMode: m.requestUI.authEditSourceMode,
+		FieldView:      m.widgets.requestFieldInput.BareView(),
+		BodyView:       m.widgets.requestBodyInput.BareView(),
 	}
 }
 
@@ -345,6 +346,14 @@ func (m *Model) beginRequestEdit() {
 	m.viewState.RequestEditKind = start.Kind
 	m.viewState.RequestEditTarget = start.Target
 	m.viewState.RequestEditBuffer = start.Buffer
+	m.requestUI.authEditSourceMode = ""
+	if start.AuthUseEnvSource {
+		m.requestUI.authEditSourceMode = requestui.AuthSourceModeEnv
+	} else if start.Kind == model.RequestEditKindField {
+		if row, ok := activeRequestRow(rows, m.viewState.RequestActiveRow); ok && row.Kind == requestui.RowKindAuthField {
+			m.requestUI.authEditSourceMode = requestui.AuthSourceModeSession
+		}
+	}
 	if start.ResetScroll {
 		m.viewState.RequestScrollOffset = 0
 	}
@@ -360,20 +369,26 @@ func (m *Model) beginRequestEdit() {
 
 // saveRequestEdit saves the active request editor contents back into the request draft.
 func (m *Model) saveRequestEdit() {
+	buffer := m.viewState.RequestEditBuffer
+	if m.viewState.RequestEditKind == model.RequestEditKindField {
+		buffer = m.widgets.requestFieldInput.Value()
+		m.viewState.RequestEditBuffer = buffer
+	}
+
 	if isEnvironmentSaveTarget(m.viewState.RequestEditTarget) {
-		if m.saveCurrentEnvironment(m.viewState.RequestEditBuffer) {
+		if m.saveCurrentEnvironment(buffer) {
 			m.finishRequestEdit()
 		}
 		return
 	}
 	if isEnvironmentBindingTarget(m.viewState.RequestEditTarget) {
-		if row, ok := activeRequestRow(m.activeRequestRows(), m.viewState.RequestActiveRow); ok && m.saveEnvironmentBinding(row, m.viewState.RequestEditBuffer) {
+		if row, ok := activeRequestRow(m.activeRequestRows(), m.viewState.RequestActiveRow); ok && m.saveEnvironmentBinding(row, buffer) {
 			m.finishRequestEdit()
 		}
 		return
 	}
-	if isAuthSourceTarget(m.viewState.RequestEditTarget) {
-		if row, ok := activeRequestRow(m.activeRequestRows(), m.viewState.RequestActiveRow); ok && m.saveAuthSource(row, m.viewState.RequestEditBuffer) {
+	if row, ok := activeRequestRow(m.activeRequestRows(), m.viewState.RequestActiveRow); ok && row.Kind == requestui.RowKindAuthField && m.viewState.RequestEditKind == model.RequestEditKindField {
+		if m.saveAuthField(row, buffer) {
 			m.finishRequestEdit()
 		}
 		return
@@ -393,7 +408,7 @@ func (m *Model) saveRequestEdit() {
 		rows,
 		m.viewState.RequestActiveRow,
 		m.viewState.RequestEditKind,
-		m.viewState.RequestEditBuffer,
+		buffer,
 		m.securitySchemes(),
 	) {
 		if ok && shouldSyncAppliedEnvironment(activeRow) {
@@ -419,6 +434,7 @@ func (m *Model) finishRequestEdit() {
 	m.viewState.RequestEditKind = model.RequestEditKindNone
 	m.viewState.RequestEditTarget = ""
 	m.viewState.RequestEditBuffer = ""
+	m.requestUI.authEditSourceMode = ""
 	m.clearRequestValidation()
 	m.syncActiveRequestRow()
 }
@@ -473,6 +489,12 @@ func (m *Model) updateRequestEditKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.viewState.RequestEditKind == model.RequestEditKindField || m.viewState.RequestEditKind == model.RequestEditKindConfirm {
 			m.saveRequestEdit()
 			return m, nil
+		}
+	case "tab":
+		if m.viewState.RequestEditKind == model.RequestEditKindField {
+			if m.toggleAuthFieldSourceMode() {
+				return m, nil
+			}
 		}
 	}
 

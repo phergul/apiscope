@@ -10,6 +10,7 @@ type EditorState struct {
 	Kind           string
 	Buffer         string
 	View           string
+	AuthSourceMode string
 	BodyMediaType  string
 	ActiveRowKind  RowKind
 	ActiveRowLabel string
@@ -17,18 +18,20 @@ type EditorState struct {
 }
 
 type EditorInput struct {
-	Kind      model.RequestEditKind
-	Buffer    string
-	FieldView string
-	BodyView  string
+	Kind           model.RequestEditKind
+	Buffer         string
+	AuthSourceMode string
+	FieldView      string
+	BodyView       string
 }
 
 // BuildEditorState projects low-level editor inputs into the request pane editor view state.
 func BuildEditorState(input EditorInput, rows []RowDescriptor, activeRow int, selected *model.Operation, draft *model.RequestDraft) EditorState {
 	state := EditorState{
-		Kind:   string(input.Kind),
-		Buffer: input.Buffer,
-		View:   editorView(input),
+		Kind:           string(input.Kind),
+		Buffer:         input.Buffer,
+		AuthSourceMode: input.AuthSourceMode,
+		View:           editorView(input),
 	}
 
 	switch input.Kind {
@@ -108,6 +111,12 @@ func editContext(state EditorState) string {
 		return "Media type: " + state.BodyMediaType
 	case "field":
 		switch state.ActiveRowKind {
+		case RowKindAuthField:
+			mode := "Session"
+			if state.AuthSourceMode == AuthSourceModeEnv {
+				mode = "Env var"
+			}
+			return formatRowContext(state.ActiveRowLabel, state.ActiveRowMeta) + "\nSource: " + mode + " (Tab toggles)"
 		case RowKindEnvironmentSave:
 			if strings.TrimSpace(state.Buffer) == "" {
 				return "Save session as a new environment name"
@@ -115,8 +124,6 @@ func editContext(state EditorState) string {
 			return "Save or update environment: " + strings.TrimSpace(state.Buffer)
 		case RowKindEnvironmentBinding:
 			return formatRowContext(state.ActiveRowLabel, state.ActiveRowMeta) + "\nLeave empty to keep session-only auth."
-		case RowKindAuthSource:
-			return formatRowContext(state.ActiveRowLabel, state.ActiveRowMeta) + "\nLeave empty to use session-only value."
 		}
 		return formatRowContext(state.ActiveRowLabel, state.ActiveRowMeta)
 	case "confirm":
@@ -135,7 +142,7 @@ func editHelpBody(kind string) string {
 	case "body":
 		return "Ctrl+S save\nEsc cancel\nEnter newline\n? toggle help"
 	case "field":
-		return "Enter save\nEsc cancel\n? toggle help"
+		return "Tab switch source\nEnter save\nEsc cancel\n? toggle help"
 	case "confirm":
 		return "Enter delete\nEsc cancel\n? toggle help"
 	default:

@@ -88,7 +88,7 @@ func (m *Model) saveEnvironmentBinding(row requestui.RowDescriptor, envVarName s
 }
 
 func (m *Model) saveAuthSource(row requestui.RowDescriptor, source string) bool {
-	if row.Kind != requestui.RowKindAuthSource || strings.TrimSpace(row.AuthSchemeName) == "" || row.AuthField == "" {
+	if strings.TrimSpace(row.AuthSchemeName) == "" || row.AuthField == "" {
 		return false
 	}
 
@@ -121,6 +121,59 @@ func (m *Model) saveAuthSource(row requestui.RowDescriptor, source string) bool 
 	}
 	app.SetAuthField(&m.session, scheme, row.AuthField, value)
 	m.viewState.Notice = "Using env var source: " + source
+	return true
+}
+
+func (m *Model) saveAuthField(row requestui.RowDescriptor, buffer string) bool {
+	if row.Kind != requestui.RowKindAuthField {
+		return false
+	}
+
+	mode := m.requestUI.authEditSourceMode
+	if mode == "" {
+		mode = requestui.AuthSourceModeSession
+	}
+	if mode == requestui.AuthSourceModeEnv {
+		return m.saveAuthSource(row, buffer)
+	}
+
+	if m.requestUI.authSourceOverrides == nil {
+		m.requestUI.authSourceOverrides = make(map[string]requestui.AuthSourceOverride)
+	}
+	key := row.AuthSchemeName + ":" + string(row.AuthField)
+	m.requestUI.authSourceOverrides[key] = requestui.AuthSourceOverride{UseSession: true}
+
+	scheme, ok := m.securitySchemes()[row.AuthSchemeName]
+	if !ok {
+		m.viewState.Notice = "Auth scheme not found"
+		return false
+	}
+	app.SetAuthField(&m.session, scheme, row.AuthField, buffer)
+	m.viewState.Notice = "Using session value: " + row.Label
+	return true
+}
+
+func (m *Model) toggleAuthFieldSourceMode() bool {
+	row, ok := activeRequestRow(m.activeRequestRows(), m.viewState.RequestActiveRow)
+	if !ok || row.Kind != requestui.RowKindAuthField || m.viewState.RequestEditKind != model.RequestEditKindField {
+		return false
+	}
+
+	if m.requestUI.authEditSourceMode == requestui.AuthSourceModeEnv {
+		m.requestUI.authEditSourceMode = requestui.AuthSourceModeSession
+		scheme, ok := m.securitySchemes()[row.AuthSchemeName]
+		value := ""
+		if ok {
+			value = app.AuthFieldValue(m.session.AuthState[scheme.Name], row.AuthField)
+		}
+		m.widgets.requestFieldInput.SetValue(value)
+		m.viewState.RequestEditBuffer = value
+		return true
+	}
+
+	m.requestUI.authEditSourceMode = requestui.AuthSourceModeEnv
+	m.widgets.requestFieldInput.SetValue(strings.TrimSpace(row.AuthEnvVarName))
+	m.viewState.RequestEditBuffer = strings.TrimSpace(row.AuthEnvVarName)
 	return true
 }
 
@@ -174,10 +227,6 @@ func isEnvironmentSaveTarget(target string) bool {
 
 func isEnvironmentDeleteTarget(target string) bool {
 	return target == requestui.EnvironmentDeleteTarget
-}
-
-func isAuthSourceTarget(target string) bool {
-	return strings.HasPrefix(target, "auth:source:")
 }
 
 func isEnvironmentBindingTarget(target string) bool {

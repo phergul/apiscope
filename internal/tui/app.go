@@ -55,6 +55,7 @@ type requestUIState struct {
 	validation             app.RequestValidationResult
 	appliedEnvironmentName string
 	authSourceOverrides    map[string]requestui.AuthSourceOverride
+	authEditSourceMode     string
 }
 
 // persistedState groups root-owned durable user-managed state snapshots.

@@ -52,7 +52,7 @@ func TestBuildEditHelpViewUsesNamedHelpContent(t *testing.T) {
 	if help.Title != "Help" {
 		t.Fatalf("expected help title, got %q", help.Title)
 	}
-	if help.Body != "Enter save\nEsc cancel\n? toggle help" {
+	if help.Body != "Tab switch source\nEnter save\nEsc cancel\n? toggle help" {
 		t.Fatalf("expected field help body, got %q", help.Body)
 	}
 }

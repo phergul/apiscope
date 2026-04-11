@@ -1419,7 +1419,7 @@ func TestModelCtrlRFocusesFirstMissingFieldInBestAuthAlternative(t *testing.T) {
 	if updated.panes.activeRequestSection != requestui.SectionAuth {
 		t.Fatalf("expected auth section to stay active, got %q", updated.panes.activeRequestSection)
 	}
-	if updated.viewState.RequestActiveRow != 3 {
+	if updated.viewState.RequestActiveRow != 2 {
 		t.Fatalf("expected cursor to focus first missing field row, got %d", updated.viewState.RequestActiveRow)
 	}
 }
@@ -2513,14 +2513,14 @@ func TestModelEnvironmentSaveApplyAndDeleteFlow(t *testing.T) {
 	}
 	updated.panes.activeRequestSection = requestui.SectionAuth
 	authData := updated.projectRequestPane()
-	if len(authData.Rows) < 3 || authData.Rows[1].Kind != requestui.RowKindAuthField || authData.Rows[2].Kind != requestui.RowKindAuthSource {
-		t.Fatalf("expected auth section to include field and source rows, got %#v", authData.Rows)
+	if len(authData.Rows) < 2 || authData.Rows[1].Kind != requestui.RowKindAuthField {
+		t.Fatalf("expected auth section to include auth field row, got %#v", authData.Rows)
 	}
-	if authData.Rows[1].Editable {
-		t.Fatalf("expected env-managed auth field to be read-only, got %#v", authData.Rows[1])
+	if !authData.Rows[1].Editable {
+		t.Fatalf("expected env-managed auth field to remain editable for source toggling, got %#v", authData.Rows[1])
 	}
-	if got := authData.Rows[2].Value; got != "env var: APISCOPE_TEST_ENVIRONMENT_API_KEY" {
-		t.Fatalf("expected auth source row to show saved env var binding, got %q", got)
+	if !strings.Contains(authData.Rows[1].Meta, "source: env var") {
+		t.Fatalf("expected auth field meta to show saved env var binding, got %#v", authData.Rows[1])
 	}
 	updated.panes.activeRequestSection = requestui.SectionEnvironment
 
@@ -2692,7 +2692,7 @@ func TestModelUnloadEnvironmentKeepsSessionValues(t *testing.T) {
 	}
 }
 
-func TestModelAuthSourceCanSwitchToSessionOverrideWithoutSavingBinding(t *testing.T) {
+func TestModelEnvManagedAuthRowOpensUnifiedAuthEditor(t *testing.T) {
 	t.Setenv("APISCOPE_TEST_ENVIRONMENT_API_KEY", "secret-from-env")
 	store := persist.NewStore(t.TempDir())
 	scopeKey := model.NewPersistenceScopeKey("demo.yaml", model.SourceFamilyOpenAPI3)
@@ -2720,29 +2720,84 @@ func TestModelAuthSourceCanSwitchToSessionOverrideWithoutSavingBinding(t *testin
 	m.session.AuthState = map[string]model.AuthValue{"api_key": {Type: model.AuthSchemeValueTypeAPIKey, APIKey: "secret-from-env"}}
 	m.viewState.FocusedPane = model.FocusedPaneRequest
 	m.panes.activeRequestSection = requestui.SectionAuth
-	m.viewState.RequestActiveRow = 2
+	m.viewState.RequestActiveRow = 1
 	m.syncActiveRequestRow()
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	updated := updatedModel.(*Model)
 	if updated.viewState.RequestEditKind != model.RequestEditKindField {
-		t.Fatalf("expected auth source row to enter field edit, got %q", updated.viewState.RequestEditKind)
+		t.Fatalf("expected env-managed auth row to open field editor, got %q", updated.viewState.RequestEditKind)
+	}
+	if updated.requestUI.authEditSourceMode != requestui.AuthSourceModeEnv {
+		t.Fatalf("expected unified auth editor to start in env mode, got %q", updated.requestUI.authEditSourceMode)
+	}
+	if updated.viewState.RequestEditBuffer != "APISCOPE_TEST_ENVIRONMENT_API_KEY" {
+		t.Fatalf("expected unified auth editor to seed env var name, got %q", updated.viewState.RequestEditBuffer)
+	}
+}
+
+func TestModelAuthEditorSavesEnvSourceOnEnter(t *testing.T) {
+	t.Setenv("APISCOPE_RUNTIME_TOKEN", "runtime-secret")
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.panes.activeRequestSection = requestui.SectionAuth
+	m.viewState.RequestActiveRow = 1
+	m.syncActiveRequestRow()
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated := updatedModel.(*Model)
+	if updated.viewState.RequestEditKind != model.RequestEditKindField {
+		t.Fatalf("expected auth row to open field editor, got %q", updated.viewState.RequestEditKind)
 	}
 
-	updated.viewState.RequestEditBuffer = ""
-	updated.widgets.requestFieldInput.SetValue("")
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyTab})
+	updated = updatedModel.(*Model)
+	if updated.requestUI.authEditSourceMode != requestui.AuthSourceModeEnv {
+		t.Fatalf("expected tab to switch auth editor into env mode, got %q", updated.requestUI.authEditSourceMode)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("APISCOPE_RUNTIME_TOKEN")})
+	updated = updatedModel.(*Model)
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated = updatedModel.(*Model)
+
+	if updated.viewState.RequestEditKind != model.RequestEditKindNone {
+		t.Fatalf("expected editor to close after save, got %q", updated.viewState.RequestEditKind)
+	}
+	override := updated.requestUI.authSourceOverrides["api_key:api_key"]
+	if override.EnvVarName != "APISCOPE_RUNTIME_TOKEN" {
+		t.Fatalf("expected env source override to save, got %#v", override)
+	}
+	if got := updated.session.AuthState["api_key"].APIKey; got != "runtime-secret" {
+		t.Fatalf("expected auth state to resolve env value, got %#v", updated.session.AuthState)
+	}
+}
+
+func TestModelAuthEditorShowsSavedEnvVarNameWhenEnvIsMissing(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.panes.activeRequestSection = requestui.SectionAuth
+	m.viewState.RequestActiveRow = 1
+	m.syncActiveRequestRow()
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated := updatedModel.(*Model)
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyTab})
+	updated = updatedModel.(*Model)
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("APISCOPE_NOT_SET")})
+	updated = updatedModel.(*Model)
 	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	updated = updatedModel.(*Model)
 
 	authData := updated.projectRequestPane()
-	if authData.Rows[1].Kind != requestui.RowKindAuthField || !authData.Rows[1].Editable {
-		t.Fatalf("expected auth field to become editable in session override mode, got %#v", authData.Rows[1])
+	if !strings.Contains(authData.Rows[1].Meta, "source: env var APISCOPE_NOT_SET") {
+		t.Fatalf("expected auth row meta to show saved env var name, got %#v", authData.Rows[1])
 	}
-	if authData.Rows[2].Value != "session value" {
-		t.Fatalf("expected source row to switch to session value, got %#v", authData.Rows[2])
-	}
-	if got := updated.persisted.environments[0].AuthBindings["api_key"].FieldEnvVars[model.AuthFieldAPIKey]; got != "APISCOPE_TEST_ENVIRONMENT_API_KEY" {
-		t.Fatalf("expected saved env binding to remain unchanged, got %#v", updated.persisted.environments[0].AuthBindings)
+	if got := authData.Rows[1].Value; got != "<unset>" {
+		t.Fatalf("expected unresolved env source to keep value unset, got %q", got)
 	}
 }
 
@@ -2805,6 +2860,34 @@ func TestModelDetailsPaneShowsCapabilityWarningsForSwaggerSpecs(t *testing.T) {
 		if !strings.Contains(content, snippet) {
 			t.Fatalf("expected capability warning %q, got %q", snippet, content)
 		}
+	}
+}
+
+func TestModelDetailsNavigationIncludesCapabilityWarningsSection(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FocusedPane = model.FocusedPaneDetails
+	m.session.Spec.SourceFamily = model.SourceFamilySwagger2
+	m.session.Spec.SourceVersion = "2.0"
+	m.session.Spec.Warnings = nil
+	m.session.Spec.Capabilities = model.CapabilitySet{
+		SupportsSwagger2Conversion: true,
+		SupportsRequestBodies:      true,
+		SupportsSecuritySchemes:    true,
+	}
+	m.panes.activeDetailsSection = detailsui.SectionSummary
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	updated := updatedModel.(*Model)
+	if updated.panes.activeDetailsSection != detailsui.SectionSecurity {
+		t.Fatalf("expected first ] to move to security, got %q", updated.panes.activeDetailsSection)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	updated = updatedModel.(*Model)
+	if updated.panes.activeDetailsSection != detailsui.SectionWarnings {
+		t.Fatalf("expected second ] to move to warnings, got %q", updated.panes.activeDetailsSection)
 	}
 }
 

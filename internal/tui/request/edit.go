@@ -19,6 +19,7 @@ type EditStart struct {
 	ApplyEnvironmentName         string
 	UnloadEnvironment            bool
 	ConfirmDeleteEnvironmentName string
+	AuthUseEnvSource             bool
 }
 
 // StartEdit resolves the edit action for the active request row.
@@ -82,24 +83,19 @@ func StartEdit(
 		}
 	case RowKindAuthField:
 		scheme, ok := lookupSecurityScheme(securitySchemes, row.AuthSchemeName)
-		if !ok || !row.Editable {
+		if !ok {
 			return EditStart{}
 		}
-		return EditStart{
-			Kind:       model.RequestEditKindField,
-			Target:     row.ID,
-			Buffer:     app.AuthFieldValue(authState[scheme.Name], row.AuthField),
-			FocusField: true,
-		}
-	case RowKindAuthSource:
-		if !row.Editable {
-			return EditStart{}
+		buffer := app.AuthFieldValue(authState[scheme.Name], row.AuthField)
+		if row.AuthSourceMode == AuthSourceModeEnv {
+			buffer = row.AuthEnvVarName
 		}
 		return EditStart{
-			Kind:       model.RequestEditKindField,
-			Target:     row.ID,
-			Buffer:     row.AuthEnvVarName,
-			FocusField: true,
+			Kind:             model.RequestEditKindField,
+			Target:           row.ID,
+			Buffer:           buffer,
+			FocusField:       true,
+			AuthUseEnvSource: row.AuthSourceMode == AuthSourceModeEnv,
 		}
 	case RowKindBodyMediaType:
 		return EditStart{CycleBodyMediaType: true}

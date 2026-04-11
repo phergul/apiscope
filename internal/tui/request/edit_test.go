@@ -352,23 +352,31 @@ func TestSaveEditWritesAuthFieldToSessionState(t *testing.T) {
 	}
 }
 
-func TestStartEditSeedsAuthSourceBufferFromEnvVarBinding(t *testing.T) {
+func TestStartEditSeedsAuthFieldBufferFromEnvVarSourceWhenEnvMode(t *testing.T) {
 	t.Parallel()
+
+	scheme := model.SecurityScheme{
+		Name:          "api_key",
+		Type:          model.SecuritySchemeTypeAPIKey,
+		In:            model.ParameterLocationHeader,
+		ParameterName: "X-API-Key",
+	}
 
 	got := StartEdit(
 		&model.Operation{Key: model.NewOperationKey("GET", "/pets")},
 		nil,
 		[]RowDescriptor{{
-			ID:              "environment:binding:api_key:api_key",
-			Kind:            RowKindAuthSource,
+			ID:              "auth:api_key:api_key",
+			Kind:            RowKindAuthField,
 			AuthSchemeName:  "api_key",
 			AuthField:       app.AuthFieldAPIKey,
 			AuthEnvVarName:  "APISCOPE_API_KEY",
+			AuthSourceMode:  AuthSourceModeEnv,
 			Editable:        true,
 			EnvironmentName: "staging",
 		}},
 		0,
-		nil,
+		map[string]model.SecurityScheme{"api_key": scheme},
 		nil,
 	)
 
@@ -377,5 +385,8 @@ func TestStartEditSeedsAuthSourceBufferFromEnvVarBinding(t *testing.T) {
 	}
 	if got.Buffer != "APISCOPE_API_KEY" {
 		t.Fatalf("expected env var name to seed source editor, got %q", got.Buffer)
+	}
+	if !got.AuthUseEnvSource {
+		t.Fatal("expected start edit to mark auth editor as env-source mode")
 	}
 }

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/phergul/apiscope/internal/app"
 	"github.com/phergul/apiscope/internal/model"
 	detailsui "github.com/phergul/apiscope/internal/tui/details"
 	operationsui "github.com/phergul/apiscope/internal/tui/operations"
@@ -136,16 +137,11 @@ func (m *Model) maxOperationsScrollOffset() int {
 
 // syncActiveDetailsSection clamps the active details section to the currently visible sections.
 func (m *Model) syncActiveDetailsSection() {
-	var warnings []model.SpecWarning
-	if m.session.Spec != nil {
-		warnings = m.session.Spec.Warnings
-	}
-
 	m.panes.activeDetailsSection = detailsui.ResolveActiveSection(
 		m.panes.activeDetailsSection,
 		m.resolvedSelectedOperation(),
 		m.effectiveSecurityRequirement(m.resolvedSelectedOperation()),
-		warnings,
+		m.detailsWarnings(),
 	)
 }
 
@@ -241,35 +237,34 @@ func (m *Model) onSelectionChanged(previous, current model.OperationKey) {
 
 // moveDetailsSection moves the active details section by the given direction.
 func (m *Model) moveDetailsSection(direction int) {
-	var warnings []model.SpecWarning
-	if m.session.Spec != nil {
-		warnings = m.session.Spec.Warnings
-	}
-
 	m.panes.activeDetailsSection = detailsui.MoveActiveSection(
 		m.panes.activeDetailsSection,
 		direction,
 		m.resolvedSelectedOperation(),
 		m.effectiveSecurityRequirement(m.resolvedSelectedOperation()),
-		warnings,
+		m.detailsWarnings(),
 	)
 	m.viewState.DetailsScrollOffset = 0
 }
 
 // setDetailsSectionBoundary moves the active details section to the first or last section.
 func (m *Model) setDetailsSectionBoundary(last bool) {
-	var warnings []model.SpecWarning
-	if m.session.Spec != nil {
-		warnings = m.session.Spec.Warnings
-	}
-
 	m.panes.activeDetailsSection = detailsui.BoundaryActiveSection(
 		last,
 		m.resolvedSelectedOperation(),
 		m.effectiveSecurityRequirement(m.resolvedSelectedOperation()),
-		warnings,
+		m.detailsWarnings(),
 	)
 	m.viewState.DetailsScrollOffset = 0
+}
+
+func (m *Model) detailsWarnings() []model.SpecWarning {
+	if m.session.Spec == nil {
+		return nil
+	}
+
+	warnings := append([]model.SpecWarning{}, m.session.Spec.Warnings...)
+	return append(warnings, app.ProjectCapabilityWarnings(m.session.Spec)...)
 }
 
 // scrollDetailsBy scrolls the active details section by the requested delta.

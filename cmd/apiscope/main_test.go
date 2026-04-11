@@ -37,6 +37,31 @@ func TestRunMissingArgumentPrintsUsage(t *testing.T) {
 	}
 }
 
+func TestRunVersionFlagPrintsVersionAndSkipsProgram(t *testing.T) {
+	previousFactory := newProgram
+	previousVersion := Version
+	t.Cleanup(func() {
+		newProgram = previousFactory
+		Version = previousVersion
+	})
+
+	newProgram = func(service *app.Service, source string, input io.Reader, output io.Writer) runner {
+		t.Fatal("expected program not to be created when --version is provided")
+		return &stubRunner{}
+	}
+	Version = "1.2.3"
+
+	var stdout bytes.Buffer
+	exitCode := Run([]string{"--version", "spec.yaml"}, strings.NewReader(""), &stdout, io.Discard)
+
+	if exitCode != 0 {
+		t.Fatalf("expected zero exit code, got %d", exitCode)
+	}
+	if stdout.String() != "1.2.3\n" {
+		t.Fatalf("expected version output, got %q", stdout.String())
+	}
+}
+
 func TestRunValidArgumentStartsProgram(t *testing.T) {
 	previousFactory := newProgram
 	previousLoggerFactory := newDiagnosticsLogger

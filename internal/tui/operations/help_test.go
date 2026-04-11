@@ -12,7 +12,7 @@ func TestBuildBrowseHelpViewIncludesBrowseControls(t *testing.T) {
 	if help.Title != "Operations help" {
 		t.Fatalf("expected operations help title, got %q", help.Title)
 	}
-	for _, snippet := range []string{"/ filter operations", "t / T switch theme", "z zoom focused pane"} {
+	for _, snippet := range []string{"/ filter operations", "R or Ctrl+L reload spec", "d open spec diff", "t / T switch theme", "z zoom focused pane"} {
 		if !strings.Contains(help.Body, snippet) {
 			t.Fatalf("expected operations browse help to include %q, got %q", snippet, help.Body)
 		}

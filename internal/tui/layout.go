@@ -44,6 +44,7 @@ func (m *Model) render() string {
 	}
 
 	view := lipgloss.JoinVertical(lipgloss.Left, body, statusBar)
+	view = m.renderSpecDiffPopup(view)
 	view = m.renderCurlPopup(view)
 	view = m.renderHistoryPopup(view)
 	return m.renderHelpOverlay(view, width, helpOverlay)

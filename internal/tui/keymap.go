@@ -27,6 +27,11 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	if m.hasBlockingLoadError() {
 		switch msg.String() {
+		case "R", "ctrl+l":
+			if cmd := m.reloadSpec(); cmd != nil {
+				return m, cmd
+			}
+			return m, nil
 		case "ctrl+c", "q", "enter", "esc":
 			return m, tea.Quit
 		default:
@@ -43,6 +48,9 @@ func (m *Model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.requestEditActive() {
 		return m.updateRequestEditKey(msg)
+	}
+	if m.specDiffPopupOpen() {
+		return m.updateSpecDiffPopupKey(msg)
 	}
 	if m.curlPopupOpen() {
 		return m.updateCurlPopupKey(msg)
@@ -68,8 +76,16 @@ func (m *Model) updateGlobalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			return m, cmd, true
 		}
 		return m, nil, true
+	case "R", "ctrl+l":
+		if cmd := m.reloadSpec(); cmd != nil {
+			return m, cmd, true
+		}
+		return m, nil, true
 	case "c":
 		m.exportCurrentCurl()
+		return m, nil, true
+	case "d":
+		m.openSpecDiffPopup()
 		return m, nil, true
 	case "p":
 		m.openHistoryPopup()

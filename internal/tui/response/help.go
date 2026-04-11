@@ -14,6 +14,8 @@ func BuildBrowseHelpView() widgets.HelpView {
 		Body: strings.Join([]string{
 			"j/k or up/down scroll",
 			"[ or ] or h/l switch responses",
+			"R or Ctrl+L reload spec",
+			"d open spec diff",
 			"t / T switch theme",
 			"1-4 or Tab / Shift+Tab focus panes",
 			"z zoom focused pane",

@@ -38,6 +38,28 @@ func (l *stubLoader) Load(ctx context.Context, source spec.Source) (*model.APISp
 	return l.result, nil
 }
 
+type sequenceLoader struct {
+	results []*model.APISpec
+	err     error
+	index   int
+}
+
+func (l *sequenceLoader) Load(ctx context.Context, source spec.Source) (*model.APISpec, error) {
+	if l.err != nil {
+		return nil, l.err
+	}
+	if len(l.results) == 0 {
+		return nil, nil
+	}
+	if l.index >= len(l.results) {
+		return l.results[len(l.results)-1], nil
+	}
+
+	result := l.results[l.index]
+	l.index++
+	return result, nil
+}
+
 func TestModelInitLoadsSpecAsynchronously(t *testing.T) {
 	t.Parallel()
 
@@ -269,6 +291,94 @@ func TestModelIgnoresStaleLoadResults(t *testing.T) {
 	}
 	if !updated.viewState.LoadInFlight {
 		t.Fatal("expected loading state to remain unchanged for stale result")
+	}
+}
+
+func TestModelReloadKeyStartsLoadAndSurfacesChangedDiff(t *testing.T) {
+	t.Parallel()
+
+	loader := &sequenceLoader{results: []*model.APISpec{
+		{
+			Fingerprint:  "spec-1",
+			SourceFamily: model.SourceFamilyOpenAPI3,
+			Operations: []model.Operation{
+				{Key: model.NewOperationKey("GET", "/pets"), Method: "GET", Path: "/pets", Summary: "list"},
+			},
+		},
+		{
+			Fingerprint:  "spec-2",
+			SourceFamily: model.SourceFamilyOpenAPI3,
+			Operations: []model.Operation{
+				{Key: model.NewOperationKey("GET", "/pets"), Method: "GET", Path: "/pets", Summary: "list pets"},
+				{Key: model.NewOperationKey("POST", "/pets"), Method: "POST", Path: "/pets"},
+			},
+		},
+	}}
+	service := app.NewService(loader, nil, nil, nil)
+	m := NewModel(service, "demo.yaml")
+
+	initial := m.Init()
+	updatedModel, _ := m.Update(initial())
+	updated := updatedModel.(*Model)
+
+	updatedModel, cmd := updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'R'}})
+	updated = updatedModel.(*Model)
+	if cmd == nil {
+		t.Fatal("expected reload command")
+	}
+	if !updated.viewState.LoadInFlight {
+		t.Fatal("expected reload to enter load-in-flight state")
+	}
+	if updated.viewState.Notice != "Reloading spec" {
+		t.Fatalf("expected reloading notice, got %q", updated.viewState.Notice)
+	}
+
+	updatedModel, _ = updated.Update(cmd())
+	updated = updatedModel.(*Model)
+	if updated.viewState.Notice != "Spec reloaded (changes detected)" {
+		t.Fatalf("expected reload-changed notice, got %q", updated.viewState.Notice)
+	}
+	if !updated.specDiffUI.hasBaseline {
+		t.Fatal("expected reload baseline to be available")
+	}
+	if !updated.specDiffUI.diff.Changed {
+		t.Fatalf("expected stored diff to report changes, got %#v", updated.specDiffUI.diff)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	updated = updatedModel.(*Model)
+	if !updated.specDiffPopupOpen() {
+		t.Fatal("expected d to open spec diff popup")
+	}
+	view := stripANSI(updated.View())
+	if !strings.Contains(view, "Spec diff") || !strings.Contains(view, "POST /pets") {
+		t.Fatalf("expected diff popup content, got %q", view)
+	}
+}
+
+func TestModelReloadCanRunFromBlockingLoadError(t *testing.T) {
+	t.Parallel()
+
+	loader := &sequenceLoader{results: []*model.APISpec{{
+		Fingerprint:  "spec-1",
+		SourceFamily: model.SourceFamilyOpenAPI3,
+		Operations: []model.Operation{{
+			Key: model.NewOperationKey("GET", "/pets"), Method: "GET", Path: "/pets",
+		}},
+	}}}
+	m := NewModel(app.NewService(loader, nil, nil, nil), "demo.yaml")
+	m.shell.loadErr = errors.New("temporary fetch failure")
+
+	updatedModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'R'}})
+	updated := updatedModel.(*Model)
+	if cmd == nil {
+		t.Fatal("expected reload command while blocking load error is shown")
+	}
+	if updated.shell.loadErr != nil {
+		t.Fatal("expected reload start to clear blocking load error")
+	}
+	if !updated.viewState.LoadInFlight {
+		t.Fatal("expected reload to enter loading state")
 	}
 }
 

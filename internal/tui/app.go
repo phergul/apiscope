@@ -80,6 +80,13 @@ type curlUIState struct {
 	command string
 }
 
+// specDiffUIState groups shell-owned spec reload-diff popup state.
+type specDiffUIState struct {
+	open        bool
+	hasBaseline bool
+	diff        app.SpecDiffResult
+}
+
 // Model is the root Bubble Tea model for the TUI shell.
 type Model struct {
 	service          *app.Service
@@ -93,6 +100,7 @@ type Model struct {
 	historyUI        historyUIState
 	helpUI           helpUIState
 	curlUI           curlUIState
+	specDiffUI       specDiffUIState
 	schemaExplorerUI schemaExplorerUIState
 }
 
@@ -166,7 +174,7 @@ func NewModel(service *app.Service, source string) *Model {
 // Init starts the initial spec load for the TUI model.
 func (m *Model) Init() tea.Cmd {
 	m.ensureWidgetDefaults()
-	return m.startLoadCmd()
+	return m.startLoadCmd("Loading spec")
 }
 
 // Update applies one Bubble Tea message to the root shell model.
@@ -187,6 +195,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		previousSpec := m.session.Spec
 		m.shell.loadErr = msg.err
 		if msg.err != nil {
 			m.session.ActiveLoadRequestID = msg.requestID
@@ -205,11 +214,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewState.ActiveLoadRequestID = msg.requestID
 		m.viewState.LoadInFlight = false
 		m.viewState.RightPaneLayoutPreset = chooseLayoutPreset(m.shell.width)
+		m.specDiffUI.hasBaseline = previousSpec != nil
+		m.specDiffUI.diff = app.DiffSpecs(previousSpec, m.session.Spec)
 		m.syncVisibleOperations()
 		m.syncActivePaneSections()
 		switch {
 		case strings.TrimSpace(msg.result.Notice) != "":
 			m.viewState.Notice = msg.result.Notice
+		case previousSpec != nil && m.specDiffUI.diff.Changed:
+			m.viewState.Notice = "Spec reloaded (changes detected)"
+		case previousSpec != nil:
+			m.viewState.Notice = "Spec reloaded (no changes)"
 		case strings.TrimSpace(m.shell.startupNotice) != "":
 			m.viewState.Notice = m.shell.startupNotice
 		default:
@@ -283,12 +298,12 @@ func (m *Model) cycleTheme(forward bool) {
 }
 
 // startLoadCmd starts a new asynchronous spec load request.
-func (m *Model) startLoadCmd() tea.Cmd {
+func (m *Model) startLoadCmd(notice string) tea.Cmd {
 	requestID := m.viewState.ActiveLoadRequestID + 1
 	m.session.ActiveLoadRequestID = requestID
 	m.viewState.ActiveLoadRequestID = requestID
 	m.viewState.LoadInFlight = true
-	m.viewState.Notice = "Loading spec"
+	m.viewState.Notice = notice
 	m.shell.loadErr = nil
 
 	service := m.service
@@ -302,4 +317,12 @@ func (m *Model) startLoadCmd() tea.Cmd {
 			err:       err,
 		}
 	}
+}
+
+func (m *Model) reloadSpec() tea.Cmd {
+	if m.viewState.LoadInFlight || strings.TrimSpace(m.shell.source) == "" {
+		return nil
+	}
+
+	return m.startLoadCmd("Reloading spec")
 }

@@ -10,6 +10,7 @@ import (
 	requestui "github.com/phergul/apiscope/internal/tui/request"
 	responseui "github.com/phergul/apiscope/internal/tui/response"
 	schemaexplorerui "github.com/phergul/apiscope/internal/tui/schemaexplorer"
+	specdiffui "github.com/phergul/apiscope/internal/tui/specdiff"
 	"github.com/phergul/apiscope/internal/tui/widgets"
 	"github.com/phergul/apiscope/internal/util"
 
@@ -66,6 +67,8 @@ func (m *Model) currentHelpView() widgets.HelpView {
 		return m.blockingLoadErrorHelpView()
 	case m.schemaExplorerOpen():
 		return schemaexplorerui.BuildHelpView()
+	case m.specDiffPopupOpen():
+		return specdiffui.BuildHelpView()
 	case m.historyPopupOpen():
 		return historyui.BuildHelpView()
 	case m.viewState.ActiveEditorMode == model.EditorModeFilter:
@@ -92,6 +95,7 @@ func (m *Model) blockingLoadErrorHelpView() widgets.HelpView {
 		Hint:  "Help - ?",
 		Title: "Load error help",
 		Body: strings.Join([]string{
+			"R or Ctrl+L reload spec",
 			"Enter, Esc, or q quit",
 			"? or Esc close help",
 		}, "\n"),

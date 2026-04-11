@@ -139,11 +139,22 @@ func dataSections(data Data) []widgets.Section {
 // renderSummaryContent renders the summary section for the selected operation.
 func renderSummaryContent(data Data) string {
 	return strings.Join([]string{
-		fmt.Sprintf("Summary: %s", fallbackText(data.Selected.Summary, "None")),
-		fmt.Sprintf("Description: %s", fallbackText(data.Selected.Description, "None")),
-		fmt.Sprintf("Tags: %s", formatTags(data.Selected.Tags)),
-		fmt.Sprintf("Deprecated: %s", yesNo(data.Selected.Deprecated)),
+		renderSummaryField("Summary", fallbackText(data.Selected.Summary, "None")),
+		renderSummaryField("Description", fallbackText(data.Selected.Description, "None")),
+		renderSummaryField("Tags", formatTags(data.Selected.Tags)),
+		renderSummaryField("Deprecated", yesNo(data.Selected.Deprecated)),
 	}, "\n")
+}
+
+func renderSummaryField(label, value string) string {
+	lines := strings.Split(value, "\n")
+	body := make([]string, 0, len(lines))
+	body = append(body, fmt.Sprintf("%s %s", widgets.MutedTextStyle().Render(label+":"), lines[0]))
+	for _, line := range lines[1:] {
+		body = append(body, "  "+line)
+	}
+
+	return strings.Join(body, "\n")
 }
 
 // fallbackText returns a trimmed value or the provided fallback string.

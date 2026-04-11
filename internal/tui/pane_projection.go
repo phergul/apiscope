@@ -32,9 +32,10 @@ func (m *Model) projectOperationsPaneForState(contentWidth, maxLines, scrollOffs
 	return operationsui.ProjectPane(input)
 }
 
-// projectDetailsPane projects root state into the details pane render model without viewport clipping.
+// projectDetailsPane projects root state into the details pane render model using the real pane width without viewport clipping.
 func (m *Model) projectDetailsPane() detailsui.Data {
-	return m.projectDetailsPaneForSize(0, 0).Data
+	width, _ := m.detailsPaneSize()
+	return m.projectDetailsPaneForSize(width, 0).Data
 }
 
 // projectDetailsPaneForSize projects root state into the details pane for a specific pane size.

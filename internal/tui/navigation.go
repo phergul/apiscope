@@ -342,15 +342,8 @@ func (m *Model) maxDetailsScrollOffset() int {
 
 // detailsVisibleBodyLines returns the visible details body height for the current layout.
 func (m *Model) detailsVisibleBodyLines() int {
-	width, height := m.resolvedDimensions()
-	bodyHeight := max(height-m.statusBarHeight(width), 12)
-	var paneHeight int
-	if m.viewState.RightPaneLayoutPreset == layoutPresetWide {
-		paneHeight = computeWidePaneHeights(bodyHeight).Details
-	} else {
-		paneHeight = computeNarrowPaneHeights(bodyHeight).Details
-	}
+	_, paneHeight := m.detailsPaneSize()
 
-	// reserve six lines for the pane frame, section strip, and spacing above the body content.
-	return max(paneHeight-6, 1)
+	// reserve lines for the pane frame, section strip, and spacing above the body content.
+	return max(paneHeight-4, 1)
 }

@@ -239,6 +239,37 @@ func TestModelRotatesFocusWithTabAndShiftTab(t *testing.T) {
 	}
 }
 
+func TestDetailsScrollCanReachWrappedSummaryBottom(t *testing.T) {
+	t.Parallel()
+
+	service := app.NewService(&stubLoader{}, nil, nil, nil)
+	m := NewModel(service, "demo.yaml")
+	m.shell.width = 80
+	m.shell.height = 32
+	m.viewState.RightPaneLayoutPreset = layoutPresetWide
+	m.viewState.FocusedPane = model.FocusedPaneDetails
+	m.session.Spec = &model.APISpec{
+		Operations: []model.Operation{{
+			Key:         model.NewOperationKey("GET", "/pets"),
+			Method:      "GET",
+			Path:        "/pets",
+			Summary:     "List pets",
+			Description: strings.Repeat("long description text ", 30),
+		}},
+	}
+	m.session.SelectedOperationKey = m.session.Spec.Operations[0].Key
+
+	maxOffset := m.maxDetailsScrollOffset()
+	if maxOffset == 0 {
+		t.Fatalf("expected wrapped summary content to be scrollable, got max offset %d", maxOffset)
+	}
+
+	m.scrollDetailsToBoundary(true)
+	if m.viewState.DetailsScrollOffset != maxOffset {
+		t.Fatalf("expected details scroll to reach bottom offset %d, got %d", maxOffset, m.viewState.DetailsScrollOffset)
+	}
+}
+
 func TestModelZoomToggleAndFocusChangesFollowWhileZoomed(t *testing.T) {
 	t.Parallel()
 

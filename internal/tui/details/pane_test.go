@@ -78,3 +78,30 @@ func TestProjectPaneRendersWarningsSection(t *testing.T) {
 		t.Fatalf("expected warnings section to render, got %q", content)
 	}
 }
+
+func TestProjectPaneWrapsSummaryDescriptionToContentWidth(t *testing.T) {
+	t.Parallel()
+
+	projected := ProjectPane(PaneInput{
+		Selected: &model.Operation{
+			Method:      "GET",
+			Path:        "/pets",
+			Summary:     "List pets",
+			Description: "this description should wrap to fit pane width",
+		},
+		ActiveSection: SectionSummary,
+		ContentWidth:  18,
+		ContentHeight: 8,
+	})
+
+	content := ansi.Strip(Render(projected.Data))
+	if !strings.Contains(content, "Description: this") {
+		t.Fatalf("expected wrapped description to keep the prefix on first line, got %q", content)
+	}
+	if !strings.Contains(content, "description should") {
+		t.Fatalf("expected wrapped description body continuation, got %q", content)
+	}
+	if !strings.Contains(content, "wrap to fit pane") {
+		t.Fatalf("expected wrapped description final continuation, got %q", content)
+	}
+}

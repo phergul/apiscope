@@ -43,7 +43,7 @@ func ProjectPane(input PaneInput) PaneProjection {
 	}
 
 	projected := widgets.ProjectClippedSectionView(widgets.ClippedSectionViewInput{
-		Sections:      Sections(data),
+		Sections:      wrapSections(Sections(data), input.ContentWidth),
 		Active:        data.ActiveSection,
 		EmptyState:    "",
 		ContentWidth:  input.ContentWidth,
@@ -62,4 +62,19 @@ func ProjectPane(input PaneInput) PaneProjection {
 // MaxScrollOffset returns the maximum details scroll offset for the active section.
 func MaxScrollOffset(data Data, visibleLines int) int {
 	return widgets.MaxSectionScrollOffset(dataSections(data), data.ActiveSection, visibleLines)
+}
+
+func wrapSections(sections []widgets.Section, width int) []widgets.Section {
+	if width <= 0 {
+		return sections
+	}
+
+	wrapped := make([]widgets.Section, 0, len(sections))
+	for _, section := range sections {
+		lines := strings.Split(section.Body, "\n")
+		section.Body = strings.Join(widgets.WrapLines(lines, width), "\n")
+		wrapped = append(wrapped, section)
+	}
+
+	return wrapped
 }

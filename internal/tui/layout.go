@@ -225,6 +225,27 @@ func (m *Model) rightPaneHeights(heights stackedPaneHeights) (int, int) {
 	return heights.Expanded, heights.Folded
 }
 
+// detailsPaneSize returns the rendered details pane size for the current shell layout.
+func (m *Model) detailsPaneSize() (int, int) {
+	width, height := m.resolvedDimensions()
+	bodyHeight := max(height-m.statusBarHeight(width), 12)
+	if m.viewState.ZoomedPane && m.viewState.FocusedPane == model.FocusedPaneDetails {
+		return width, bodyHeight
+	}
+
+	preset := m.viewState.RightPaneLayoutPreset
+	if preset == "" {
+		preset = chooseLayoutPreset(width)
+	}
+
+	if preset == layoutPresetWide {
+		_, rightWidth := m.wideColumnWidths(width)
+		return rightWidth, computeWidePaneHeights(bodyHeight).Details
+	}
+
+	return width, computeNarrowPaneHeights(bodyHeight).Details
+}
+
 // responsePaneSize returns the rendered response pane size for the current shell layout.
 func (m *Model) responsePaneSize() (int, int) {
 	width, height := m.resolvedDimensions()

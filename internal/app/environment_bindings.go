@@ -119,6 +119,14 @@ func (s *Service) lookupEnvFunc() func(string) (string, bool) {
 	return os.LookupEnv
 }
 
+// LookupEnv resolves one environment variable using the service lookup hook.
+func (s *Service) LookupEnv(name string) (string, bool) {
+	if s == nil {
+		return os.LookupEnv(name)
+	}
+	return s.lookupEnvFunc()(name)
+}
+
 func resolveEnvironmentAuth(environment model.SavedEnvironment, securitySchemes map[string]model.SecurityScheme, lookupEnv func(string) (string, bool)) (map[string]model.AuthValue, []string) {
 	if len(environment.AuthBindings) == 0 || len(securitySchemes) == 0 {
 		return nil, nil

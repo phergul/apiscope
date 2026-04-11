@@ -1,6 +1,7 @@
 package app
 
 import (
+	"os"
 	"strings"
 
 	"github.com/phergul/apiscope/internal/model"
@@ -118,6 +119,9 @@ func ValidateRequest(operation *model.Operation, draft *model.RequestDraft) Requ
 
 // ValidateExecutableRequest checks request inputs and auth requirements before execution.
 func ValidateExecutableRequest(session model.SessionState, operation *model.Operation, draft *model.RequestDraft) RequestValidationResult {
+	if operation != nil {
+		ResolveAuthFromDraftEnvVars(&session, operation)
+	}
 	result := ValidateRequest(operation, draft)
 	securitySchemes := map[string]model.SecurityScheme(nil)
 	if session.Spec != nil {
@@ -126,6 +130,62 @@ func ValidateExecutableRequest(session model.SessionState, operation *model.Oper
 	authValidation := ValidateAuth(EffectiveSecurityRequirement(session, operation), securitySchemes, session.AuthState)
 	result.Issues = append(result.Issues, authValidation.Issues...)
 	return result
+}
+
+func DraftAuthEnvVar(session *model.SessionState, operation *model.Operation, schemeName string, field model.AuthField) string {
+	if session == nil || operation == nil {
+		return ""
+	}
+
+	draft := EnsureRequestDraft(session, operation)
+	if draft == nil {
+		return ""
+	}
+	if draft.BodyPartEncoding == nil {
+		return ""
+	}
+
+	key := "auth:env:" + schemeName + ":" + string(field)
+	return strings.TrimSpace(draft.BodyPartEncoding[key])
+}
+
+// ResolveAuthFromDraftEnvVars applies env-var auth bindings from the current draft into session auth state.
+func ResolveAuthFromDraftEnvVars(session *model.SessionState, operation *model.Operation) {
+	if session == nil || session.Spec == nil || operation == nil {
+		return
+	}
+
+	requirement := EffectiveSecurityRequirement(*session, operation)
+	if requirement == nil || len(requirement.Alternatives) == 0 {
+		return
+	}
+
+	for _, alternative := range requirement.Alternatives {
+		for _, ref := range alternative.Schemes {
+			scheme, ok := session.Spec.SecuritySchemes[ref.Name]
+			if !ok {
+				continue
+			}
+			for _, field := range SupportedAuthFields(scheme) {
+				authValue := AuthValue(*session, scheme.Name)
+				if AuthFieldSatisfied(authValue, field) {
+					continue
+				}
+				envVarName := DraftAuthEnvVar(session, operation, ref.Name, field)
+				if strings.TrimSpace(envVarName) == "" {
+					envVarName = DraftAuthEnvVar(session, operation, scheme.Name, field)
+				}
+				if strings.TrimSpace(envVarName) == "" {
+					continue
+				}
+				value, ok := os.LookupEnv(envVarName)
+				if !ok || strings.TrimSpace(value) == "" {
+					continue
+				}
+				SetAuthField(session, scheme, field, value)
+			}
+		}
+	}
 }
 
 // draftParameterValue returns the current draft value for the requested parameter.

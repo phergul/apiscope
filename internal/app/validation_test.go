@@ -101,3 +101,37 @@ func TestValidateRequestReportsRequiredMultipartBodyFields(t *testing.T) {
 		t.Fatalf("expected raw body validation to be skipped for multipart fields, got %#v", result.Issues)
 	}
 }
+
+func TestValidateExecutableRequestResolvesAuthFromDraftEnvVarBinding(t *testing.T) {
+	t.Setenv("APISCOPE_TEST_TOKEN", "secret-token")
+
+	operation := model.Operation{
+		Key:    model.NewOperationKey("GET", "/pets"),
+		Method: "GET",
+		Path:   "/pets",
+		Security: &model.SecurityRequirement{Alternatives: []model.SecurityAlternative{{
+			Schemes: []model.SecurityRequirementRef{{Name: "api_key"}},
+		}}},
+	}
+	session := model.SessionState{
+		SpecFingerprint:      "spec-1",
+		SelectedOperationKey: operation.Key,
+		Spec: &model.APISpec{
+			Operations: []model.Operation{operation},
+			SecuritySchemes: map[string]model.SecurityScheme{
+				"api_key": {Name: "api_key", Type: model.SecuritySchemeTypeAPIKey, In: model.ParameterLocationHeader, ParameterName: "X-API-Key"},
+			},
+		},
+		RequestDrafts: map[model.DraftKey]*model.RequestDraft{},
+	}
+	draft := EnsureRequestDraft(&session, &operation)
+	if draft.BodyPartEncoding == nil {
+		draft.BodyPartEncoding = make(map[string]string)
+	}
+	draft.BodyPartEncoding["auth:env:api_key:api_key"] = "APISCOPE_TEST_TOKEN"
+
+	result := ValidateExecutableRequest(session, &operation, draft)
+	if result.HasIssues() {
+		t.Fatalf("expected env var auth binding to satisfy validation, got %#v", result.Issues)
+	}
+}

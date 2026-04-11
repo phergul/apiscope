@@ -100,11 +100,33 @@ func (m *Model) saveAuthSource(row requestui.RowDescriptor, source string) bool 
 	source = strings.TrimSpace(source)
 	if source == "" {
 		m.requestUI.authSourceOverrides[key] = requestui.AuthSourceOverride{UseSession: true}
+		if scheme, ok := m.securitySchemes()[row.AuthSchemeName]; ok && strings.TrimSpace(scheme.Name) != "" {
+			m.requestUI.authSourceOverrides[scheme.Name+":"+string(row.AuthField)] = requestui.AuthSourceOverride{UseSession: true}
+		}
+		draft := m.ensureSelectedRequestDraft()
+		if draft != nil && draft.BodyPartEncoding != nil {
+			delete(draft.BodyPartEncoding, "auth:env:"+row.AuthSchemeName+":"+string(row.AuthField))
+			if scheme, ok := m.securitySchemes()[row.AuthSchemeName]; ok && strings.TrimSpace(scheme.Name) != "" {
+				delete(draft.BodyPartEncoding, "auth:env:"+scheme.Name+":"+string(row.AuthField))
+			}
+		}
 		m.viewState.Notice = "Using session value: " + row.Label
 		return true
 	}
 
 	m.requestUI.authSourceOverrides[key] = requestui.AuthSourceOverride{EnvVarName: source}
+	if scheme, ok := m.securitySchemes()[row.AuthSchemeName]; ok && strings.TrimSpace(scheme.Name) != "" {
+		m.requestUI.authSourceOverrides[scheme.Name+":"+string(row.AuthField)] = requestui.AuthSourceOverride{EnvVarName: source}
+	}
+	if draft := m.ensureSelectedRequestDraft(); draft != nil {
+		if draft.BodyPartEncoding == nil {
+			draft.BodyPartEncoding = make(map[string]string)
+		}
+		draft.BodyPartEncoding["auth:env:"+row.AuthSchemeName+":"+string(row.AuthField)] = source
+		if scheme, ok := m.securitySchemes()[row.AuthSchemeName]; ok && strings.TrimSpace(scheme.Name) != "" {
+			draft.BodyPartEncoding["auth:env:"+scheme.Name+":"+string(row.AuthField)] = source
+		}
+	}
 	value, ok := os.LookupEnv(source)
 	scheme, schemeOK := m.securitySchemes()[row.AuthSchemeName]
 	if !ok || strings.TrimSpace(value) == "" {

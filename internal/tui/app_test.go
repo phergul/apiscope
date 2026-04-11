@@ -2801,6 +2801,49 @@ func TestModelAuthEditorShowsSavedEnvVarNameWhenEnvIsMissing(t *testing.T) {
 	}
 }
 
+func TestModelCtrlRUsesDraftEnvAuthBindingForExecution(t *testing.T) {
+	t.Setenv("APISCOPE_EXEC_KEY", "secret-from-env")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("X-API-Key"); got != "secret-from-env" {
+			t.Fatalf("expected api key from draft env binding, got %q", got)
+		}
+		_, _ = w.Write([]byte(`ok`))
+	}))
+	defer server.Close()
+
+	m := newLoadedModelForNavigation()
+	m.service = app.NewService(nil, nil, nil, nil)
+	m.session.SelectedServerURL = server.URL
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	draft := m.ensureSelectedRequestDraft()
+	draft.PathParams["petId"] = "abc"
+	draft.BodyRaw = `{"name":"fido"}`
+	draft.BodyMediaType = "application/json"
+	if draft.BodyPartEncoding == nil {
+		draft.BodyPartEncoding = make(map[string]string)
+	}
+	draft.BodyPartEncoding["auth:env:api_key:api_key"] = "APISCOPE_EXEC_KEY"
+
+	updatedModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlR})
+	updated := updatedModel.(*Model)
+	if cmd == nil {
+		t.Fatal("expected ctrl+r to execute using draft env auth binding")
+	}
+	if !updated.viewState.ExecuteInFlight {
+		t.Fatal("expected execute-in-flight state")
+	}
+
+	execModel, _ := updated.Update(cmd())
+	execUpdated := execModel.(*Model)
+	if execUpdated.viewState.ExecuteInFlight {
+		t.Fatal("expected execute-in-flight to clear")
+	}
+	if execUpdated.session.LastResponse == nil || execUpdated.session.LastResponse.TransportError != "" {
+		t.Fatalf("expected successful response after env-bound auth execution, got %#v", execUpdated.session.LastResponse)
+	}
+}
+
 func TestModelThemeKeysStillWorkFromHistoryPopup(t *testing.T) {
 	t.Parallel()
 

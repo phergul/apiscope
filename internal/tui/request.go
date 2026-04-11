@@ -13,7 +13,11 @@ import (
 
 // ensureSelectedRequestDraft returns the current request draft for the selected operation.
 func (m *Model) ensureSelectedRequestDraft() *model.RequestDraft {
-	return app.EnsureRequestDraft(&m.session, m.resolvedSelectedOperation())
+	selected := m.resolvedSelectedOperation()
+	draft := app.EnsureRequestDraft(&m.session, selected)
+	app.ResolveAuthFromDraftEnvVars(&m.session, selected)
+	m.applyAuthSourceOverrides(selected)
+	return draft
 }
 
 // activeRequestRows returns the request rows for the active request section.
@@ -22,6 +26,8 @@ func (m *Model) activeRequestRows() []requestui.RowDescriptor {
 	if selected == nil {
 		return nil
 	}
+	m.applyAuthSourceOverrides(selected)
+	app.ResolveAuthFromDraftEnvVars(&m.session, selected)
 
 	return requestui.ActiveRows(
 		selected,
@@ -36,6 +42,54 @@ func (m *Model) activeRequestRows() []requestui.RowDescriptor {
 		m.requestUI.appliedEnvironmentName,
 		m.requestUI.authSourceOverrides,
 	)
+}
+
+func (m *Model) applyAuthSourceOverrides(selected *model.Operation) {
+	if selected == nil || len(m.requestUI.authSourceOverrides) == 0 {
+		return
+	}
+
+	security := m.effectiveSecurityRequirement(selected)
+	if security == nil || len(security.Alternatives) == 0 {
+		return
+	}
+	schemes := m.securitySchemes()
+	if len(schemes) == 0 {
+		return
+	}
+
+	seen := make(map[string]struct{})
+	for _, alternative := range security.Alternatives {
+		for _, ref := range alternative.Schemes {
+			scheme, ok := schemes[ref.Name]
+			if !ok {
+				continue
+			}
+			for _, field := range app.SupportedAuthFields(scheme) {
+				key := scheme.Name + ":" + string(field)
+				if _, done := seen[key]; done {
+					continue
+				}
+				seen[key] = struct{}{}
+				override, ok := m.requestUI.authSourceOverrides[key]
+				if !ok {
+					continue
+				}
+				if override.UseSession {
+					continue
+				}
+				envVar := strings.TrimSpace(override.EnvVarName)
+				if envVar == "" {
+					continue
+				}
+				value, ok := m.service.LookupEnv(envVar)
+				if !ok || strings.TrimSpace(value) == "" {
+					continue
+				}
+				app.SetAuthField(&m.session, scheme, field, value)
+			}
+		}
+	}
 }
 
 // requestRowState returns the current request row selection and scroll state.

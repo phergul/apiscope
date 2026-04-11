@@ -1419,7 +1419,7 @@ func TestModelCtrlRFocusesFirstMissingFieldInBestAuthAlternative(t *testing.T) {
 	if updated.panes.activeRequestSection != requestui.SectionAuth {
 		t.Fatalf("expected auth section to stay active, got %q", updated.panes.activeRequestSection)
 	}
-	if updated.viewState.RequestActiveRow != 2 {
+	if updated.viewState.RequestActiveRow != 3 {
 		t.Fatalf("expected cursor to focus first missing field row, got %d", updated.viewState.RequestActiveRow)
 	}
 }
@@ -2481,7 +2481,7 @@ func TestModelEnvironmentSaveApplyAndDeleteFlow(t *testing.T) {
 	updated = updatedModel.(*Model)
 	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	updated = updatedModel.(*Model)
-	if updated.viewState.Notice != "Environment saved" {
+	if updated.viewState.Notice != "Saved environment: staging" {
 		t.Fatalf("expected saved environment notice, got %q", updated.viewState.Notice)
 	}
 	if updated.requestUI.appliedEnvironmentName != "staging" {
@@ -2491,7 +2491,7 @@ func TestModelEnvironmentSaveApplyAndDeleteFlow(t *testing.T) {
 		t.Fatalf("expected one persisted environment, got %#v", updated.persisted.environments)
 	}
 
-	updated.viewState.RequestActiveRow = 2
+	updated.viewState.RequestActiveRow = 4
 	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	updated = updatedModel.(*Model)
 	if updated.viewState.RequestEditKind != model.RequestEditKindField {
@@ -2502,7 +2502,7 @@ func TestModelEnvironmentSaveApplyAndDeleteFlow(t *testing.T) {
 	updated = updatedModel.(*Model)
 	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	updated = updatedModel.(*Model)
-	if updated.viewState.Notice != "Environment binding saved" {
+	if updated.viewState.Notice != "Saved binding: api_key" {
 		t.Fatalf("expected saved binding notice, got %q", updated.viewState.Notice)
 	}
 	if got := updated.persisted.environments[0].AuthBindings["api_key"].FieldEnvVars[model.AuthFieldAPIKey]; got != "APISCOPE_TEST_ENVIRONMENT_API_KEY" {
@@ -2511,15 +2511,27 @@ func TestModelEnvironmentSaveApplyAndDeleteFlow(t *testing.T) {
 	if updated.session.AuthState["api_key"].APIKey != "secret-from-env" {
 		t.Fatalf("expected binding save to reapply resolved auth, got %#v", updated.session.AuthState)
 	}
+	updated.panes.activeRequestSection = requestui.SectionAuth
+	authData := updated.projectRequestPane()
+	if len(authData.Rows) < 3 || authData.Rows[1].Kind != requestui.RowKindAuthField || authData.Rows[2].Kind != requestui.RowKindAuthSource {
+		t.Fatalf("expected auth section to include field and source rows, got %#v", authData.Rows)
+	}
+	if authData.Rows[1].Editable {
+		t.Fatalf("expected env-managed auth field to be read-only, got %#v", authData.Rows[1])
+	}
+	if got := authData.Rows[2].Value; got != "env var: APISCOPE_TEST_ENVIRONMENT_API_KEY" {
+		t.Fatalf("expected auth source row to show saved env var binding, got %q", got)
+	}
+	updated.panes.activeRequestSection = requestui.SectionEnvironment
 
 	updated.session.SelectedServerURL = "https://api.example.com"
 	updated.session.AuthState = map[string]model.AuthValue{}
 	updated.requestUI.appliedEnvironmentName = ""
-	updated.viewState.RequestActiveRow = 3
+	updated.viewState.RequestActiveRow = 2
 
 	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	updated = updatedModel.(*Model)
-	if updated.viewState.Notice != "Environment applied" {
+	if updated.viewState.Notice != "Loaded environment: staging" {
 		t.Fatalf("expected apply environment notice, got %q", updated.viewState.Notice)
 	}
 	if updated.session.SelectedServerURL != "https://staging.example.com" {
@@ -2529,7 +2541,7 @@ func TestModelEnvironmentSaveApplyAndDeleteFlow(t *testing.T) {
 		t.Fatalf("expected applied auth state, got %#v", updated.session.AuthState)
 	}
 
-	updated.viewState.RequestActiveRow = 4
+	updated.viewState.RequestActiveRow = 5
 	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	updated = updatedModel.(*Model)
 	if updated.viewState.RequestEditKind != model.RequestEditKindConfirm {
@@ -2538,7 +2550,7 @@ func TestModelEnvironmentSaveApplyAndDeleteFlow(t *testing.T) {
 
 	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	updated = updatedModel.(*Model)
-	if updated.viewState.Notice != "Environment deleted" {
+	if updated.viewState.Notice != "Deleted environment: staging" {
 		t.Fatalf("expected delete notice, got %q", updated.viewState.Notice)
 	}
 	if updated.requestUI.appliedEnvironmentName != "" {
@@ -2639,16 +2651,98 @@ func TestModelApplyEnvironmentShowsMissingEnvVarNotice(t *testing.T) {
 	}}
 	m.viewState.FocusedPane = model.FocusedPaneRequest
 	m.panes.activeRequestSection = requestui.SectionEnvironment
-	m.viewState.RequestActiveRow = 3
+	m.viewState.RequestActiveRow = 2
 	m.syncActiveRequestRow()
 
 	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	updated := updatedModel.(*Model)
-	if updated.viewState.Notice != "Environment applied; missing APISCOPE_MISSING_TOKEN" {
+	if updated.viewState.Notice != "Loaded environment: staging; missing APISCOPE_MISSING_TOKEN" {
 		t.Fatalf("expected missing env var notice, got %q", updated.viewState.Notice)
 	}
 	if updated.session.SelectedServerURL != "https://staging.example.com" {
 		t.Fatalf("expected server update even with missing env var, got %q", updated.session.SelectedServerURL)
+	}
+}
+
+func TestModelUnloadEnvironmentKeepsSessionValues(t *testing.T) {
+	t.Parallel()
+
+	m := newLoadedModelForNavigation()
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.panes.activeRequestSection = requestui.SectionEnvironment
+	m.requestUI.appliedEnvironmentName = "staging"
+	m.session.SelectedServerURL = "https://staging.example.com"
+	m.session.AuthState = map[string]model.AuthValue{"api_key": {Type: model.AuthSchemeValueTypeAPIKey, APIKey: "secret"}}
+	m.viewState.RequestActiveRow = 1
+	m.syncActiveRequestRow()
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated := updatedModel.(*Model)
+	if updated.requestUI.appliedEnvironmentName != "" {
+		t.Fatalf("expected unload to clear applied environment marker, got %q", updated.requestUI.appliedEnvironmentName)
+	}
+	if updated.session.SelectedServerURL != "https://staging.example.com" {
+		t.Fatalf("expected unload to keep selected server URL, got %q", updated.session.SelectedServerURL)
+	}
+	if got := updated.session.AuthState["api_key"].APIKey; got != "secret" {
+		t.Fatalf("expected unload to keep session auth value, got %#v", updated.session.AuthState)
+	}
+	if updated.viewState.Notice != "Unloaded environment: staging" {
+		t.Fatalf("expected unload notice, got %q", updated.viewState.Notice)
+	}
+}
+
+func TestModelAuthSourceCanSwitchToSessionOverrideWithoutSavingBinding(t *testing.T) {
+	t.Setenv("APISCOPE_TEST_ENVIRONMENT_API_KEY", "secret-from-env")
+	store := persist.NewStore(t.TempDir())
+	scopeKey := model.NewPersistenceScopeKey("demo.yaml", model.SourceFamilyOpenAPI3)
+	if err := store.SaveEnvironments([]model.SavedEnvironment{{
+		Name:     "staging",
+		ScopeKey: scopeKey,
+		AuthBindings: map[string]model.SavedAuthBinding{
+			"api_key": {FieldEnvVars: map[model.AuthField]string{model.AuthFieldAPIKey: "APISCOPE_TEST_ENVIRONMENT_API_KEY"}},
+		},
+	}}); err != nil {
+		t.Fatalf("SaveEnvironments returned error: %v", err)
+	}
+
+	m := newLoadedModelForNavigation()
+	m.service = app.NewService(nil, nil, store, nil)
+	m.session.PersistenceScopeKey = scopeKey
+	m.persisted.environments = []model.SavedEnvironment{{
+		Name:     "staging",
+		ScopeKey: scopeKey,
+		AuthBindings: map[string]model.SavedAuthBinding{
+			"api_key": {FieldEnvVars: map[model.AuthField]string{model.AuthFieldAPIKey: "APISCOPE_TEST_ENVIRONMENT_API_KEY"}},
+		},
+	}}
+	m.requestUI.appliedEnvironmentName = "staging"
+	m.session.AuthState = map[string]model.AuthValue{"api_key": {Type: model.AuthSchemeValueTypeAPIKey, APIKey: "secret-from-env"}}
+	m.viewState.FocusedPane = model.FocusedPaneRequest
+	m.panes.activeRequestSection = requestui.SectionAuth
+	m.viewState.RequestActiveRow = 2
+	m.syncActiveRequestRow()
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated := updatedModel.(*Model)
+	if updated.viewState.RequestEditKind != model.RequestEditKindField {
+		t.Fatalf("expected auth source row to enter field edit, got %q", updated.viewState.RequestEditKind)
+	}
+
+	updated.viewState.RequestEditBuffer = ""
+	updated.widgets.requestFieldInput.SetValue("")
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated = updatedModel.(*Model)
+
+	authData := updated.projectRequestPane()
+	if authData.Rows[1].Kind != requestui.RowKindAuthField || !authData.Rows[1].Editable {
+		t.Fatalf("expected auth field to become editable in session override mode, got %#v", authData.Rows[1])
+	}
+	if authData.Rows[2].Value != "session value" {
+		t.Fatalf("expected source row to switch to session value, got %#v", authData.Rows[2])
+	}
+	if got := updated.persisted.environments[0].AuthBindings["api_key"].FieldEnvVars[model.AuthFieldAPIKey]; got != "APISCOPE_TEST_ENVIRONMENT_API_KEY" {
+		t.Fatalf("expected saved env binding to remain unchanged, got %#v", updated.persisted.environments[0].AuthBindings)
 	}
 }
 

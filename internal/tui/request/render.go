@@ -81,8 +81,24 @@ func RenderActiveSection(data Data) string {
 
 	activeIndex := requestActiveRowIndex(data.Rows, data.ActiveRow)
 	lines := make([]string, 0, len(data.Rows)*2)
+	if data.ActiveSection == SectionEnvironment {
+		if summary := renderEnvironmentSummary(data.Rows); summary != "" {
+			lines = append(lines, summary, "")
+		}
+	}
 	rowErrorMessages := make(map[string]struct{}, len(data.Rows))
+	lastEnvironmentGroup := ""
 	for index, row := range data.Rows {
+		if data.ActiveSection == SectionEnvironment {
+			group := environmentGroupForRow(row.Kind)
+			if group != "" && group != lastEnvironmentGroup {
+				if len(lines) > 0 && lines[len(lines)-1] != "" {
+					lines = append(lines, "")
+				}
+				lines = append(lines, widgets.RenderMutedHeading(group))
+				lastEnvironmentGroup = group
+			}
+		}
 		if row.Kind == RowKindBodyText {
 			lines = append(lines, renderBodyPreviewRow(row, index == activeIndex, data.ContentWidth))
 		} else {
@@ -125,6 +141,42 @@ func filterValidationSummaryMessages(messages []string, rowErrorMessages map[str
 	}
 
 	return filtered
+}
+
+func renderEnvironmentSummary(rows []Row) string {
+	hasSaved := false
+	for _, row := range rows {
+		if row.Kind == RowKindEnvironmentApply {
+			hasSaved = true
+			break
+		}
+	}
+
+	lines := []string{widgets.MutedTextStyle().Render("Enter saves, loads, or edits the selected environment row.")}
+	if !hasSaved {
+		lines = append(lines, widgets.MutedTextStyle().Render("No saved environments yet. Save session as a name to create one."))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func environmentGroupForRow(kind RowKind) string {
+	switch kind {
+	case RowKindEnvironmentCurrent:
+		return "Session"
+	case RowKindEnvironmentUnload:
+		return "Session"
+	case RowKindEnvironmentSave:
+		return "Save"
+	case RowKindEnvironmentApply:
+		return "Saved environments"
+	case RowKindEnvironmentBinding:
+		return "Env var bindings"
+	case RowKindEnvironmentDelete:
+		return "Danger zone"
+	default:
+		return ""
+	}
 }
 
 // renderRequestRow renders a standard single-line request row.
@@ -327,14 +379,33 @@ func editorPopupBody(data Data) string {
 
 // popupWidth returns the request editor popup width for the active editor kind.
 func popupWidth(data Data) int {
+	preferred := popupPreferredWidth(data)
+	maxWidth := max(data.ContentWidth-2, 24)
 	if data.Edit.Kind == "body" {
-		// leave extra side padding for the larger body editor so the popup does not hug the pane frame.
-		// return min(max(data.ContentWidth-8, 28), 84)
-		return util.Clamp(data.ContentWidth-8, 28, 84)
+		// grow with content, then cap so long values wrap cleanly inside the popup frame.
+		return util.Clamp(preferred, 28, min(maxWidth, 108))
 	}
 
-	// use slightly tighter padding for field editors so the popup stays close to the selected row.
-	return util.Clamp(data.ContentWidth-10, 24, 64)
+	// field editors should also grow with long values, then wrap beyond a readable max.
+	return util.Clamp(preferred, 24, min(maxWidth, 88))
+}
+
+func popupPreferredWidth(data Data) int {
+	content := editorPopupBody(data)
+	if strings.TrimSpace(content) == "" {
+		return 24
+	}
+
+	maxLineWidth := 0
+	for _, line := range strings.Split(content, "\n") {
+		lineWidth := lipgloss.Width(line)
+		if lineWidth > maxLineWidth {
+			maxLineWidth = lineWidth
+		}
+	}
+
+	// account for popup frame and horizontal padding around body content.
+	return maxLineWidth + 4
 }
 
 // popupX places the editor under the selected row.

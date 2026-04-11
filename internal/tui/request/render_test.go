@@ -247,6 +247,81 @@ func TestRenderKeepsValidationSummaryForSectionOnlyMessage(t *testing.T) {
 	}
 }
 
+func TestRenderEnvironmentSectionShowsWorkflowAndGroups(t *testing.T) {
+	t.Parallel()
+
+	content := ansi.Strip(Render(Data{
+		Sections:      []string{SectionEnvironment},
+		ActiveSection: SectionEnvironment,
+		Rows: []Row{
+			{Kind: RowKindEnvironmentCurrent, Label: "Loaded environment", Meta: "session state", Value: "staging", Editable: false},
+			{Kind: RowKindEnvironmentSave, Label: "Save session as", Meta: "Enter saves or updates", Value: "staging", Editable: true},
+			{Kind: RowKindEnvironmentApply, Label: "staging", Meta: "loaded now, Enter reloads", Value: "server: https://staging.example.com · auth: 1 env binding", Editable: true},
+			{Kind: RowKindEnvironmentBinding, Label: "api_key", Meta: "api key, env var binding", Value: "APISCOPE_API_KEY", Editable: true},
+			{Kind: RowKindEnvironmentDelete, Label: "Delete saved environment", Meta: "Enter confirms delete", Value: "staging", Editable: true},
+		},
+		ActiveRow: 1,
+	}))
+
+	for _, snippet := range []string{
+		"Enter saves, loads, or edits the selected environment row.",
+		"Session",
+		"Save",
+		"Saved environments",
+		"Env var bindings",
+		"Danger zone",
+	} {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected environment rendering to include %q, got %q", snippet, content)
+		}
+	}
+}
+
+func TestRenderEnvironmentSectionShowsEmptySavedEnvironmentHint(t *testing.T) {
+	t.Parallel()
+
+	content := ansi.Strip(Render(Data{
+		Sections:      []string{SectionEnvironment},
+		ActiveSection: SectionEnvironment,
+		Rows: []Row{
+			{Kind: RowKindEnvironmentCurrent, Label: "Loaded environment", Value: "Session only", Editable: false},
+			{Kind: RowKindEnvironmentSave, Label: "Save session as", Value: "<new name>", Editable: true},
+		},
+		ActiveRow: 1,
+	}))
+
+	if !strings.Contains(content, "No saved environments yet. Save session as a name to create one.") {
+		t.Fatalf("expected empty-saved-environment hint, got %q", content)
+	}
+}
+
+func TestPopupWidthGrowsWithLongEditorContentThenCaps(t *testing.T) {
+	t.Parallel()
+
+	short := popupWidth(Data{
+		ContentWidth: 90,
+		Edit: EditView{
+			Kind:    "field",
+			Context: "api_key source",
+			View:    "ABC",
+		},
+	})
+	long := popupWidth(Data{
+		ContentWidth: 90,
+		Edit: EditView{
+			Kind:    "field",
+			Context: "api_key source",
+			View:    strings.Repeat("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", 4),
+		},
+	})
+	if long <= short {
+		t.Fatalf("expected popup width to grow with content, short=%d long=%d", short, long)
+	}
+	if long > 88 {
+		t.Fatalf("expected field popup width to cap at 88, got %d", long)
+	}
+}
+
 func TestRenderShowsMultilineBodyPreview(t *testing.T) {
 	t.Parallel()
 

@@ -351,3 +351,31 @@ func TestSaveEditWritesAuthFieldToSessionState(t *testing.T) {
 		t.Fatalf("expected bearer token to be saved, got %q", got)
 	}
 }
+
+func TestStartEditSeedsAuthSourceBufferFromEnvVarBinding(t *testing.T) {
+	t.Parallel()
+
+	got := StartEdit(
+		&model.Operation{Key: model.NewOperationKey("GET", "/pets")},
+		nil,
+		[]RowDescriptor{{
+			ID:              "environment:binding:api_key:api_key",
+			Kind:            RowKindAuthSource,
+			AuthSchemeName:  "api_key",
+			AuthField:       app.AuthFieldAPIKey,
+			AuthEnvVarName:  "APISCOPE_API_KEY",
+			Editable:        true,
+			EnvironmentName: "staging",
+		}},
+		0,
+		nil,
+		nil,
+	)
+
+	if got.Kind != model.RequestEditKindField {
+		t.Fatalf("expected field edit kind, got %q", got.Kind)
+	}
+	if got.Buffer != "APISCOPE_API_KEY" {
+		t.Fatalf("expected env var name to seed source editor, got %q", got.Buffer)
+	}
+}

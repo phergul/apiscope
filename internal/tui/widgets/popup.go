@@ -31,7 +31,7 @@ func RenderPopup(data PopupData) string {
 	if body != "" {
 		// preserve trailing blank lines so embedded editors keep their full rendered height.
 		for line := range strings.SplitSeq(body, "\n") {
-			lines = append(lines, fitPopupLine(line, innerWidth))
+			lines = append(lines, fitPopupLines(line, innerWidth)...)
 		}
 	}
 
@@ -40,7 +40,7 @@ func RenderPopup(data PopupData) string {
 			lines = append(lines, "")
 		}
 		for line := range strings.SplitSeq(data.Help, "\n") {
-			lines = append(lines, fitPopupLine(MutedTextStyle().Render(line), innerWidth))
+			lines = append(lines, fitPopupLines(MutedTextStyle().Render(line), innerWidth)...)
 		}
 	}
 
@@ -107,12 +107,22 @@ func renderPopupHeader(title, meta string, width int) string {
 	return left + strings.Repeat(" ", gapWidth) + right
 }
 
-func fitPopupLine(line string, width int) string {
+func fitPopupLines(line string, width int) []string {
 	if width <= 0 {
-		return line
+		return []string{line}
 	}
 
-	return lipgloss.NewStyle().Width(width).MaxWidth(width).Render(line)
+	wrapped := WrapLines([]string{line}, width)
+	if len(wrapped) == 0 {
+		return []string{""}
+	}
+
+	fitted := make([]string, 0, len(wrapped))
+	for _, wrappedLine := range wrapped {
+		fitted = append(fitted, lipgloss.NewStyle().Width(width).MaxWidth(width).Render(wrappedLine))
+	}
+
+	return fitted
 }
 
 func renderPopupFrame(lines []string, width int, focused bool) string {

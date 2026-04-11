@@ -17,6 +17,7 @@ type EditStart struct {
 	CycleBodyMediaType           bool
 	CycleBodyExample             bool
 	ApplyEnvironmentName         string
+	UnloadEnvironment            bool
 	ConfirmDeleteEnvironmentName string
 }
 
@@ -58,6 +59,8 @@ func StartEdit(
 			Buffer:     buffer,
 			FocusField: true,
 		}
+	case RowKindEnvironmentUnload:
+		return EditStart{UnloadEnvironment: true}
 	case RowKindEnvironmentApply:
 		return EditStart{ApplyEnvironmentName: row.EnvironmentName}
 	case RowKindEnvironmentDelete:
@@ -86,6 +89,16 @@ func StartEdit(
 			Kind:       model.RequestEditKindField,
 			Target:     row.ID,
 			Buffer:     app.AuthFieldValue(authState[scheme.Name], row.AuthField),
+			FocusField: true,
+		}
+	case RowKindAuthSource:
+		if !row.Editable {
+			return EditStart{}
+		}
+		return EditStart{
+			Kind:       model.RequestEditKindField,
+			Target:     row.ID,
+			Buffer:     row.AuthEnvVarName,
 			FocusField: true,
 		}
 	case RowKindBodyMediaType:

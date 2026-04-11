@@ -66,3 +66,23 @@ func TestOverlayPreservesUnderlyingContentOutsidePopupWidth(t *testing.T) {
 		t.Fatalf("expected overlay to preserve content outside popup width, got %q", content)
 	}
 }
+
+func TestRenderPopupWrapsLongBodyLinesWithinPopupWidth(t *testing.T) {
+	t.Parallel()
+
+	content := ansi.Strip(RenderPopup(PopupData{
+		Title:   "Edit value",
+		Body:    "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+		Width:   24,
+		Focused: true,
+	}))
+
+	if strings.Contains(content, "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789") {
+		t.Fatalf("expected long body line to wrap inside popup width, got %q", content)
+	}
+	for _, snippet := range []string{"ABCDEFGHIJKLMNOPQRST", "UVWXYZ0123456789"} {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected wrapped popup content to include %q, got %q", snippet, content)
+		}
+	}
+}

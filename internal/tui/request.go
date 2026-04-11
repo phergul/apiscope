@@ -34,6 +34,7 @@ func (m *Model) activeRequestRows() []requestui.RowDescriptor {
 		m.session.AuthState,
 		m.persisted.environments,
 		m.requestUI.appliedEnvironmentName,
+		m.requestUI.authSourceOverrides,
 	)
 }
 
@@ -247,6 +248,7 @@ func (m *Model) projectRequestPaneForSize(width, height int) requestui.PaneProje
 		SelectedServerURL:      m.session.SelectedServerURL,
 		SecuritySchemes:        m.securitySchemes(),
 		AuthState:              m.session.AuthState,
+		AuthSourceOverrides:    m.requestUI.authSourceOverrides,
 		Environments:           m.persisted.environments,
 		AppliedEnvironmentName: m.requestUI.appliedEnvironmentName,
 		ActiveSection:          activeSection,
@@ -262,10 +264,9 @@ func (m *Model) projectRequestPaneForSize(width, height int) requestui.PaneProje
 
 // configureRequestEditors sizes the request editor widgets for the current pane.
 func (m *Model) configureRequestEditors(contentWidth, height int) {
-	// keep field editors narrower so they stay visually tied to the selected row.
-	fieldPopupWidth := min(max(contentWidth-10, 24), 64)
-	// allow the body editor to use more width because it edits multi-line payload content.
-	bodyPopupWidth := min(max(contentWidth-8, 28), 84)
+	// match editor widget widths to popup growth caps so filled backgrounds track popup width.
+	fieldPopupWidth := min(max(contentWidth-10, 24), 88)
+	bodyPopupWidth := min(max(contentWidth-8, 28), 108)
 	// subtract the popup frame before sizing the embedded text input.
 	m.widgets.requestFieldInput.SetWidth(max(fieldPopupWidth-4, 12))
 
@@ -319,6 +320,10 @@ func (m *Model) beginRequestEdit() {
 		m.applyEnvironmentByName(start.ApplyEnvironmentName)
 		return
 	}
+	if start.UnloadEnvironment {
+		m.unloadEnvironment()
+		return
+	}
 	if start.CycleBodyMediaType {
 		requestui.CycleBodyMediaType(&m.session, selected)
 		return
@@ -363,6 +368,12 @@ func (m *Model) saveRequestEdit() {
 	}
 	if isEnvironmentBindingTarget(m.viewState.RequestEditTarget) {
 		if row, ok := activeRequestRow(m.activeRequestRows(), m.viewState.RequestActiveRow); ok && m.saveEnvironmentBinding(row, m.viewState.RequestEditBuffer) {
+			m.finishRequestEdit()
+		}
+		return
+	}
+	if isAuthSourceTarget(m.viewState.RequestEditTarget) {
+		if row, ok := activeRequestRow(m.activeRequestRows(), m.viewState.RequestActiveRow); ok && m.saveAuthSource(row, m.viewState.RequestEditBuffer) {
 			m.finishRequestEdit()
 		}
 		return

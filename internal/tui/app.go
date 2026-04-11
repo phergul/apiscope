@@ -8,6 +8,7 @@ import (
 	"github.com/phergul/apiscope/internal/app"
 	"github.com/phergul/apiscope/internal/model"
 	detailsui "github.com/phergul/apiscope/internal/tui/details"
+	requestui "github.com/phergul/apiscope/internal/tui/request"
 	responseui "github.com/phergul/apiscope/internal/tui/response"
 	"github.com/phergul/apiscope/internal/tui/widgets"
 
@@ -53,6 +54,7 @@ type widgetState struct {
 type requestUIState struct {
 	validation             app.RequestValidationResult
 	appliedEnvironmentName string
+	authSourceOverrides    map[string]requestui.AuthSourceOverride
 }
 
 // persistedState groups root-owned durable user-managed state snapshots.

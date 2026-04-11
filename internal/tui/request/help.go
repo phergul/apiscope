@@ -15,7 +15,7 @@ func BuildBrowseHelpView() widgets.HelpView {
 			"j/k or up/down move row",
 			"Home/End jump to first or last row",
 			"[ or ] or h/l switch sections",
-			"Enter edit, apply, or cycle option",
+			"Enter edit, save, load, apply, or cycle option",
 			"Ctrl+R send request",
 			"R or Ctrl+L reload spec",
 			"d open spec diff",

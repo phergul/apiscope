@@ -64,9 +64,24 @@ func TestBuildBrowseHelpViewUsesBrowseControls(t *testing.T) {
 	if help.Title != "Request help" {
 		t.Fatalf("expected request browse help title, got %q", help.Title)
 	}
-	for _, snippet := range []string{"Ctrl+R send request", "t / T switch theme", "Enter edit, apply, or cycle option"} {
+	for _, snippet := range []string{"Ctrl+R send request", "t / T switch theme", "Enter edit, save, load, apply, or cycle option"} {
 		if !strings.Contains(help.Body, snippet) {
 			t.Fatalf("expected request browse help to include %q, got %q", snippet, help.Body)
 		}
+	}
+}
+
+func TestBuildEditViewForEnvironmentSaveUsesSaveOrUpdateContext(t *testing.T) {
+	t.Parallel()
+
+	view := BuildEditView(EditorState{
+		Kind:          "field",
+		Buffer:        "staging",
+		View:          "staging",
+		ActiveRowKind: RowKindEnvironmentSave,
+	})
+
+	if view.Context != "Save or update environment: staging" {
+		t.Fatalf("expected save/update context, got %q", view.Context)
 	}
 }

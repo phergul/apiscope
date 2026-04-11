@@ -11,6 +11,7 @@ type EditorState struct {
 	Buffer         string
 	View           string
 	BodyMediaType  string
+	ActiveRowKind  RowKind
 	ActiveRowLabel string
 	ActiveRowMeta  string
 }
@@ -35,6 +36,7 @@ func BuildEditorState(input EditorInput, rows []RowDescriptor, activeRow int, se
 		state.BodyMediaType = DraftBodyMediaType(selected, draft)
 	case model.RequestEditKindField, model.RequestEditKindConfirm:
 		if row := activeEditorRow(rows, activeRow); row != nil {
+			state.ActiveRowKind = row.Kind
 			state.ActiveRowLabel = row.Label
 			state.ActiveRowMeta = row.Meta
 		}
@@ -105,6 +107,17 @@ func editContext(state EditorState) string {
 		}
 		return "Media type: " + state.BodyMediaType
 	case "field":
+		switch state.ActiveRowKind {
+		case RowKindEnvironmentSave:
+			if strings.TrimSpace(state.Buffer) == "" {
+				return "Save session as a new environment name"
+			}
+			return "Save or update environment: " + strings.TrimSpace(state.Buffer)
+		case RowKindEnvironmentBinding:
+			return formatRowContext(state.ActiveRowLabel, state.ActiveRowMeta) + "\nLeave empty to keep session-only auth."
+		case RowKindAuthSource:
+			return formatRowContext(state.ActiveRowLabel, state.ActiveRowMeta) + "\nLeave empty to use session-only value."
+		}
 		return formatRowContext(state.ActiveRowLabel, state.ActiveRowMeta)
 	case "confirm":
 		if strings.TrimSpace(state.Buffer) == "" {

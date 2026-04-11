@@ -38,6 +38,7 @@ type PaneInput struct {
 	SelectedServerURL      string
 	SecuritySchemes        map[string]model.SecurityScheme
 	AuthState              map[string]model.AuthValue
+	AuthSourceOverrides    map[string]AuthSourceOverride
 	Environments           []model.SavedEnvironment
 	AppliedEnvironmentName string
 	ActiveSection          string
@@ -83,7 +84,7 @@ func projectPaneData(input PaneInput) (Data, EditorState) {
 
 	activeSection := ResolveActiveSection(input.ActiveSection, input.Selected, input.Security, input.Servers)
 	sections := AvailableSections(input.Selected, input.Security, input.Servers)
-	rows := ActiveRows(input.Selected, input.Draft, activeSection, input.Security, input.Servers, input.SelectedServerURL, input.SecuritySchemes, input.AuthState, input.Environments, input.AppliedEnvironmentName)
+	rows := ActiveRows(input.Selected, input.Draft, activeSection, input.Security, input.Servers, input.SelectedServerURL, input.SecuritySchemes, input.AuthState, input.Environments, input.AppliedEnvironmentName, input.AuthSourceOverrides)
 	editorState := BuildEditorState(input.Editor, rows, input.ActiveRow, input.Selected, input.Draft)
 
 	data.Sections = sections

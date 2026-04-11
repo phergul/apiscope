@@ -19,13 +19,21 @@ const (
 	RowKindBodyExample        RowKind = "body_example"
 	RowKindBodyText           RowKind = "body_text"
 	RowKindAuthField          RowKind = "auth_field"
+	RowKindAuthSource         RowKind = "auth_source"
 	RowKindAuthInfo           RowKind = "auth_info"
 	RowKindEnvironmentCurrent RowKind = "environment_current"
+	RowKindEnvironmentUnload  RowKind = "environment_unload"
 	RowKindEnvironmentSave    RowKind = "environment_save"
 	RowKindEnvironmentBinding RowKind = "environment_binding"
 	RowKindEnvironmentApply   RowKind = "environment_apply"
 	RowKindEnvironmentDelete  RowKind = "environment_delete"
 )
+
+// AuthSourceOverride stores one runtime auth-source preference in the current session.
+type AuthSourceOverride struct {
+	UseSession bool
+	EnvVarName string
+}
 
 type RowDescriptor struct {
 	ID               string
@@ -34,6 +42,7 @@ type RowDescriptor struct {
 	ServerURL        string
 	AuthSchemeName   string
 	AuthField        app.AuthField
+	AuthEnvVarName   string
 	EnvironmentName  string
 	ValidationTarget string
 	Label            string
@@ -54,6 +63,7 @@ func ActiveRows(
 	authState map[string]model.AuthValue,
 	environments []model.SavedEnvironment,
 	appliedEnvironmentName string,
+	authSourceOverrides map[string]AuthSourceOverride,
 ) []RowDescriptor {
 	if selected == nil {
 		return nil
@@ -77,7 +87,7 @@ func ActiveRows(
 	case SectionEnvironment:
 		return environmentRows(security, securitySchemes, environments, appliedEnvironmentName)
 	case SectionAuth:
-		return authRows(security, securitySchemes, authState)
+		return authRows(security, securitySchemes, authState, environments, appliedEnvironmentName, authSourceOverrides)
 	default:
 		return nil
 	}
@@ -261,10 +271,16 @@ func BodyPreview(draft *model.RequestDraft) string {
 }
 
 // authRows builds editable auth rows for the effective security requirement.
-func authRows(requirement *model.SecurityRequirement, securitySchemes map[string]model.SecurityScheme, authState map[string]model.AuthValue) []RowDescriptor {
+func authRows(requirement *model.SecurityRequirement, securitySchemes map[string]model.SecurityScheme, authState map[string]model.AuthValue, environments []model.SavedEnvironment, appliedEnvironmentName string, authSourceOverrides map[string]AuthSourceOverride) []RowDescriptor {
 	projections := app.ProjectAuthAlternatives(requirement, securitySchemes, authState)
 	if len(projections) == 0 {
 		return nil
+	}
+
+	appliedEnvironment := currentEnvironment(environments, appliedEnvironmentName)
+	bindingIndex := make(map[string]app.EnvironmentBindingProjection)
+	for _, binding := range app.ProjectEnvironmentBindings(requirement, securitySchemes, appliedEnvironment) {
+		bindingIndex[binding.SchemeName+":"+string(binding.Field)] = binding
 	}
 
 	rows := make([]RowDescriptor, 0, len(projections)*3)
@@ -308,6 +324,27 @@ func authRows(requirement *model.SecurityRequirement, securitySchemes map[string
 			}
 
 			for _, field := range scheme.Fields {
+				binding, hasBinding := bindingIndex[scheme.Ref.Name+":"+string(field.Field)]
+				override, hasOverride := authSourceOverrides[scheme.Ref.Name+":"+string(field.Field)]
+				if hasOverride {
+					switch {
+					case override.UseSession:
+						hasBinding = false
+						binding.EnvVarName = ""
+					case strings.TrimSpace(override.EnvVarName) != "":
+						hasBinding = true
+						binding.EnvVarName = strings.TrimSpace(override.EnvVarName)
+					}
+				}
+				fieldMeta := field.Meta
+				if hasBinding && strings.TrimSpace(binding.EnvVarName) != "" {
+					fieldMeta += ", env-managed"
+				}
+				sourceValue := "session value"
+				if hasBinding && strings.TrimSpace(binding.EnvVarName) != "" {
+					sourceValue = "env var: " + strings.TrimSpace(binding.EnvVarName)
+				}
+
 				rows = append(rows, RowDescriptor{
 					ID:               field.ValidationTarget,
 					Kind:             RowKindAuthField,
@@ -315,9 +352,29 @@ func authRows(requirement *model.SecurityRequirement, securitySchemes map[string
 					AuthField:        field.Field,
 					ValidationTarget: field.ValidationTarget,
 					Label:            field.Label,
-					Meta:             field.Meta,
+					Meta:             fieldMeta,
 					Value:            field.Summary,
-					Editable:         true,
+					Editable:         !(hasBinding && strings.TrimSpace(binding.EnvVarName) != ""),
+				})
+
+				sourceMeta := "runtime source (session only)"
+				sourceEditable := true
+				if strings.TrimSpace(appliedEnvironmentName) != "" {
+					sourceMeta = "runtime source, not saved until updated in Environment"
+				}
+
+				rows = append(rows, RowDescriptor{
+					ID:               authSourceTarget(scheme.Ref.Name, field.Field),
+					Kind:             RowKindAuthSource,
+					AuthSchemeName:   scheme.Ref.Name,
+					AuthField:        field.Field,
+					AuthEnvVarName:   strings.TrimSpace(binding.EnvVarName),
+					ValidationTarget: authSourceTarget(scheme.Ref.Name, field.Field),
+					Label:            field.Label + " source",
+					Meta:             sourceMeta,
+					Value:            sourceValue,
+					Editable:         sourceEditable,
+					EnvironmentName:  strings.TrimSpace(appliedEnvironmentName),
 				})
 			}
 		}

@@ -61,8 +61,8 @@ func TestProjectPaneBuildsEditableAuthRows(t *testing.T) {
 	if projection.Data.ActiveSection != SectionAuth {
 		t.Fatalf("expected auth section, got %q", projection.Data.ActiveSection)
 	}
-	if len(projection.Data.Rows) != 2 {
-		t.Fatalf("expected option header plus auth row, got %d", len(projection.Data.Rows))
+	if len(projection.Data.Rows) != 3 {
+		t.Fatalf("expected option header plus auth field and source rows, got %d", len(projection.Data.Rows))
 	}
 	if projection.Data.Rows[0].Kind != RowKindAuthOption {
 		t.Fatalf("expected option header row first, got %#v", projection.Data.Rows[0])
@@ -72,6 +72,9 @@ func TestProjectPaneBuildsEditableAuthRows(t *testing.T) {
 	}
 	if projection.Data.Rows[1].Value != "token set" {
 		t.Fatalf("expected masked auth summary, got %q", projection.Data.Rows[1].Value)
+	}
+	if projection.Data.Rows[2].Kind != RowKindAuthSource || projection.Data.Rows[2].Value != "session value" {
+		t.Fatalf("expected auth source row to default to session value, got %#v", projection.Data.Rows[2])
 	}
 }
 
@@ -296,11 +299,11 @@ func TestProjectPaneBuildsAlternativeBlocksWithoutDeduplicatingSchemes(t *testin
 		ActiveSection: SectionAuth,
 	})
 
-	if len(projection.Data.Rows) != 4 {
-		t.Fatalf("expected two option blocks with one field each, got %d", len(projection.Data.Rows))
+	if len(projection.Data.Rows) != 6 {
+		t.Fatalf("expected two option blocks with one field and source row each, got %d", len(projection.Data.Rows))
 	}
-	if projection.Data.Rows[1].Kind != RowKindAuthField || projection.Data.Rows[3].Kind != RowKindAuthField {
-		t.Fatalf("expected auth field rows under each option, got %#v", projection.Data.Rows)
+	if projection.Data.Rows[1].Kind != RowKindAuthField || projection.Data.Rows[2].Kind != RowKindAuthSource || projection.Data.Rows[4].Kind != RowKindAuthField || projection.Data.Rows[5].Kind != RowKindAuthSource {
+		t.Fatalf("expected auth field and source rows under each option, got %#v", projection.Data.Rows)
 	}
 	rows := ActiveRows(
 		&model.Operation{},
@@ -324,9 +327,41 @@ func TestProjectPaneBuildsAlternativeBlocksWithoutDeduplicatingSchemes(t *testin
 		nil,
 		nil,
 		"",
+		nil,
 	)
-	if rows[1].ID == rows[3].ID || rows[1].ValidationTarget == rows[3].ValidationTarget {
+	if rows[1].ID == rows[4].ID || rows[1].ValidationTarget == rows[4].ValidationTarget {
 		t.Fatalf("expected duplicated scheme rows to remain distinct, got %#v", rows)
+	}
+}
+
+func TestProjectPaneBuildsEnvManagedAuthRowsForLoadedEnvironment(t *testing.T) {
+	t.Parallel()
+
+	projection := ProjectPane(PaneInput{
+		Selected: &model.Operation{},
+		Security: &model.SecurityRequirement{Alternatives: []model.SecurityAlternative{{Schemes: []model.SecurityRequirementRef{{Name: "api_key"}}}}},
+		SecuritySchemes: map[string]model.SecurityScheme{
+			"api_key": {Name: "api_key", Type: model.SecuritySchemeTypeAPIKey, In: model.ParameterLocationHeader, ParameterName: "X-API-Key"},
+		},
+		AuthState: map[string]model.AuthValue{"api_key": {Type: model.AuthSchemeValueTypeAPIKey, APIKey: "secret"}},
+		Environments: []model.SavedEnvironment{{
+			Name: "staging",
+			AuthBindings: map[string]model.SavedAuthBinding{
+				"api_key": {FieldEnvVars: map[model.AuthField]string{model.AuthFieldAPIKey: "APISCOPE_API_KEY"}},
+			},
+		}},
+		AppliedEnvironmentName: "staging",
+		ActiveSection:          SectionAuth,
+	})
+
+	if len(projection.Data.Rows) != 3 {
+		t.Fatalf("expected auth option, field, and source rows, got %#v", projection.Data.Rows)
+	}
+	if projection.Data.Rows[1].Kind != RowKindAuthField || projection.Data.Rows[1].Editable {
+		t.Fatalf("expected env-managed auth field row to be read-only, got %#v", projection.Data.Rows[1])
+	}
+	if projection.Data.Rows[2].Kind != RowKindAuthSource || projection.Data.Rows[2].Value != "env var: APISCOPE_API_KEY" {
+		t.Fatalf("expected auth source row to show env var binding, got %#v", projection.Data.Rows[2])
 	}
 }
 
@@ -476,23 +511,29 @@ func TestProjectPaneBuildsEnvironmentRows(t *testing.T) {
 		}},
 	})
 
-	if len(projection.Data.Rows) != 5 {
-		t.Fatalf("expected current, save, binding, apply, and delete rows, got %#v", projection.Data.Rows)
+	if len(projection.Data.Rows) != 6 {
+		t.Fatalf("expected current, unload, save, apply, binding, and delete rows, got %#v", projection.Data.Rows)
 	}
 	if projection.Data.Rows[0].Kind != RowKindEnvironmentCurrent {
 		t.Fatalf("expected current-environment row first, got %#v", projection.Data.Rows[0])
 	}
-	if projection.Data.Rows[1].Kind != RowKindEnvironmentSave || !projection.Data.Rows[1].Editable {
-		t.Fatalf("expected editable save row, got %#v", projection.Data.Rows[1])
+	if projection.Data.Rows[0].Label != "Loaded environment" {
+		t.Fatalf("expected clearer loaded environment label, got %#v", projection.Data.Rows[0])
 	}
-	if projection.Data.Rows[2].Kind != RowKindEnvironmentBinding || projection.Data.Rows[2].Value != "API_KEY_ENV" {
-		t.Fatalf("expected environment binding row, got %#v", projection.Data.Rows[2])
+	if projection.Data.Rows[1].Kind != RowKindEnvironmentUnload || !projection.Data.Rows[1].Editable {
+		t.Fatalf("expected editable unload row, got %#v", projection.Data.Rows[1])
+	}
+	if projection.Data.Rows[2].Kind != RowKindEnvironmentSave || !projection.Data.Rows[2].Editable {
+		t.Fatalf("expected editable save row, got %#v", projection.Data.Rows[2])
 	}
 	if projection.Data.Rows[3].Kind != RowKindEnvironmentApply || projection.Data.Rows[3].Value == "" {
 		t.Fatalf("expected apply row with summary, got %#v", projection.Data.Rows[3])
 	}
-	if projection.Data.Rows[4].Kind != RowKindEnvironmentDelete {
-		t.Fatalf("expected delete row last, got %#v", projection.Data.Rows[4])
+	if projection.Data.Rows[4].Kind != RowKindEnvironmentBinding || projection.Data.Rows[4].Value != "API_KEY_ENV" {
+		t.Fatalf("expected environment binding row, got %#v", projection.Data.Rows[4])
+	}
+	if projection.Data.Rows[5].Kind != RowKindEnvironmentDelete {
+		t.Fatalf("expected delete row last, got %#v", projection.Data.Rows[5])
 	}
 }
 

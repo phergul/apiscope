@@ -23,7 +23,7 @@ func TestRenderIncludesOperationAndCapabilitySections(t *testing.T) {
 		CapabilityChanges: []app.SpecDiffCapabilityChange{{Name: "SupportsOpenAPI3", From: false, To: true}},
 	})
 
-	for _, snippet := range []string{"Fingerprint: a -> b", "Added operations", "GET /admin", "Capability changes", "SupportsOpenAPI3"} {
+	for _, snippet := range []string{"Operations: 0 -> 0", "Added operations", "GET /admin", "Capability changes", "SupportsOpenAPI3"} {
 		if !strings.Contains(body, snippet) {
 			t.Fatalf("expected body to include %q, got %q", snippet, body)
 		}

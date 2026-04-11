@@ -78,13 +78,15 @@ func TestRenderShowsSupportSummaryAndValidationTogether(t *testing.T) {
 	}))
 
 	for _, snippet := range []string{
-		"Validation:",
 		"Support notes:",
 		`downgraded: Swagger collectionFormat "pipes" needs manual formatting. Enter the fully formatted value yourself.`,
 	} {
 		if !strings.Contains(content, snippet) {
 			t.Fatalf("expected mixed validation/support render to include %q, got %q", snippet, content)
 		}
+	}
+	if strings.Contains(content, "Validation:") {
+		t.Fatalf("expected validation summary to hide duplicate row error, got %q", content)
 	}
 }
 
@@ -211,14 +213,36 @@ func TestRenderShowsInlineValidationState(t *testing.T) {
 		ActiveRow: 0,
 	}))
 
-	wantSnippets := []string{
-		"Validation:",
-		"- Required value missing.",
-		"petId (required, string) = <unset>",
-	}
+	wantSnippets := []string{"petId (required, string) = <unset>", "Required value missing."}
 	for _, snippet := range wantSnippets {
 		if !strings.Contains(content, snippet) {
 			t.Fatalf("expected request validation content to include %q, got %q", snippet, content)
+		}
+	}
+	if strings.Contains(content, "Validation:") {
+		t.Fatalf("expected validation summary to hide duplicate row error, got %q", content)
+	}
+}
+
+func TestRenderKeepsValidationSummaryForSectionOnlyMessage(t *testing.T) {
+	t.Parallel()
+
+	content := ansi.Strip(Render(Data{
+		Sections:         []string{"Auth"},
+		ActiveSection:    "Auth",
+		ValidationNotice: []string{"Choose one auth option."},
+		Rows: []Row{{
+			Kind:     RowKindAuthOption,
+			Label:    "Option 1",
+			Meta:     "missing 1 field",
+			Value:    "bearer_auth",
+			Editable: false,
+		}},
+	}))
+
+	for _, snippet := range []string{"Validation:", "- Choose one auth option."} {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("expected section-level validation summary %q, got %q", snippet, content)
 		}
 	}
 }

@@ -81,6 +81,7 @@ func RenderActiveSection(data Data) string {
 
 	activeIndex := requestActiveRowIndex(data.Rows, data.ActiveRow)
 	lines := make([]string, 0, len(data.Rows)*2)
+	rowErrorMessages := make(map[string]struct{}, len(data.Rows))
 	for index, row := range data.Rows {
 		if row.Kind == RowKindBodyText {
 			lines = append(lines, renderBodyPreviewRow(row, index == activeIndex, data.ContentWidth))
@@ -88,6 +89,7 @@ func RenderActiveSection(data Data) string {
 			lines = append(lines, renderRequestRow(row, index == activeIndex))
 		}
 		if strings.TrimSpace(row.Error) != "" {
+			rowErrorMessages[row.Error] = struct{}{}
 			lines = append(lines, "  "+widgets.RenderValidationMessage(row.Error))
 		}
 		for _, note := range row.Support {
@@ -95,7 +97,7 @@ func RenderActiveSection(data Data) string {
 		}
 	}
 
-	if summary := renderValidationSummary(data.ValidationNotice); summary != "" {
+	if summary := renderValidationSummary(filterValidationSummaryMessages(data.ValidationNotice, rowErrorMessages)); summary != "" {
 		parts = append(parts, summary)
 	}
 	if summary := renderSupportSummary(data.SupportNotice); summary != "" {
@@ -107,6 +109,22 @@ func RenderActiveSection(data Data) string {
 	}
 
 	return renderEditorOverlay(base, data)
+}
+
+func filterValidationSummaryMessages(messages []string, rowErrorMessages map[string]struct{}) []string {
+	if len(messages) == 0 || len(rowErrorMessages) == 0 {
+		return messages
+	}
+
+	filtered := make([]string, 0, len(messages))
+	for _, message := range messages {
+		if _, ok := rowErrorMessages[message]; ok {
+			continue
+		}
+		filtered = append(filtered, message)
+	}
+
+	return filtered
 }
 
 // renderRequestRow renders a standard single-line request row.

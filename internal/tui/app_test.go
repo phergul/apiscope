@@ -698,6 +698,18 @@ func TestModelRequestSectionNavigationMovesAcrossParameterBodyAndAuth(t *testing
 	if updated.panes.activeRequestSection != "Auth" {
 		t.Fatalf("expected ] to move to auth after environment, got %q", updated.panes.activeRequestSection)
 	}
+	if updated.viewState.RequestActiveRow != 1 {
+		t.Fatalf("expected auth section to auto-select first editable row, got %d", updated.viewState.RequestActiveRow)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated = updatedModel.(*Model)
+	if updated.viewState.RequestEditKind != model.RequestEditKindField {
+		t.Fatalf("expected enter to edit auto-selected auth field row, got %q", updated.viewState.RequestEditKind)
+	}
+
+	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated = updatedModel.(*Model)
 
 	updatedModel, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
 	updated = updatedModel.(*Model)

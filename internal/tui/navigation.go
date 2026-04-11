@@ -158,6 +158,7 @@ func (m *Model) availableRequestSections() []string {
 func (m *Model) resetActiveRequestSection() {
 	m.panes.activeRequestSection = requestui.ResolveActiveSection("", m.resolvedSelectedOperation(), m.effectiveSecurityRequirement(m.resolvedSelectedOperation()), m.topLevelServers())
 	m.resetRequestCursorAndScroll()
+	m.syncActiveRequestRow()
 	m.clearRequestValidation()
 }
 
@@ -165,6 +166,7 @@ func (m *Model) resetActiveRequestSection() {
 func (m *Model) moveRequestSection(direction int) {
 	m.panes.activeRequestSection = requestui.MoveActiveSection(m.panes.activeRequestSection, direction, m.resolvedSelectedOperation(), m.effectiveSecurityRequirement(m.resolvedSelectedOperation()), m.topLevelServers())
 	m.resetRequestCursorAndScroll()
+	m.syncActiveRequestRow()
 	m.clearRequestValidation()
 }
 
@@ -172,6 +174,7 @@ func (m *Model) moveRequestSection(direction int) {
 func (m *Model) setRequestSectionBoundary(last bool) {
 	m.panes.activeRequestSection = requestui.BoundaryActiveSection(last, m.resolvedSelectedOperation(), m.effectiveSecurityRequirement(m.resolvedSelectedOperation()), m.topLevelServers())
 	m.resetRequestCursorAndScroll()
+	m.syncActiveRequestRow()
 	m.clearRequestValidation()
 }
 
